@@ -17,12 +17,12 @@ module.exports = (sequelize, DataTypes) => {
   ApplicationDocument.init(
     {
       id: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
         primaryKey: true,
-        autoIncrement: true,
+        defaultValue: DataTypes.UUIDV4,
       },
       application_id: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
         allowNull: false,
       },
       document_type: {
@@ -38,7 +38,7 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
       },
       size_bytes: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
         allowNull: true,
       },
       is_valid: {
@@ -47,7 +47,7 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: false,
       },
       checked_by: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
         allowNull: true,
       },
       checked_at: {

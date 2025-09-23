@@ -4,6 +4,7 @@ module.exports = (sequelize, DataTypes) => {
   class User extends Model {
     static associate(models) {
       User.belongsTo(models.Department, { foreignKey: "department_id" });
+      User.belongsTo(models.Faculty, { foreignKey: "faculty_id" });
       User.hasMany(models.ActivityLog, { foreignKey: "user_id" });
       User.hasMany(models.BackupHistory, { foreignKey: "executed_by" });
       User.hasMany(models.Information, { foreignKey: "author_id" });
@@ -24,14 +25,15 @@ module.exports = (sequelize, DataTypes) => {
       });
       User.hasMany(models.Scholarship, { foreignKey: "created_by" });
       User.hasMany(models.GovernmentScholarship, { foreignKey: "imported_by" });
+      User.hasMany(models.RefreshToken, { foreignKey: "user_id" });
     }
   }
   User.init(
     {
       id: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
         primaryKey: true,
-        autoIncrement: true,
+        defaultValue: DataTypes.UUIDV4,
       },
       email: {
         type: DataTypes.STRING(191),
@@ -64,8 +66,16 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(50),
         allowNull: true,
       },
+      faculty_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       department_id: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      phone_number: {
+        type: DataTypes.STRING(20),
         allowNull: true,
       },
       gender: {
@@ -78,6 +88,23 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: true,
       },
       last_login_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      emailVerificationCode: {
+        type: DataTypes.STRING(10),
+        allowNull: true,
+      },
+      emailVerified: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      resetPasswordCode: {
+        type: DataTypes.STRING(10),
+        allowNull: true,
+      },
+      resetPasswordExpires: {
         type: DataTypes.DATE,
         allowNull: true,
       },

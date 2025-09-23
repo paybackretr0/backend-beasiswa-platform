@@ -1,52 +1,49 @@
 "use strict";
-
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.createTable("chat_messages", {
+    await queryInterface.createTable("refresh_tokens", {
       id: {
+        allowNull: false,
+        primaryKey: true,
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
-        primaryKey: true,
+      },
+      token: {
+        type: Sequelize.STRING,
         allowNull: false,
       },
-      room_id: {
-        type: Sequelize.UUID,
-        allowNull: false,
-        references: {
-          model: "chat_rooms",
-          key: "id",
-        },
-        onDelete: "CASCADE",
-        onUpdate: "CASCADE",
-      },
-      sender_id: {
+      user_id: {
         type: Sequelize.UUID,
         allowNull: false,
         references: {
           model: "users",
           key: "id",
         },
-        onDelete: "CASCADE",
         onUpdate: "CASCADE",
+        onDelete: "CASCADE",
       },
-      content: {
-        type: Sequelize.TEXT,
+      deviceInfo: {
+        type: Sequelize.STRING,
+        allowNull: true,
+      },
+      expiresAt: {
+        type: Sequelize.DATE,
         allowNull: false,
       },
-      sent_at: {
+      createdAt: {
         type: Sequelize.DATE,
         allowNull: false,
         defaultValue: Sequelize.literal("CURRENT_TIMESTAMP"),
       },
-      read_at: {
+      updatedAt: {
         type: Sequelize.DATE,
-        allowNull: true,
+        allowNull: false,
+        defaultValue: Sequelize.literal("CURRENT_TIMESTAMP"),
       },
     });
   },
-
   async down(queryInterface, Sequelize) {
-    await queryInterface.dropTable("chat_messages");
+    await queryInterface.dropTable("refresh_tokens");
   },
 };

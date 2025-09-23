@@ -13,9 +13,9 @@ module.exports = (sequelize, DataTypes) => {
   GovernmentScholarship.init(
     {
       id: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
         primaryKey: true,
-        autoIncrement: true,
+        defaultValue: DataTypes.UUIDV4,
       },
       nim: {
         type: DataTypes.STRING(50),
@@ -59,7 +59,7 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
       },
       imported_by: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
         allowNull: true,
       },
       imported_at: {
