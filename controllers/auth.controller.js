@@ -173,7 +173,7 @@ const login = async (req, res) => {
       token_type: "Bearer",
       user: {
         id: user.id,
-        name: user.name,
+        full_name: user.full_name,
         email: user.email,
         role: user.role,
       },
@@ -300,7 +300,6 @@ const updateProfile = async (req, res) => {
       return errorResponse(res, "User not found", 404);
     }
 
-    // Validasi gender jika diisi
     if (gender && !["L", "P"].includes(gender)) {
       return errorResponse(res, "Gender harus L atau P", 400);
     }
@@ -386,7 +385,21 @@ const logout = async (req, res) => {
 
 const getProfile = async (req, res) => {
   try {
-    const user = await User.findByPk(req.user.id);
+    const user = await User.findByPk(req.user.id, {
+      include: [
+        {
+          model: Faculty,
+          attributes: ["name"],
+        },
+        {
+          model: Department,
+          attributes: ["name"],
+        },
+      ],
+      attributes: {
+        exclude: ["password", "emailVerificationCode", "resetPasswordCode"],
+      },
+    });
 
     if (!user) {
       return errorResponse(res, "User not found", 404);
