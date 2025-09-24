@@ -1,4 +1,15 @@
 const jwt = require("jsonwebtoken");
+const { User } = require("../models");
+
+const verifiedUser = async (req, res, next) => {
+  const user = await User.findByPk(req.user.id);
+  if (!user || !user.emailVerified) {
+    return res.status(403).json({
+      message: "Email belum diverifikasi, silakan lakukan verifikasi dahulu.",
+    });
+  }
+  next();
+};
 
 const authenticate = (req, res, next) => {
   try {
@@ -33,4 +44,7 @@ const authenticate = (req, res, next) => {
   }
 };
 
-module.exports = authenticate;
+module.exports = {
+  authenticate,
+  verifiedUser,
+};

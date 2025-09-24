@@ -5,7 +5,10 @@ const {
   validateRegister,
   validateLogin,
 } = require("../validators/auth.validator");
-const auth = require("../middlewares/auth.middleware");
+const {
+  authenticate: auth,
+  verifiedUser,
+} = require("../middlewares/auth.middleware");
 
 // ==== Rute publik (tidak memerlukan autentikasi) ====
 
@@ -17,25 +20,25 @@ router.post("/login", validateLogin, authController.login);
 
 router.post("/verify-email", authController.verifyEmail);
 
-router.post("/forgot-password", authController.forgotPassword);
-router.post("/verify-reset-code", authController.verifyResetCode);
-router.post("/reset-password", authController.resetPassword);
+router.post("/forgot-password", verifiedUser, authController.forgotPassword);
+router.post("/verify-reset-code", verifiedUser, authController.verifyResetCode);
+router.post("/reset-password", verifiedUser, authController.resetPassword);
 
 // // Refresh token
-// router.post("/token", authController.getToken);
+router.post("/token", authController.getToken);
 
 // // ==== Rute terproteksi (memerlukan autentikasi) ====
 
 // // Update profil
-// router.put("/profile", auth, authController.updateProfile);
+router.put("/profile", auth, verifiedUser, authController.updateProfile);
 
 // // Update password
-// router.put("/password", auth, authController.updatePassword);
+router.put("/password", auth, verifiedUser, authController.updatePassword);
 
 // Logout
 router.post("/logout", auth, authController.logout);
 
 // // Get profile
-// router.get("/profile", auth, authController.getProfile);
+router.get("/profile", auth, verifiedUser, authController.getProfile);
 
 module.exports = router;

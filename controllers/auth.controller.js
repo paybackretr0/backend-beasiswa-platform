@@ -143,14 +143,6 @@ const login = async (req, res) => {
       return errorResponse(res, "Invalid email or password", 401);
     }
 
-    if (!user.emailVerified) {
-      return errorResponse(
-        res,
-        "Email belum diverifikasi. Silakan cek email Anda.",
-        403
-      );
-    }
-
     const isPasswordValid = await comparePassword(password, user.password);
     if (!isPasswordValid) {
       return errorResponse(res, "Invalid email or password", 401);
@@ -228,14 +220,6 @@ const forgotPassword = async (req, res) => {
       );
     }
 
-    if (!user.emailVerified) {
-      return errorResponse(
-        res,
-        "Email belum diverifikasi. Silakan cek email Anda.",
-        403
-      );
-    }
-
     const resetCode = generateVerificationCode();
     const expirationTime = new Date(Date.now() + 10 * 60 * 1000); // 10 menit
 
@@ -270,14 +254,6 @@ const verifyResetCode = async (req, res) => {
       return errorResponse(res, "Kode reset salah atau sudah kadaluarsa", 400);
     }
 
-    if (!user.emailVerified) {
-      return errorResponse(
-        res,
-        "Email belum diverifikasi. Silakan cek email Anda.",
-        403
-      );
-    }
-
     return successResponse(
       res,
       "Kode reset valid, silakan lanjutkan reset password"
@@ -302,14 +278,6 @@ const resetPassword = async (req, res) => {
       return errorResponse(res, "Kode reset salah atau sudah kadaluarsa", 400);
     }
 
-    if (!user.emailVerified) {
-      return errorResponse(
-        res,
-        "Email belum diverifikasi. Silakan cek email Anda.",
-        403
-      );
-    }
-
     const hashedPassword = await hashPassword(new_password);
     await user.update({
       password: hashedPassword,
@@ -323,75 +291,82 @@ const resetPassword = async (req, res) => {
   }
 };
 
-// const updateProfile = async (req, res) => {
-//   const { name } = req.body;
+const updateProfile = async (req, res) => {
+  const { full_name, phone_number, gender } = req.body;
 
-//   try {
-//     const user = await User.findByPk(req.user.id);
-//     if (!user) {
-//       return errorResponse(res, "User not found", 404);
-//     }
+  try {
+    const user = await User.findByPk(req.user.id);
+    if (!user) {
+      return errorResponse(res, "User not found", 404);
+    }
 
-//     await user.update({
-//       name: name,
-//     });
+    // Validasi gender jika diisi
+    if (gender && !["L", "P"].includes(gender)) {
+      return errorResponse(res, "Gender harus L atau P", 400);
+    }
 
-//     return successResponse(res, "Profile updated successfully", {
-//       user: {
-//         id: user.id,
-//         name: user.name,
-//         email: user.email,
-//         role: user.role,
-//       },
-//     });
-//   } catch (error) {
-//     return errorResponse(res, "Internal server error", 500, error.message);
-//   }
-// };
+    await user.update({
+      full_name: full_name ?? user.full_name,
+      phone_number: phone_number ?? user.phone_number,
+      gender: gender ?? user.gender,
+    });
 
-// const updatePassword = async (req, res) => {
-//   const { current_password, new_password, new_password_confirmation } =
-//     req.body;
+    return successResponse(res, "Profil berhasil diupdate", {
+      id: user.id,
+      full_name: user.full_name,
+      phone_number: user.phone_number,
+      gender: user.gender,
+      email: user.email,
+      role: user.role,
+    });
+  } catch (error) {
+    return errorResponse(res, "Internal server error", 500, error.message);
+  }
+};
 
-//   try {
-//     if (new_password !== new_password_confirmation) {
-//       return errorResponse(
-//         res,
-//         "New password and confirmation do not match",
-//         400
-//       );
-//     }
+const updatePassword = async (req, res) => {
+  const { current_password, new_password, new_password_confirmation } =
+    req.body;
 
-//     const user = await User.findByPk(req.user.id);
-//     if (!user) {
-//       return errorResponse(res, "User not found", 404);
-//     }
+  try {
+    if (new_password !== new_password_confirmation) {
+      return errorResponse(
+        res,
+        "New password and confirmation do not match",
+        400
+      );
+    }
 
-//     const isPasswordValid = await comparePassword(
-//       current_password,
-//       user.password
-//     );
-//     if (!isPasswordValid) {
-//       return errorResponse(res, "Current password is incorrect", 401);
-//     }
+    const user = await User.findByPk(req.user.id);
+    if (!user) {
+      return errorResponse(res, "User not found", 404);
+    }
 
-//     const hashedPassword = await hashPassword(new_password);
+    const isPasswordValid = await comparePassword(
+      current_password,
+      user.password
+    );
+    if (!isPasswordValid) {
+      return errorResponse(res, "Current password is incorrect", 401);
+    }
 
-//     await user.update({
-//       password: hashedPassword,
-//     });
+    const hashedPassword = await hashPassword(new_password);
 
-//     await RefreshToken.destroy({
-//       where: {
-//         user_id: user.id,
-//       },
-//     });
+    await user.update({
+      password: hashedPassword,
+    });
 
-//     return successResponse(res, "Password updated successfully");
-//   } catch (error) {
-//     return errorResponse(res, "Internal server error", 500, error.message);
-//   }
-// };
+    await RefreshToken.destroy({
+      where: {
+        user_id: user.id,
+      },
+    });
+
+    return successResponse(res, "Password updated successfully");
+  } catch (error) {
+    return errorResponse(res, "Internal server error", 500, error.message);
+  }
+};
 
 const logout = async (req, res) => {
   const refreshToken = req.body.refresh_token;
@@ -409,63 +384,49 @@ const logout = async (req, res) => {
   }
 };
 
-// const getProfile = async (req, res) => {
-//   try {
-//     const user = await User.findByPk(req.user.id);
-//     if (!user) {
-//       return errorResponse(res, "User not found", 404);
-//     }
+const getProfile = async (req, res) => {
+  try {
+    const user = await User.findByPk(req.user.id);
 
-//     const reportCount = await Report.count({
-//       where: {
-//         user_id: user.id,
-//         is_anonymous: false,
-//       },
-//     });
+    if (!user) {
+      return errorResponse(res, "User not found", 404);
+    }
 
-//     return successResponse(res, "User profile fetched", {
-//       user: {
-//         id: user.id,
-//         name: user.name,
-//         email: user.email,
-//         role: user.role,
-//         reportCount: reportCount,
-//       },
-//     });
-//   } catch (error) {
-//     return errorResponse(res, "Internal server error", 500, error.message);
-//   }
-// };
+    return successResponse(res, "Profil berhasil diambil", user);
+  } catch (error) {
+    return errorResponse(res, "Internal server error", 500, error.message);
+  }
+};
 
-// const getToken = async (req, res) => {
-//   const { refresh_token } = req.body;
+const getToken = async (req, res) => {
+  const { refresh_token } = req.body;
 
-//   try {
-//     const existingToken = await RefreshToken.findOne({
-//       where: {
-//         token: refresh_token,
-//       },
-//     });
+  try {
+    const existingToken = await RefreshToken.findOne({
+      where: {
+        token: refresh_token,
+      },
+    });
 
-//     if (!existingToken) {
-//       return errorResponse(res, "Invalid refresh token", 401);
-//     }
+    if (!existingToken) {
+      return errorResponse(res, "Invalid refresh token", 401);
+    }
 
-//     const user = await User.findByPk(existingToken.user_id);
-//     if (!user) {
-//       return errorResponse(res, "User not found", 404);
-//     }
+    const user = await User.findByPk(existingToken.user_id);
+    if (!user) {
+      return errorResponse(res, "User not found", 404);
+    }
 
-//     const newAccessToken = jwt.generateAccessToken(user);
+    const newAccessToken = jwt.generateAccessToken(user);
 
-//     return successResponse(res, "Token refreshed successfully", {
-//       access_token: newAccessToken,
-//       token_type: "Bearer",
-//     });
-//   } catch (error) {
-//     return errorResponse(res, "Internal server error", 500, error.message);
-//   }
-// };
+    return successResponse(res, "Token refreshed successfully", {
+      access_token: newAccessToken,
+      token_type: "Bearer",
+    });
+  } catch (error) {
+    return errorResponse(res, "Internal server error", 500, error.message);
+  }
+};
 
 module.exports = {
   register,
@@ -474,9 +435,11 @@ module.exports = {
   forgotPassword,
   verifyResetCode,
   resetPassword,
-  //   updateProfile,
-  //   updatePassword,
+  updateProfile,
+  updatePassword,
   logout,
-  //   getProfile,
-  //   getToken,
+  getProfile,
+  getToken,
+  sendVerificationEmail,
+  sendResetEmail,
 };
