@@ -7,8 +7,8 @@ module.exports = {
       "departments",
       [
         {
-          id: 1,
-          faculty_id: 15,
+          id: "11111111-1111-1111-1111-111111111111",
+          faculty_id: "15151515-1515-1515-1515-151515151515",
           code: "1",
           name: "Teknik Komputer",
           degree: "S1",
@@ -17,8 +17,8 @@ module.exports = {
           updatedAt: new Date(),
         },
         {
-          id: 2,
-          faculty_id: 15,
+          id: "22222222-2222-2222-2222-222222222222",
+          faculty_id: "15151515-1515-1515-1515-151515151515",
           code: "2",
           name: "Sistem Informasi",
           degree: "S1",
@@ -27,8 +27,8 @@ module.exports = {
           updatedAt: new Date(),
         },
         {
-          id: 3,
-          faculty_id: 15,
+          id: "33333333-3333-3333-3333-333333333333",
+          faculty_id: "15151515-1515-1515-1515-151515151515",
           code: "3",
           name: "Informatika",
           degree: "S1",

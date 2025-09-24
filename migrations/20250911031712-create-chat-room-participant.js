@@ -5,7 +5,7 @@ module.exports = {
   async up(queryInterface, Sequelize) {
     await queryInterface.createTable("chat_room_participants", {
       room_id: {
-        type: Sequelize.BIGINT,
+        type: Sequelize.UUID,
         allowNull: false,
         references: {
           model: "chat_rooms",
@@ -16,7 +16,7 @@ module.exports = {
         primaryKey: true,
       },
       user_id: {
-        type: Sequelize.BIGINT,
+        type: Sequelize.UUID,
         allowNull: false,
         references: {
           model: "users",

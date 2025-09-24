@@ -5,13 +5,13 @@ module.exports = {
   async up(queryInterface, Sequelize) {
     await queryInterface.createTable("backup_histories", {
       id: {
-        type: Sequelize.BIGINT,
+        type: Sequelize.UUID,
+        defaultValue: Sequelize.UUIDV4,
         primaryKey: true,
-        autoIncrement: true,
         allowNull: false,
       },
       executed_by: {
-        type: Sequelize.BIGINT,
+        type: Sequelize.UUID,
         allowNull: true,
         references: {
           model: "users",

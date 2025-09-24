@@ -5,13 +5,13 @@ module.exports = {
   async up(queryInterface, Sequelize) {
     await queryInterface.createTable("activity_logs", {
       id: {
-        type: Sequelize.BIGINT,
+        type: Sequelize.UUID,
+        defaultValue: Sequelize.UUIDV4,
         primaryKey: true,
-        autoIncrement: true,
         allowNull: false,
       },
       user_id: {
-        type: Sequelize.BIGINT,
+        type: Sequelize.UUID,
         allowNull: true,
         references: {
           model: "users",
@@ -29,7 +29,7 @@ module.exports = {
         allowNull: true,
       },
       entity_id: {
-        type: Sequelize.BIGINT,
+        type: Sequelize.UUID,
         allowNull: true,
       },
       description: {

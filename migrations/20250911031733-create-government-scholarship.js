@@ -5,9 +5,9 @@ module.exports = {
   async up(queryInterface, Sequelize) {
     await queryInterface.createTable("government_scholarships", {
       id: {
-        type: Sequelize.BIGINT,
+        type: Sequelize.UUID,
+        defaultValue: Sequelize.UUIDV4,
         primaryKey: true,
-        autoIncrement: true,
         allowNull: false,
       },
       nim: {
@@ -52,7 +52,7 @@ module.exports = {
         allowNull: true,
       },
       imported_by: {
-        type: Sequelize.BIGINT,
+        type: Sequelize.UUID,
         allowNull: true,
         comment: "ID Superadmin yang mengimpor data",
         references: {

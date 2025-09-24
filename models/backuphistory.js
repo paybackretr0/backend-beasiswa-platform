@@ -10,12 +10,12 @@ module.exports = (sequelize, DataTypes) => {
   BackupHistory.init(
     {
       id: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
         primaryKey: true,
-        autoIncrement: true,
+        defaultValue: DataTypes.UUIDV4,
       },
       executed_by: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
         allowNull: true,
       },
       storage_target: {

@@ -12,12 +12,12 @@ module.exports = (sequelize, DataTypes) => {
   ChatRoomParticipant.init(
     {
       room_id: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
         primaryKey: true,
         allowNull: false,
       },
       user_id: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
         primaryKey: true,
         allowNull: false,
       },

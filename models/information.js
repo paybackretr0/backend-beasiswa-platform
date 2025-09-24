@@ -13,9 +13,9 @@ module.exports = (sequelize, DataTypes) => {
   Information.init(
     {
       id: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
         primaryKey: true,
-        autoIncrement: true,
+        defaultValue: DataTypes.UUIDV4,
       },
       type: {
         type: DataTypes.ENUM("NEWS", "ARTICLE"),
@@ -45,7 +45,7 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: "DRAFT",
       },
       author_id: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
         allowNull: true,
       },
       published_at: {

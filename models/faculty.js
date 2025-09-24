@@ -4,14 +4,15 @@ module.exports = (sequelize, DataTypes) => {
   class Faculty extends Model {
     static associate(models) {
       Faculty.hasMany(models.Department, { foreignKey: "faculty_id" });
+      Faculty.hasMany(models.User, { foreignKey: "faculty_id" });
     }
   }
   Faculty.init(
     {
       id: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
         primaryKey: true,
-        autoIncrement: true,
+        defaultValue: DataTypes.UUIDV4,
       },
       code: {
         type: DataTypes.STRING(50),

@@ -14,16 +14,16 @@ module.exports = (sequelize, DataTypes) => {
   FormAnswer.init(
     {
       id: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
         primaryKey: true,
-        autoIncrement: true,
+        defaultValue: DataTypes.UUIDV4,
       },
       application_id: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
         allowNull: false,
       },
       field_id: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
         allowNull: false,
       },
       answer_text: {

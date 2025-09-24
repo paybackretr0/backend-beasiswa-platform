@@ -27,16 +27,16 @@ module.exports = (sequelize, DataTypes) => {
   Application.init(
     {
       id: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
         primaryKey: true,
-        autoIncrement: true,
+        defaultValue: DataTypes.UUIDV4,
       },
       scholarship_id: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
         allowNull: false,
       },
       student_id: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
         allowNull: false,
       },
       status: {
@@ -56,7 +56,7 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
       },
       verified_by: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
         allowNull: true,
       },
       verified_at: {

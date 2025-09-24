@@ -5,9 +5,9 @@ module.exports = {
   async up(queryInterface, Sequelize) {
     await queryInterface.createTable("users", {
       id: {
-        type: Sequelize.BIGINT,
+        type: Sequelize.UUID,
+        defaultValue: Sequelize.UUIDV4,
         primaryKey: true,
-        autoIncrement: true,
         allowNull: false,
       },
       email: {
@@ -38,8 +38,18 @@ module.exports = {
         type: Sequelize.STRING(50),
         allowNull: true,
       },
+      faculty_id: {
+        type: Sequelize.UUID,
+        allowNull: true,
+        references: {
+          model: "faculties",
+          key: "id",
+        },
+        onUpdate: "CASCADE",
+        onDelete: "SET NULL",
+      },
       department_id: {
-        type: Sequelize.BIGINT,
+        type: Sequelize.UUID,
         allowNull: true,
         references: {
           model: "departments",
@@ -52,12 +62,33 @@ module.exports = {
         type: Sequelize.ENUM("L", "P"),
         allowNull: true,
       },
+      phone_number: {
+        type: Sequelize.STRING(20),
+        allowNull: true,
+      },
       is_active: {
         type: Sequelize.BOOLEAN,
         allowNull: false,
         defaultValue: true,
       },
       last_login_at: {
+        type: Sequelize.DATE,
+        allowNull: true,
+      },
+      emailVerificationCode: {
+        type: Sequelize.STRING(10),
+        allowNull: true,
+      },
+      emailVerified: {
+        type: Sequelize.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+      resetPasswordCode: {
+        type: Sequelize.STRING(10),
+        allowNull: true,
+      },
+      resetPasswordExpires: {
         type: Sequelize.DATE,
         allowNull: true,
       },

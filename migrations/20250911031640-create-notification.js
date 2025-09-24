@@ -5,13 +5,13 @@ module.exports = {
   async up(queryInterface, Sequelize) {
     await queryInterface.createTable("notifications", {
       id: {
-        type: Sequelize.BIGINT,
+        type: Sequelize.UUID,
+        defaultValue: Sequelize.UUIDV4,
         primaryKey: true,
-        autoIncrement: true,
         allowNull: false,
       },
       user_id: {
-        type: Sequelize.BIGINT,
+        type: Sequelize.UUID,
         allowNull: false,
         comment: "target user penerima notifications",
         references: {

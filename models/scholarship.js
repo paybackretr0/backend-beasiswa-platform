@@ -12,9 +12,9 @@ module.exports = (sequelize, DataTypes) => {
   Scholarship.init(
     {
       id: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
         primaryKey: true,
-        autoIncrement: true,
+        defaultValue: DataTypes.UUIDV4,
       },
       name: {
         type: DataTypes.STRING(191),
@@ -54,7 +54,7 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: true,
       },
       created_by: {
-        type: DataTypes.BIGINT,
+        type: DataTypes.UUID,
         allowNull: true,
       },
     },

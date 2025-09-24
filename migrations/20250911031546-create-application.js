@@ -5,13 +5,13 @@ module.exports = {
   async up(queryInterface, Sequelize) {
     await queryInterface.createTable("applications", {
       id: {
-        type: Sequelize.BIGINT,
+        type: Sequelize.UUID,
+        defaultValue: Sequelize.UUIDV4,
         primaryKey: true,
-        autoIncrement: true,
         allowNull: false,
       },
       scholarship_id: {
-        type: Sequelize.BIGINT,
+        type: Sequelize.UUID,
         allowNull: false,
         references: {
           model: "scholarships",
@@ -21,7 +21,7 @@ module.exports = {
         onDelete: "CASCADE",
       },
       student_id: {
-        type: Sequelize.BIGINT,
+        type: Sequelize.UUID,
         allowNull: false,
         references: {
           model: "users",
@@ -47,7 +47,7 @@ module.exports = {
         allowNull: true,
       },
       verified_by: {
-        type: Sequelize.BIGINT,
+        type: Sequelize.UUID,
         allowNull: true,
         references: {
           model: "users",
