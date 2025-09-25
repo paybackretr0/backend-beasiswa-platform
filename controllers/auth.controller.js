@@ -173,7 +173,7 @@ const login = async (req, res) => {
       token_type: "Bearer",
       user: {
         id: user.id,
-        name: user.name,
+        full_name: user.full_name,
         email: user.email,
         role: user.role,
       },
@@ -209,10 +209,10 @@ const sendResetEmail = async (user, code) => {
 
 const forgotPassword = async (req, res) => {
   const { email } = req.body;
+  console.log(email);
   try {
     const user = await User.findOne({ where: { email } });
     if (!user) {
-      // Untuk keamanan, response tetap sukses walau email tidak ditemukan
       return successResponse(
         res,
         "Jika email terdaftar, kode reset akan dikirim",
@@ -220,8 +220,12 @@ const forgotPassword = async (req, res) => {
       );
     }
 
+    if (!user.emailVerified) {
+      return errorResponse(res, "Email belum diverifikasi", 400);
+    }
+
     const resetCode = generateVerificationCode();
-    const expirationTime = new Date(Date.now() + 10 * 60 * 1000); // 10 menit
+    const expirationTime = new Date(Date.now() + 10 * 60 * 1000);
 
     await user.update({
       resetPasswordCode: resetCode,
@@ -254,6 +258,10 @@ const verifyResetCode = async (req, res) => {
       return errorResponse(res, "Kode reset salah atau sudah kadaluarsa", 400);
     }
 
+    if (!user.emailVerified) {
+      return errorResponse(res, "Email belum diverifikasi", 400);
+    }
+
     return successResponse(
       res,
       "Kode reset valid, silakan lanjutkan reset password"
@@ -278,6 +286,10 @@ const resetPassword = async (req, res) => {
       return errorResponse(res, "Kode reset salah atau sudah kadaluarsa", 400);
     }
 
+    if (!user.emailVerified) {
+      return errorResponse(res, "Email belum diverifikasi", 400);
+    }
+
     const hashedPassword = await hashPassword(new_password);
     await user.update({
       password: hashedPassword,
@@ -300,7 +312,6 @@ const updateProfile = async (req, res) => {
       return errorResponse(res, "User not found", 404);
     }
 
-    // Validasi gender jika diisi
     if (gender && !["L", "P"].includes(gender)) {
       return errorResponse(res, "Gender harus L atau P", 400);
     }
@@ -325,8 +336,12 @@ const updateProfile = async (req, res) => {
 };
 
 const updatePassword = async (req, res) => {
-  const { current_password, new_password, new_password_confirmation } =
-    req.body;
+  const {
+    current_password,
+    new_password,
+    new_password_confirmation,
+    refresh_token,
+  } = req.body;
 
   try {
     if (new_password !== new_password_confirmation) {
@@ -356,9 +371,11 @@ const updatePassword = async (req, res) => {
       password: hashedPassword,
     });
 
+    // Hapus semua refresh token kecuali yang sedang digunakan
     await RefreshToken.destroy({
       where: {
         user_id: user.id,
+        token: { [Op.ne]: refresh_token }, // Jangan hapus token yang sedang digunakan
       },
     });
 
@@ -386,7 +403,21 @@ const logout = async (req, res) => {
 
 const getProfile = async (req, res) => {
   try {
-    const user = await User.findByPk(req.user.id);
+    const user = await User.findByPk(req.user.id, {
+      include: [
+        {
+          model: Faculty,
+          attributes: ["name"],
+        },
+        {
+          model: Department,
+          attributes: ["name"],
+        },
+      ],
+      attributes: {
+        exclude: ["password", "emailVerificationCode", "resetPasswordCode"],
+      },
+    });
 
     if (!user) {
       return errorResponse(res, "User not found", 404);
