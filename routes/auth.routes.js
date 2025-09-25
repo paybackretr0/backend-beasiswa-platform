@@ -20,14 +20,14 @@ router.post("/login", validateLogin, authController.login);
 
 router.post("/verify-email", authController.verifyEmail);
 
-router.post("/forgot-password", verifiedUser, authController.forgotPassword);
-router.post("/verify-reset-code", verifiedUser, authController.verifyResetCode);
-router.post("/reset-password", verifiedUser, authController.resetPassword);
+router.post("/forgot-password", authController.forgotPassword);
+router.post("/verify-reset-code", authController.verifyResetCode);
+router.post("/reset-password", authController.resetPassword);
 
-// // Refresh token
+// Refresh token
 router.post("/token", authController.getToken);
 
-// // ==== Rute terproteksi (memerlukan autentikasi) ====
+// ==== Rute terproteksi (memerlukan autentikasi) ====
 
 // // Update profil
 router.put("/profile", auth, verifiedUser, authController.updateProfile);
