@@ -39,7 +39,7 @@ const sendVerificationEmail = async (user, code) => {
 };
 
 const register = async (req, res) => {
-  const { name, email, password, password_confirmation } = req.body;
+  const { full_name, email, password, password_confirmation } = req.body;
   try {
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
@@ -89,7 +89,7 @@ const register = async (req, res) => {
     const newUser = await User.create({
       email,
       password: hashedPassword,
-      full_name: name,
+      full_name,
       role: "MAHASISWA",
       nim,
       faculty_id,
