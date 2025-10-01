@@ -1,48 +1,37 @@
 const multer = require("multer");
 const path = require("path");
-const uploadUtils = require("../utils/upload");
+const {
+  getUploadDirectory,
+  getFileInfo,
+  getValidCategory,
+} = require("../utils/upload");
 
 /**
- * Konfigurasi storage multer dengan direktori yang dinamis berdasarkan kategori file
+ * Membuat storage multer dengan kategori yang fleksibel
+ * @param {string} category - Kategori upload (news, articles, evidence, dll)
+ * @returns {multer.StorageEngine}
  */
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    // Menentukan kategori file dari parameter request atau dari URL
-    let category = 'evidence';
-    
-    if (req.body && req.body.fileCategory) {
-      category = req.body.fileCategory;
-    } else if (req.originalUrl && req.originalUrl.includes('complete')) {
-      category = 'handling';
-    }
-    
-    // Log untuk debugging
-    console.log(`Upload file: Category=${category}, URL=${req.originalUrl}, MimeType=${file.mimetype}`);
-    
-    // Dapatkan direktori upload yang sesuai berdasarkan kategori dan jenis file
-    const uploadDir = uploadUtils.getUploadDirectory(category, file.mimetype);
-    
-    console.log(`Upload directory: ${uploadDir}`);
-    
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    // Membuat nama file yang unik dengan timestamp + nama asli
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const fileExt = path.extname(file.originalname);
-    const filename = `${uniqueSuffix}${fileExt}`;
-    
-    console.log(`Generated filename: ${filename}`);
-    
-    cb(null, filename);
-  },
-});
+const createStorage = (category = "general") => {
+  return multer.diskStorage({
+    destination: (req, file, cb) => {
+      const validCategory = getValidCategory(category);
+      const uploadDir = getUploadDirectory(validCategory, file.mimetype);
+      cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+      const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+      const fileExt = path.extname(file.originalname);
+      const filename = `${uniqueSuffix}${fileExt}`;
+      cb(null, filename);
+    },
+  });
+};
 
 /**
- * Filter file untuk jenis yang diizinkan
+ * File filter untuk gambar
  */
-const fileFilter = (req, file, cb) => {
-  const allowedTypes = /jpeg|jpg|png|pdf/;
+const imageFilter = (req, file, cb) => {
+  const allowedTypes = /jpeg|jpg|png|gif|webp/;
   const extname = allowedTypes.test(
     path.extname(file.originalname).toLowerCase()
   );
@@ -51,76 +40,153 @@ const fileFilter = (req, file, cb) => {
   if (extname && mimetype) {
     return cb(null, true);
   } else {
-    cb("Error: Jenis file tidak didukung. Hanya JPG, PNG, dan PDF yang diperbolehkan.");
+    cb(
+      new Error("Hanya file gambar (JPG, PNG, GIF, WEBP) yang diperbolehkan.")
+    );
   }
 };
 
 /**
- * Middleware upload untuk evidence (bukti laporan)
+ * File filter untuk dokumen
  */
-const uploadEvidence = multer({
-  storage,
-  fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
-}).single("evidence_files");
+const documentFilter = (req, file, cb) => {
+  const allowedTypes = /pdf|doc|docx/;
+  const extname = allowedTypes.test(
+    path.extname(file.originalname).toLowerCase()
+  );
+  const mimetype =
+    /application\/(pdf|msword|vnd\.openxmlformats-officedocument\.wordprocessingml\.document)/.test(
+      file.mimetype
+    );
+
+  if (extname && mimetype) {
+    return cb(null, true);
+  } else {
+    cb(new Error("Hanya file dokumen (PDF, DOC, DOCX) yang diperbolehkan."));
+  }
+};
 
 /**
- * Middleware upload untuk handling proof (bukti penanganan)
+ * File filter untuk gambar dan dokumen
  */
-const uploadHandlingProof = multer({
-  storage,
-  fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
-}).single("handling_proof");
+const mixedFilter = (req, file, cb) => {
+  const allowedImageTypes = /jpeg|jpg|png|gif|webp/;
+  const allowedDocTypes = /pdf|doc|docx/;
+
+  const extname =
+    allowedImageTypes.test(path.extname(file.originalname).toLowerCase()) ||
+    allowedDocTypes.test(path.extname(file.originalname).toLowerCase());
+
+  const mimetype =
+    file.mimetype.startsWith("image/") ||
+    /application\/(pdf|msword|vnd\.openxmlformats-officedocument\.wordprocessingml\.document)/.test(
+      file.mimetype
+    );
+
+  if (extname && mimetype) {
+    return cb(null, true);
+  } else {
+    cb(new Error("Hanya file gambar atau dokumen yang diperbolehkan."));
+  }
+};
 
 /**
- * Middleware upload generik (untuk keperluan lain)
+ * Middleware untuk mengatur fileInfo setelah upload
  */
-const upload = multer({
-  storage,
-  fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
-});
+const setFileInfo = (req, res, next) => {
+  if (req.file) {
+    req.fileInfo = getFileInfo(req.file);
+  }
+  if (req.files) {
+    req.filesInfo = Array.isArray(req.files)
+      ? req.files.map((file) => getFileInfo(file))
+      : Object.keys(req.files).reduce((acc, key) => {
+          acc[key] = Array.isArray(req.files[key])
+            ? req.files[key].map((file) => getFileInfo(file))
+            : getFileInfo(req.files[key]);
+          return acc;
+        }, {});
+  }
+  next();
+};
 
 /**
- * Wrapper untuk menangani error dari multer
+ * Membuat upload middleware dengan konfigurasi fleksibel
+ * @param {object} options - Konfigurasi upload
+ * @param {string} options.category - Kategori upload
+ * @param {string} options.fileType - Tipe file ('image', 'document', 'mixed')
+ * @param {number} options.maxSize - Ukuran maksimal file dalam bytes
+ * @returns {object} - Upload middleware
  */
-const handleUpload = (uploadMiddleware) => {
-  return (req, res, next) => {
-    console.log(`Processing ${req.originalUrl} with upload middleware`);
-    
-    uploadMiddleware(req, res, (err) => {
-      if (err instanceof multer.MulterError) {
-        // Error dari multer
-        console.error(`Multer error: ${err.code} - ${err.message}`);
-        
-        if (err.code === 'LIMIT_FILE_SIZE') {
-          return res.status(400).json({
-            message: "Ukuran file terlalu besar. Maksimal 10MB."
-          });
-        }
-        return res.status(400).json({ message: err.message });
-      } else if (err) {
-        // Error lainnya
-        console.error(`Upload error: ${err}`);
-        return res.status(400).json({ message: err });
-      }
-      
-      // Jika berhasil, tambahkan fileInfo ke request untuk digunakan controller
-      if (req.file) {
-        console.log(`File uploaded successfully: ${req.file.path}`);
-        req.fileInfo = uploadUtils.getFileInfo(req.file);
-      } else {
-        console.log('No file uploaded');
-      }
-      
-      next();
-    });
+const createUploadMiddleware = (options = {}) => {
+  const {
+    category = "general",
+    fileType = "mixed",
+    maxSize = 10 * 1024 * 1024, // 10MB default
+  } = options;
+
+  // Pilih file filter berdasarkan tipe
+  let fileFilter;
+  switch (fileType) {
+    case "image":
+      fileFilter = imageFilter;
+      break;
+    case "document":
+      fileFilter = documentFilter;
+      break;
+    default:
+      fileFilter = mixedFilter;
+  }
+
+  const upload = multer({
+    storage: createStorage(category),
+    fileFilter,
+    limits: { fileSize: maxSize },
+  });
+
+  return {
+    single: (fieldName) => [upload.single(fieldName), setFileInfo],
+    multiple: (fieldName, maxCount = 10) => [
+      upload.array(fieldName, maxCount),
+      setFileInfo,
+    ],
+    fields: (fields) => [upload.fields(fields), setFileInfo],
   };
 };
 
+// Export middleware untuk berbagai kegunaan
 module.exports = {
-  upload,
-  uploadEvidence: handleUpload(uploadEvidence),
-  uploadHandlingProof: handleUpload(uploadHandlingProof)
+  // Untuk upload berita/artikel (gambar saja)
+  newsUpload: createUploadMiddleware({
+    category: "news",
+    fileType: "image",
+    maxSize: 5 * 1024 * 1024, // 5MB
+  }),
+
+  // Untuk upload artikel
+  articleUpload: createUploadMiddleware({
+    category: "articles",
+    fileType: "image",
+    maxSize: 5 * 1024 * 1024, // 5MB
+  }),
+
+  // Untuk upload evidence (dokumen + gambar)
+  evidenceUpload: createUploadMiddleware({
+    category: "evidence",
+    fileType: "mixed",
+    maxSize: 10 * 1024 * 1024, // 10MB
+  }),
+
+  // Untuk upload umum
+  generalUpload: createUploadMiddleware({
+    category: "general",
+    fileType: "mixed",
+    maxSize: 10 * 1024 * 1024, // 10MB
+  }),
+
+  // Function untuk membuat upload middleware custom
+  createUploadMiddleware,
+
+  // Legacy support
+  upload: createUploadMiddleware(),
 };

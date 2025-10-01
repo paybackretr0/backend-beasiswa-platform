@@ -1,8 +1,8 @@
 /**
  * Utilitas untuk penanganan upload file
  */
-const path = require('path');
-const fs = require('fs');
+const path = require("path");
+const fs = require("fs");
 
 /**
  * Memeriksa apakah file adalah gambar
@@ -10,7 +10,7 @@ const fs = require('fs');
  * @returns {boolean} - true jika file adalah gambar
  */
 const isImage = (mimeType) => {
-  return mimeType.startsWith('image/');
+  return mimeType.startsWith("image/");
 };
 
 /**
@@ -19,30 +19,37 @@ const isImage = (mimeType) => {
  * @returns {boolean} - true jika file adalah dokumen
  */
 const isDocument = (mimeType) => {
-  return mimeType === 'application/pdf';
+  return (
+    mimeType === "application/pdf" ||
+    mimeType === "application/msword" ||
+    mimeType ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  );
 };
 
 /**
- * Menentukan direktori penyimpanan untuk file
- * @param {string} category - Kategori file ('evidence' atau 'handling')
+ * Menentukan direktori penyimpanan untuk file dengan kategori yang fleksibel
+ * @param {string} category - Kategori file (bebas, contoh: 'news', 'articles', 'evidence', 'profiles', dll)
  * @param {string} mimeType - MIME type file
  * @returns {string} - Path direktori penyimpanan
  */
-const getUploadDirectory = (category, mimeType) => {
-  // Tentukan kategori folder (evidence atau handling)
-  const categoryDir = ['evidence', 'handling'].includes(category) 
-    ? category 
-    : 'evidence'; // Default ke evidence jika kategori tidak valid
-  
+const getUploadDirectory = (category = "general", mimeType) => {
+  // Bersihkan category name (hapus spasi, karakter khusus)
+  const cleanCategory = category
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
   // Tentukan subfolder berdasarkan jenis file
-  const subDir = isImage(mimeType) ? 'images' : 'documents';
-  
-  // Gabungkan path
-  const uploadDir = path.join('uploads', categoryDir, subDir);
-  
+  const subDir = isImage(mimeType) ? "images" : "documents";
+
+  // Gabungkan path: uploads/category/images atau uploads/category/documents
+  const uploadDir = path.join("uploads", cleanCategory, subDir);
+
   // Pastikan direktori ada
   ensureDirectoryExists(uploadDir);
-  
+
   return uploadDir;
 };
 
@@ -51,7 +58,6 @@ const getUploadDirectory = (category, mimeType) => {
  * @param {string} directory - Path direktori
  */
 const ensureDirectoryExists = (directory) => {
-  // Membuat direktori secara rekursif jika tidak ada
   if (!fs.existsSync(directory)) {
     fs.mkdirSync(directory, { recursive: true });
   }
@@ -64,14 +70,12 @@ const ensureDirectoryExists = (directory) => {
  */
 const getFileUrl = (filePath) => {
   if (!filePath) return null;
-  
+
   // Ubah backslash ke forward slash untuk URL
-  const normalizedPath = filePath.replace(/\\/g, '/');
-  
-  // Jika path dimulai dengan 'uploads/', hapus untuk membuat URL relatif
-  return normalizedPath.startsWith('uploads/') 
-    ? normalizedPath 
-    : `uploads/${normalizedPath}`;
+  const normalizedPath = filePath.replace(/\\/g, "/");
+
+  // Return path lengkap untuk URL
+  return normalizedPath;
 };
 
 /**
@@ -81,7 +85,7 @@ const getFileUrl = (filePath) => {
  */
 const getFileInfo = (file) => {
   if (!file) return null;
-  
+
   return {
     originalName: file.originalname,
     filename: file.filename,
@@ -89,8 +93,44 @@ const getFileInfo = (file) => {
     size: file.size,
     mimeType: file.mimetype,
     url: getFileUrl(file.path),
-    fileType: isImage(file.mimetype) ? 'image' : 'document'
+    fileType: isImage(file.mimetype) ? "image" : "document",
   };
+};
+
+/**
+ * Konfigurasi kategori upload yang tersedia
+ * Bisa ditambah sesuai kebutuhan
+ */
+const UPLOAD_CATEGORIES = {
+  NEWS: "news",
+  ARTICLES: "articles",
+  EVIDENCE: "evidence",
+  HANDLING: "handling",
+  PROFILES: "profiles",
+  SCHOLARSHIPS: "scholarships",
+  GENERAL: "general",
+};
+
+/**
+ * Mendapatkan kategori upload yang valid
+ * @param {string} category - Kategori yang diminta
+ * @returns {string} - Kategori yang valid atau default 'general'
+ */
+const getValidCategory = (category) => {
+  if (!category) return UPLOAD_CATEGORIES.GENERAL;
+
+  // Cek apakah kategori ada di daftar yang sudah ditentukan
+  const upperCategory = category.toUpperCase();
+  if (UPLOAD_CATEGORIES[upperCategory]) {
+    return UPLOAD_CATEGORIES[upperCategory];
+  }
+
+  // Jika tidak ada, bersihkan dan gunakan sebagai kategori custom
+  return category
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
 };
 
 module.exports = {
@@ -99,5 +139,7 @@ module.exports = {
   getUploadDirectory,
   ensureDirectoryExists,
   getFileUrl,
-  getFileInfo
+  getFileInfo,
+  getValidCategory,
+  UPLOAD_CATEGORIES,
 };
