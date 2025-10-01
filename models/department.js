@@ -22,7 +22,6 @@ module.exports = (sequelize, DataTypes) => {
       code: {
         type: DataTypes.STRING(50),
         allowNull: false,
-        unique: true,
       },
       name: {
         type: DataTypes.STRING(191),
