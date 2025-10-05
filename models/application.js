@@ -45,8 +45,7 @@ module.exports = (sequelize, DataTypes) => {
           "SUBMITTED",
           "VERIFIED",
           "REJECTED",
-          "ACCEPTED",
-          "WAITLIST"
+          "ACCEPTED"
         ),
         allowNull: false,
         defaultValue: "DRAFT",

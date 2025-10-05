@@ -1,6 +1,5 @@
 const { Department, Faculty } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
-const { sequelize } = require("../models");
 
 const getAllDepartments = async (req, res) => {
   try {

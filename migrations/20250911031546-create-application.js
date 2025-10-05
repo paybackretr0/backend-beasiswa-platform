@@ -36,8 +36,7 @@ module.exports = {
           "SUBMITTED",
           "VERIFIED",
           "REJECTED",
-          "ACCEPTED",
-          "WAITLIST"
+          "ACCEPTED"
         ),
         allowNull: false,
         defaultValue: "DRAFT",
