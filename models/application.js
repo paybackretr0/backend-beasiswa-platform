@@ -3,21 +3,17 @@ const { Model } = require("sequelize");
 module.exports = (sequelize, DataTypes) => {
   class Application extends Model {
     static associate(models) {
-      // Application belongs to Scholarship
       Application.belongsTo(models.Scholarship, {
         foreignKey: "scholarship_id",
       });
-      // Application belongs to User (student)
       Application.belongsTo(models.User, {
         foreignKey: "student_id",
         as: "student",
       });
-      // Application can be verified by User (verifikator)
       Application.belongsTo(models.User, {
         foreignKey: "verified_by",
         as: "verificator",
       });
-      // Application has many ApplicationDocument
       Application.hasMany(models.ApplicationDocument, {
         foreignKey: "application_id",
       });
@@ -42,10 +38,11 @@ module.exports = (sequelize, DataTypes) => {
       status: {
         type: DataTypes.ENUM(
           "DRAFT",
-          "SUBMITTED",
+          "MENUNGGU_VERIFIKASI",
           "VERIFIED",
+          "MENUNGGU_VALIDASI",
           "REJECTED",
-          "ACCEPTED"
+          "VALIDATED"
         ),
         allowNull: false,
         defaultValue: "DRAFT",
@@ -75,7 +72,7 @@ module.exports = (sequelize, DataTypes) => {
       sequelize,
       modelName: "Application",
       tableName: "applications",
-      timestamps: true, // createdAt & updatedAt otomatis
+      timestamps: true,
     }
   );
   return Application;

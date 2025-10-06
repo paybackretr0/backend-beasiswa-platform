@@ -7,6 +7,10 @@ const {
   getAllScholarships,
   createScholarship,
   getAllActiveScholarships,
+  getBeasiswaById,
+  updateScholarship,
+  deactivateScholarship,
+  activateScholarship,
 } = require("../controllers/beasiswa.controller");
 
 const scholarshipUpload = createUploadMiddleware({
@@ -28,5 +32,19 @@ router.post(
   ]),
   createScholarship
 );
+
+router.get("/:id", getBeasiswaById);
+
+router.put(
+  "/:id",
+  scholarshipUpload.fields([
+    { name: "requirement_file", maxCount: 1 },
+    { name: "logo_file", maxCount: 1 },
+  ]),
+  updateScholarship
+);
+
+router.patch("/:id/deactivate", deactivateScholarship);
+router.patch("/:id/activate", activateScholarship);
 
 module.exports = router;
