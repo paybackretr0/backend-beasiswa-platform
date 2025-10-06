@@ -7,6 +7,43 @@ module.exports = (sequelize, DataTypes) => {
       Scholarship.belongsTo(models.User, { foreignKey: "created_by" });
       Scholarship.hasMany(models.Application, { foreignKey: "scholarship_id" });
       Scholarship.hasMany(models.FormField, { foreignKey: "scholarship_id" });
+
+      // Relasi dengan tabel junction
+      Scholarship.hasMany(models.ScholarshipFaculty, {
+        foreignKey: "scholarship_id",
+        as: "scholarshipFaculties",
+      });
+      Scholarship.hasMany(models.ScholarshipDepartment, {
+        foreignKey: "scholarship_id",
+        as: "scholarshipDepartments",
+      });
+      Scholarship.hasMany(models.ScholarshipDocument, {
+        foreignKey: "scholarship_id",
+        as: "scholarshipDocuments",
+      });
+      Scholarship.hasMany(models.ScholarshipRequirement, {
+        foreignKey: "scholarship_id",
+        as: "requirements",
+      });
+      Scholarship.hasMany(models.ScholarshipBenefit, {
+        foreignKey: "scholarship_id",
+        as: "benefits",
+      });
+
+      // Many-to-many relations through junction tables
+      Scholarship.belongsToMany(models.Faculty, {
+        through: models.ScholarshipFaculty,
+        foreignKey: "scholarship_id",
+        otherKey: "faculty_id",
+        as: "faculties",
+      });
+
+      Scholarship.belongsToMany(models.Department, {
+        through: models.ScholarshipDepartment,
+        foreignKey: "scholarship_id",
+        otherKey: "department_id",
+        as: "departments",
+      });
     }
   }
   Scholarship.init(
@@ -36,10 +73,6 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
-      requirements_json: {
-        type: DataTypes.JSON,
-        allowNull: true,
-      },
       start_date: {
         type: DataTypes.DATEONLY,
         allowNull: true,
@@ -52,6 +85,47 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.BOOLEAN,
         allowNull: false,
         defaultValue: true,
+      },
+      contact_person_name: {
+        type: DataTypes.STRING(191),
+        allowNull: false,
+      },
+      contact_person_email: {
+        type: DataTypes.STRING(191),
+        allowNull: false,
+      },
+      contact_person_phone: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+      },
+      scholarship_status: {
+        type: DataTypes.ENUM("AKTIF", "NONAKTIF"),
+        allowNull: false,
+        defaultValue: "AKTIF",
+      },
+      gpa_minimum: {
+        type: DataTypes.DECIMAL(3, 2),
+        allowNull: true,
+      },
+      semester_minimum: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+      },
+      scholarship_value: {
+        type: DataTypes.DECIMAL(15, 2),
+        allowNull: false,
+      },
+      duration_semesters: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+      },
+      website_url: {
+        type: DataTypes.STRING(191),
+        allowNull: true,
+      },
+      logo_path: {
+        type: DataTypes.STRING(191),
+        allowNull: true,
       },
       created_by: {
         type: DataTypes.UUID,

@@ -33,11 +33,11 @@ module.exports = {
       status: {
         type: Sequelize.ENUM(
           "DRAFT",
-          "SUBMITTED",
+          "MENUNGGU_VERIFIKASI",
           "VERIFIED",
+          "MENUNGGU_VALIDASI",
           "REJECTED",
-          "ACCEPTED",
-          "WAITLIST"
+          "VALIDATED"
         ),
         allowNull: false,
         defaultValue: "DRAFT",
