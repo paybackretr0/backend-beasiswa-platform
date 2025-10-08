@@ -18,6 +18,7 @@ const getAllFaculties = async (req, res) => {
       include: [
         {
           model: Department,
+          as: "departments",
           attributes: [],
         },
       ],

@@ -5,6 +5,7 @@ module.exports = (sequelize, DataTypes) => {
     static associate(models) {
       Application.belongsTo(models.Scholarship, {
         foreignKey: "scholarship_id",
+        as: "scholarship",
       });
       Application.belongsTo(models.User, {
         foreignKey: "student_id",

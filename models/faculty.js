@@ -3,8 +3,14 @@ const { Model } = require("sequelize");
 module.exports = (sequelize, DataTypes) => {
   class Faculty extends Model {
     static associate(models) {
-      Faculty.hasMany(models.Department, { foreignKey: "faculty_id" });
-      Faculty.hasMany(models.User, { foreignKey: "faculty_id" });
+      Faculty.hasMany(models.Department, {
+        foreignKey: "faculty_id",
+        as: "departments", // Add alias
+      });
+      Faculty.hasMany(models.User, {
+        foreignKey: "faculty_id",
+        as: "users", // Add alias
+      });
     }
   }
   Faculty.init(

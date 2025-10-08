@@ -8,6 +8,7 @@ const getAllDepartments = async (req, res) => {
       include: [
         {
           model: Faculty,
+          as: "faculty",
           attributes: ["id", "name"],
         },
       ],
