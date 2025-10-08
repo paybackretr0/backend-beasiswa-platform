@@ -4,14 +4,16 @@ const {
   Scholarship,
   Faculty,
   Department,
+  ActivityLog,
   sequelize,
 } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 const { Op } = require("sequelize");
 
-const getMainSummary = async (req, res) => {
+const getSummary = async (req, res) => {
   try {
     const { year = new Date().getFullYear() } = req.query;
+    const currentYear = new Date().getFullYear();
 
     const totalPendaftar = await Application.count({
       where: {
@@ -39,63 +41,76 @@ const getMainSummary = async (req, res) => {
 
     const beasiswaSudahTutup = totalBeasiswa - beasiswaMasihBuka;
 
+    const totalMahasiswa = await User.count({
+      where: {
+        role: "MAHASISWA",
+        is_active: true,
+      },
+    });
+
     const summary = {
       totalPendaftar,
       totalBeasiswa,
       beasiswaMasihBuka,
       beasiswaSudahTutup,
+      totalMahasiswa,
     };
 
-    return successResponse(res, "Main summary retrieved successfully", summary);
+    return successResponse(res, "Summary retrieved successfully", summary);
   } catch (error) {
-    console.error("Error fetching main summary:", error);
-    return errorResponse(res, "Failed to retrieve main summary", 500);
+    console.error("Error fetching summary:", error);
+    return errorResponse(res, "Failed to retrieve summary", 500);
   }
 };
 
+// Selection Summary Data
 const getSelectionSummary = async (req, res) => {
   try {
     const { year = new Date().getFullYear() } = req.query;
 
-    const lolosSeleksiBerkas = await Application.count({
-      where: {
-        status: "VALIDATED",
-        createdAt: {
-          [Op.gte]: new Date(`${year}-01-01`),
-          [Op.lte]: new Date(`${year}-12-31`),
+    const [
+      lolosSeleksiBerkas,
+      menungguVerifikasi,
+      menungguValidasi,
+      tidakLolosSeleksi,
+    ] = await Promise.all([
+      Application.count({
+        where: {
+          status: "VALIDATED",
+          createdAt: {
+            [Op.gte]: new Date(`${year}-01-01`),
+            [Op.lte]: new Date(`${year}-12-31`),
+          },
         },
-      },
-    });
-
-    const menungguVerifikasi = await Application.count({
-      where: {
-        status: "MENUNGGU_VERIFIKASI",
-        createdAt: {
-          [Op.gte]: new Date(`${year}-01-01`),
-          [Op.lte]: new Date(`${year}-12-31`),
+      }),
+      Application.count({
+        where: {
+          status: "MENUNGGU_VERIFIKASI",
+          createdAt: {
+            [Op.gte]: new Date(`${year}-01-01`),
+            [Op.lte]: new Date(`${year}-12-31`),
+          },
         },
-      },
-    });
-
-    const menungguValidasi = await Application.count({
-      where: {
-        status: "MENUNGGU_VALIDASI",
-        createdAt: {
-          [Op.gte]: new Date(`${year}-01-01`),
-          [Op.lte]: new Date(`${year}-12-31`),
+      }),
+      Application.count({
+        where: {
+          status: "MENUNGGU_VALIDASI",
+          createdAt: {
+            [Op.gte]: new Date(`${year}-01-01`),
+            [Op.lte]: new Date(`${year}-12-31`),
+          },
         },
-      },
-    });
-
-    const tidakLolosSeleksi = await Application.count({
-      where: {
-        status: "REJECTED",
-        createdAt: {
-          [Op.gte]: new Date(`${year}-01-01`),
-          [Op.lte]: new Date(`${year}-12-31`),
+      }),
+      Application.count({
+        where: {
+          status: "REJECTED",
+          createdAt: {
+            [Op.gte]: new Date(`${year}-01-01`),
+            [Op.lte]: new Date(`${year}-12-31`),
+          },
         },
-      },
-    });
+      }),
+    ]);
 
     const summary = {
       lolosSeleksiBerkas,
@@ -126,13 +141,15 @@ const getFacultyDistribution = async (req, res) => {
         COUNT(a.id) as value
       FROM faculties f
       LEFT JOIN departments d ON f.id = d.faculty_id
-      LEFT JOIN users u ON u.department_id = d.id
+      LEFT JOIN users u ON u.department_id = d.id AND u.role = 'MAHASISWA'
       LEFT JOIN applications a ON u.id = a.student_id 
         AND a.status != 'DRAFT'
         AND YEAR(a.createdAt) = :year
+      WHERE f.is_active = true
       GROUP BY f.id, f.name
+      HAVING COUNT(a.id) > 0
       ORDER BY value DESC
-      LIMIT 5
+      LIMIT 10
       `,
       {
         replacements: { year },
@@ -161,13 +178,15 @@ const getDepartmentDistribution = async (req, res) => {
         d.name as label,
         COUNT(a.id) as value
       FROM departments d
-      LEFT JOIN users u ON u.department_id = d.id
+      LEFT JOIN users u ON u.department_id = d.id AND u.role = 'MAHASISWA'
       LEFT JOIN applications a ON u.id = a.student_id 
         AND a.status != 'DRAFT'
         AND YEAR(a.createdAt) = :year
+      WHERE d.is_active = true
       GROUP BY d.id, d.name
+      HAVING COUNT(a.id) > 0
       ORDER BY value DESC
-      LIMIT 5
+      LIMIT 10
       `,
       {
         replacements: { year },
@@ -239,8 +258,9 @@ const getGenderDistribution = async (req, res) => {
       LEFT JOIN applications a ON u.id = a.student_id 
         AND a.status != 'DRAFT'
         AND YEAR(a.createdAt) = :year
-      WHERE u.role = 'mahasiswa' AND a.id IS NOT NULL
+      WHERE u.role = 'MAHASISWA' AND a.id IS NOT NULL
       GROUP BY u.gender
+      HAVING COUNT(a.id) > 0
       `,
       {
         replacements: { year },
@@ -264,6 +284,162 @@ const getGenderDistribution = async (req, res) => {
   }
 };
 
+const getStatusSummary = async (req, res) => {
+  try {
+    const { year = new Date().getFullYear() } = req.query;
+
+    const [menungguVerifikasi, menungguValidasi, disetujui, ditolak] =
+      await Promise.all([
+        Application.count({
+          where: {
+            status: "MENUNGGU_VERIFIKASI",
+            createdAt: {
+              [Op.gte]: new Date(`${year}-01-01`),
+              [Op.lte]: new Date(`${year}-12-31`),
+            },
+          },
+        }),
+        Application.count({
+          where: {
+            status: "MENUNGGU_VALIDASI",
+            createdAt: {
+              [Op.gte]: new Date(`${year}-01-01`),
+              [Op.lte]: new Date(`${year}-12-31`),
+            },
+          },
+        }),
+        Application.count({
+          where: {
+            status: "VALIDATED",
+            createdAt: {
+              [Op.gte]: new Date(`${year}-01-01`),
+              [Op.lte]: new Date(`${year}-12-31`),
+            },
+          },
+        }),
+        Application.count({
+          where: {
+            status: "REJECTED",
+            createdAt: {
+              [Op.gte]: new Date(`${year}-01-01`),
+              [Op.lte]: new Date(`${year}-12-31`),
+            },
+          },
+        }),
+      ]);
+
+    const statusSummary = [
+      {
+        label: "Menunggu Verifikasi",
+        value: menungguVerifikasi,
+        color: "#FF8C42",
+      },
+      {
+        label: "Menunggu Validasi",
+        value: menungguValidasi,
+        color: "#FFD23F",
+      },
+      {
+        label: "Disetujui",
+        value: disetujui,
+        color: "#06D6A0",
+      },
+      {
+        label: "Ditolak",
+        value: ditolak,
+        color: "#EF476F",
+      },
+    ];
+
+    return successResponse(
+      res,
+      "Status summary retrieved successfully",
+      statusSummary
+    );
+  } catch (error) {
+    console.error("Error fetching status summary:", error);
+    return errorResponse(res, "Failed to retrieve status summary", 500);
+  }
+};
+
+const getActivities = async (req, res) => {
+  try {
+    const recentActivityLogs = await ActivityLog.findAll({
+      where: {
+        createdAt: {
+          [Op.gte]: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        },
+      },
+      include: [
+        {
+          model: User,
+          attributes: ["full_name", "role"],
+          required: false,
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+      limit: 15,
+    });
+
+    const activities = [];
+
+    recentActivityLogs.forEach((log) => {
+      const timeAgo = getTimeAgo(log.createdAt);
+
+      let type = "SISTEM";
+      let description = log.description;
+
+      if (log.action.includes("CREATE") || log.action.includes("REGISTER")) {
+        if (log.entity_type === "APPLICATION") {
+          type = "PENDAFTARAN";
+        } else if (log.entity_type === "SCHOLARSHIP") {
+          type = "BEASISWA";
+        } else if (log.entity_type === "USER") {
+          type = "PENGGUNA";
+        }
+      } else if (
+        log.action.includes("UPDATE") ||
+        log.action.includes("VERIFY")
+      ) {
+        if (log.entity_type === "APPLICATION") {
+          type = "VERIFIKASI";
+        } else if (log.entity_type === "SCHOLARSHIP") {
+          type = "BEASISWA";
+        }
+      } else if (log.action.includes("DELETE")) {
+        type = "PENGHAPUSAN";
+      } else if (log.action.includes("LOGIN")) {
+        type = "LOGIN";
+      }
+
+      if (!description) {
+        const userName = log.User?.full_name || "Sistem";
+        description = `${userName} melakukan ${log.action.toLowerCase()}`;
+      }
+
+      activities.push({
+        type: type,
+        desc: description,
+        time: timeAgo,
+        timestamp: log.createdAt,
+        user: log.User?.full_name || null,
+        action: log.action,
+      });
+    });
+
+    const recentActivities = activities.slice(0, 8);
+
+    return successResponse(
+      res,
+      "Activities retrieved successfully",
+      recentActivities
+    );
+  } catch (error) {
+    console.error("Error fetching activities:", error);
+    return errorResponse(res, "Failed to retrieve activities", 500);
+  }
+};
+
 const getApplicationsList = async (req, res) => {
   try {
     const {
@@ -282,7 +458,9 @@ const getApplicationsList = async (req, res) => {
       },
     };
 
-    let userWhereCondition = {};
+    let userWhereCondition = {
+      role: "MAHASISWA",
+    };
     let departmentWhereCondition = {};
     let facultyWhereCondition = {};
 
@@ -320,6 +498,7 @@ const getApplicationsList = async (req, res) => {
               where: Object.keys(departmentWhereCondition).length
                 ? departmentWhereCondition
                 : undefined,
+              required: false,
               attributes: ["id", "name"],
               include: [
                 {
@@ -328,6 +507,7 @@ const getApplicationsList = async (req, res) => {
                   where: Object.keys(facultyWhereCondition).length
                     ? facultyWhereCondition
                     : undefined,
+                  required: false,
                   attributes: ["id", "name"],
                 },
               ],
@@ -366,6 +546,24 @@ const getApplicationsList = async (req, res) => {
   }
 };
 
+const getTimeAgo = (date) => {
+  const now = new Date();
+  const diffInMs = now - new Date(date);
+  const diffInMinutes = Math.floor(diffInMs / (1000 * 60));
+  const diffInHours = Math.floor(diffInMs / (1000 * 60 * 60));
+
+  if (diffInMinutes < 1) {
+    return "Baru saja";
+  } else if (diffInMinutes < 60) {
+    return `${diffInMinutes} menit lalu`;
+  } else if (diffInHours < 24) {
+    return `${diffInHours} jam lalu`;
+  } else {
+    const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
+    return `${diffInDays} hari lalu`;
+  }
+};
+
 const getStatusLabel = (status) => {
   const statusMap = {
     MENUNGGU_VERIFIKASI: "Menunggu Verifikasi",
@@ -378,11 +576,13 @@ const getStatusLabel = (status) => {
 };
 
 module.exports = {
-  getMainSummary,
+  getSummary,
   getSelectionSummary,
   getFacultyDistribution,
   getDepartmentDistribution,
   getYearlyTrend,
   getGenderDistribution,
+  getStatusSummary,
+  getActivities,
   getApplicationsList,
 };

@@ -5,11 +5,11 @@ module.exports = (sequelize, DataTypes) => {
     static associate(models) {
       User.belongsTo(models.Department, {
         foreignKey: "department_id",
-        as: "department", // Add alias
+        as: "department",
       });
       User.belongsTo(models.Faculty, {
         foreignKey: "faculty_id",
-        as: "faculty", // Add alias
+        as: "faculty",
       });
       User.hasMany(models.ActivityLog, { foreignKey: "user_id" });
       User.hasMany(models.BackupHistory, { foreignKey: "executed_by" });

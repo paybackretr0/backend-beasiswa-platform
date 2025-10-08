@@ -50,7 +50,6 @@ const register = async (req, res) => {
       return errorResponse(res, "Password confirmation does not match", 400);
     }
 
-    // Ambil NIM dari email
     const nim = parseNimFromEmail(email);
 
     let faculty_id = null;
@@ -64,12 +63,10 @@ const register = async (req, res) => {
         return errorResponse(res, "Invalid NIM format", 400);
       }
 
-      // Cari fakultas berdasarkan kode
       const faculty = await Faculty.findOne({ where: { code: kodeFakultas } });
       if (faculty) {
         faculty_id = faculty.id;
 
-        // Cari departemen di fakultas tersebut berdasarkan kode
         const department = await Department.findOne({
           where: {
             faculty_id: faculty.id,
@@ -371,11 +368,10 @@ const updatePassword = async (req, res) => {
       password: hashedPassword,
     });
 
-    // Hapus semua refresh token kecuali yang sedang digunakan
     await RefreshToken.destroy({
       where: {
         user_id: user.id,
-        token: { [Op.ne]: refresh_token }, // Jangan hapus token yang sedang digunakan
+        token: { [Op.ne]: refresh_token },
       },
     });
 
@@ -407,10 +403,12 @@ const getProfile = async (req, res) => {
       include: [
         {
           model: Faculty,
+          as: "faculty",
           attributes: ["name"],
         },
         {
           model: Department,
+          as: "department",
           attributes: ["name"],
         },
       ],

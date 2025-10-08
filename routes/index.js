@@ -8,7 +8,7 @@ const websiteRoutes = require("./website.routes");
 const additionalRoutes = require("./additional.routes");
 const beasiswaRoutes = require("./beasiswa.routes");
 const pendaftaranRoutes = require("./pendaftaran.routes");
-const reportRoutes = require("./report.routes");
+const analyticsRoutes = require("./analytics.routes");
 
 router.use("/auth", authRoutes);
 router.use("/users", userRoutes);
@@ -18,6 +18,6 @@ router.use("/websites", websiteRoutes);
 router.use("/additional", additionalRoutes);
 router.use("/beasiswa", beasiswaRoutes);
 router.use("/pendaftaran", pendaftaranRoutes);
-router.use("/reports", reportRoutes);
+router.use("/analytics", analyticsRoutes);
 
 module.exports = router;
