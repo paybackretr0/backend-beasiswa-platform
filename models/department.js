@@ -4,8 +4,14 @@ module.exports = (sequelize, DataTypes) => {
   class Department extends Model {
     static associate(models) {
       // Department belongs to Faculty
-      Department.belongsTo(models.Faculty, { foreignKey: "faculty_id" });
-      Department.hasMany(models.User, { foreignKey: "department_id" });
+      Department.belongsTo(models.Faculty, {
+        foreignKey: "faculty_id",
+        as: "faculty", // Add alias
+      });
+      Department.hasMany(models.User, {
+        foreignKey: "department_id",
+        as: "users", // Add alias
+      });
     }
   }
   Department.init(
