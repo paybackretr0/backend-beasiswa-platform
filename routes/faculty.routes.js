@@ -8,8 +8,9 @@ const {
   activateFaculty,
   deactivateFaculty,
 } = require("../controllers/faculty.controller");
+const authorize = require("../middlewares/role.middleware");
 
-router.use(authenticate);
+router.use(authenticate, authorize("SUPERADMIN"));
 router.get("/", getAllFaculties);
 router.post("/", createFaculty);
 router.put("/:id", editFaculty);

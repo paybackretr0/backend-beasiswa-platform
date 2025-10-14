@@ -12,8 +12,17 @@ const {
   getActivities,
   getApplicationsList,
 } = require("../controllers/analytics.controller");
+const authorize = require("../middlewares/role.middleware");
 
-router.use(authenticate);
+router.use(
+  authenticate,
+  authorize([
+    "SUPERADMIN",
+    "PIMPINAN_DITMAWA",
+    "PIMPINAN_FAKULTAS",
+    "VERIFIKATOR",
+  ])
+);
 
 // Summary endpoints
 router.get("/summary", getSummary);

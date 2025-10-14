@@ -8,8 +8,9 @@ const {
   activateDepartment,
   deactivateDepartment,
 } = require("../controllers/department.controller");
+const authorize = require("../middlewares/role.middleware");
 
-router.use(authenticate);
+router.use(authenticate, authorize("SUPERADMIN"));
 router.get("/", getAllDepartments);
 router.post("/", createDepartment);
 router.put("/:id", editDepartment);
