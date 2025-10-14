@@ -5,8 +5,12 @@ const {
   getAllApplications,
   getApplicationsSummary,
 } = require("../controllers/pendaftaran.controller");
+const authorize = require("../middlewares/role.middleware");
 
-router.use(authenticate);
+router.use(
+  authenticate,
+  authorize(["SUPERADMIN", "PIMPINAN_DITMAWA", "VERIFIKATOR"])
+);
 router.get("/", getAllApplications);
 router.get("/summary", getApplicationsSummary);
 

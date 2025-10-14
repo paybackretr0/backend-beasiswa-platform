@@ -14,8 +14,9 @@ const {
   newsUpload,
   articleUpload,
 } = require("../middlewares/upload.middleware");
+const authorize = require("../middlewares/role.middleware");
 
-router.use(authenticate);
+router.use(authenticate, authorize("SUPERADMIN"));
 router.get("/news", getAllNews);
 router.get("/articles", getAllArticles);
 
