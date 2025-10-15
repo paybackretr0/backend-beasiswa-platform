@@ -6,11 +6,11 @@ const { createUploadMiddleware } = require("../middlewares/upload.middleware");
 const {
   getAllScholarships,
   createScholarship,
-  getAllActiveScholarships,
   getBeasiswaById,
   updateScholarship,
   deactivateScholarship,
   activateScholarship,
+  getOtherScholarships,
 } = require("../controllers/beasiswa.controller");
 const authorize = require("../middlewares/role.middleware");
 
@@ -20,7 +20,9 @@ const scholarshipUpload = createUploadMiddleware({
   maxSize: 10 * 1024 * 1024,
 });
 
-router.get("/active", getAllActiveScholarships);
+router.get("/user", getAllScholarships);
+router.get("/user/:id", getBeasiswaById);
+router.get("/user/:id/others", getOtherScholarships);
 
 router.use(authenticate, authorize("SUPERADMIN"));
 

@@ -5,6 +5,7 @@ const {
   ScholarshipDocument,
   ScholarshipRequirement,
   ScholarshipBenefit,
+  FormField,
 } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 const { sequelize } = require("../models");
@@ -43,7 +44,7 @@ const createScholarship = async (req, res) => {
       contact_person_name,
       contact_person_email,
       contact_person_phone,
-      scholarship_status,
+      is_active,
       scholarship_value,
       duration_semesters,
       website_url,
@@ -89,7 +90,7 @@ const createScholarship = async (req, res) => {
         contact_person_name,
         contact_person_email,
         contact_person_phone,
-        scholarship_status: scholarship_status || "AKTIF",
+        is_active: is_active || true,
         website_url: website_url || null,
         logo_path: logoPath,
         created_by: req.user.id,
@@ -141,6 +142,16 @@ const createScholarship = async (req, res) => {
           document_name: doc,
         }));
         await ScholarshipDocument.bulkCreate(documentData, { transaction });
+
+        const formFields = parsedDocuments.map((doc, index) => ({
+          scholarship_id: scholarship.id,
+          label: doc,
+          type: "FILE",
+          is_required: true,
+          order_no: index + 1,
+        }));
+
+        await FormField.bulkCreate(formFields, { transaction });
       }
     }
 
@@ -197,23 +208,6 @@ const createScholarship = async (req, res) => {
   }
 };
 
-const getAllActiveScholarships = async (req, res) => {
-  try {
-    const scholarships = await Scholarship.findAll({
-      where: { scholarship_status: "AKTIF" },
-      order: [["createdAt", "DESC"]],
-    });
-    successResponse(
-      res,
-      "Daftar Beasiswa Aktif berhasil didapatkan",
-      scholarships
-    );
-  } catch (error) {
-    console.error("Error fetching active scholarships:", error);
-    errorResponse(res, "Gagal mendapatkan daftar Beasiswa Aktif", error);
-  }
-};
-
 const getBeasiswaById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -259,7 +253,7 @@ const updateScholarship = async (req, res) => {
       contact_person_name,
       contact_person_email,
       contact_person_phone,
-      scholarship_status,
+      is_active,
       scholarship_value,
       duration_semesters,
       website_url,
@@ -310,7 +304,7 @@ const updateScholarship = async (req, res) => {
         contact_person_name,
         contact_person_email,
         contact_person_phone,
-        scholarship_status: scholarship_status || "AKTIF",
+        is_active: is_active || true,
         website_url: website_url || null,
         logo_path: logoPath,
       },
@@ -448,7 +442,6 @@ const deactivateScholarship = async (req, res) => {
     }
     await scholarship.update({
       is_active: false,
-      scholarship_status: "NONAKTIF",
     });
     successResponse(res, "Beasiswa berhasil dinonaktifkan", scholarship);
   } catch (error) {
@@ -466,7 +459,6 @@ const activateScholarship = async (req, res) => {
     }
     await scholarship.update({
       is_active: true,
-      scholarship_status: "AKTIF",
     });
     successResponse(res, "Beasiswa berhasil diaktifkan", scholarship);
   } catch (error) {
@@ -475,12 +467,46 @@ const activateScholarship = async (req, res) => {
   }
 };
 
+const getOtherScholarships = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { limit = 5 } = req.query;
+
+    const otherScholarships = await Scholarship.findAll({
+      where: {
+        id: { [require("sequelize").Op.ne]: id },
+      },
+      order: [["createdAt", "DESC"]],
+      limit: parseInt(limit),
+      attributes: [
+        "id",
+        "name",
+        "organizer",
+        "year",
+        "logo_path",
+        "scholarship_value",
+        "end_date",
+        "createdAt",
+      ],
+    });
+
+    successResponse(
+      res,
+      "Beasiswa lainnya berhasil didapatkan",
+      otherScholarships
+    );
+  } catch (error) {
+    console.error("Error fetching other scholarships:", error);
+    errorResponse(res, "Gagal mendapatkan beasiswa lainnya", error);
+  }
+};
+
 module.exports = {
   getAllScholarships,
   createScholarship,
-  getAllActiveScholarships,
   getBeasiswaById,
   updateScholarship,
   deactivateScholarship,
   activateScholarship,
+  getOtherScholarships,
 };

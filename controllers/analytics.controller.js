@@ -34,7 +34,7 @@ const getSummary = async (req, res) => {
     const beasiswaMasihBuka = await Scholarship.count({
       where: {
         year: year,
-        scholarship_status: "AKTIF",
+        is_active: true,
         end_date: { [Op.gte]: new Date() },
       },
     });
