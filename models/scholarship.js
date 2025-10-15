@@ -98,11 +98,6 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(20),
         allowNull: false,
       },
-      scholarship_status: {
-        type: DataTypes.ENUM("AKTIF", "NONAKTIF"),
-        allowNull: false,
-        defaultValue: "AKTIF",
-      },
       gpa_minimum: {
         type: DataTypes.DECIMAL(3, 2),
         allowNull: true,

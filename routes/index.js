@@ -9,6 +9,7 @@ const additionalRoutes = require("./additional.routes");
 const beasiswaRoutes = require("./beasiswa.routes");
 const pendaftaranRoutes = require("./pendaftaran.routes");
 const analyticsRoutes = require("./analytics.routes");
+const formRoutes = require("./form.routes");
 
 router.use("/auth", authRoutes);
 router.use("/users", userRoutes);
@@ -19,5 +20,6 @@ router.use("/additional", additionalRoutes);
 router.use("/beasiswa", beasiswaRoutes);
 router.use("/pendaftaran", pendaftaranRoutes);
 router.use("/analytics", analyticsRoutes);
+router.use("/forms", formRoutes);
 
 module.exports = router;

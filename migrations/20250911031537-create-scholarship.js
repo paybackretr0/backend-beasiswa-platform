@@ -55,11 +55,6 @@ module.exports = {
         type: Sequelize.STRING(20),
         allowNull: false,
       },
-      scholarship_status: {
-        type: Sequelize.ENUM("AKTIF", "NONAKTIF"),
-        allowNull: false,
-        defaultValue: "AKTIF",
-      },
       gpa_minimum: {
         type: Sequelize.DECIMAL(3, 2),
         allowNull: true,

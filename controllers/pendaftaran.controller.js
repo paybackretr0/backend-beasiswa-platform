@@ -10,7 +10,7 @@ const getAllApplications = async (req, res) => {
         {
           model: Scholarship,
           as: "scholarship",
-          attributes: ["id", "name", "scholarship_status"],
+          attributes: ["id", "name", "is_active"],
         },
         {
           model: User,
@@ -21,7 +21,6 @@ const getAllApplications = async (req, res) => {
       order: [["submitted_at", "DESC"]],
     });
 
-    // Transform data untuk frontend
     const transformedApplications = applications.map((app) => ({
       id: app.id,
       nama: app.student?.name || "N/A",
