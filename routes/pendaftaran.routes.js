@@ -1,17 +1,29 @@
 const express = require("express");
 const router = express.Router();
 const { authenticate } = require("../middlewares/auth.middleware");
-const {
-  getAllApplications,
-  getApplicationsSummary,
-} = require("../controllers/pendaftaran.controller");
 const authorize = require("../middlewares/role.middleware");
+const { applicationUpload } = require("../middlewares/upload.middleware");
+const {
+  getScholarshipForm,
+  submitApplication,
+} = require("../controllers/pendaftaran.controller");
 
-router.use(
-  authenticate,
-  authorize(["SUPERADMIN", "PIMPINAN_DITMAWA", "VERIFIKATOR"])
+// Middleware autentikasi untuk semua route
+router.use(authenticate);
+
+// Get form untuk beasiswa tertentu (hanya mahasiswa)
+router.get(
+  "/scholarship/:scholarshipId/form",
+  authorize(["MAHASISWA"]),
+  getScholarshipForm
 );
-router.get("/", getAllApplications);
-router.get("/summary", getApplicationsSummary);
+
+// Submit application dengan file upload (hanya mahasiswa)
+router.post(
+  "/scholarship/:scholarshipId/submit",
+  authorize(["MAHASISWA"]),
+  applicationUpload.any(),
+  submitApplication
+);
 
 module.exports = router;

@@ -8,14 +8,19 @@ const {
 
 /**
  * Membuat storage multer dengan kategori yang fleksibel
- * @param {string} category - Kategori upload (news, articles, evidence, dll)
+ * @param {string} category - Kategori upload (news, articles, application, dll)
  * @returns {multer.StorageEngine}
  */
 const createStorage = (category = "general") => {
   return multer.diskStorage({
     destination: (req, file, cb) => {
       const validCategory = getValidCategory(category);
-      const uploadDir = getUploadDirectory(validCategory, file.mimetype);
+      const userId = req.user?.id || "unknown";
+      const uploadDir = getUploadDirectory(
+        validCategory,
+        file.mimetype,
+        userId
+      );
       cb(null, uploadDir);
     },
     filename: (req, file, cb) => {
@@ -151,6 +156,7 @@ const createUploadMiddleware = (options = {}) => {
       setFileInfo,
     ],
     fields: (fields) => [upload.fields(fields), setFileInfo],
+    any: () => [upload.any(), setFileInfo],
   };
 };
 
@@ -170,9 +176,9 @@ module.exports = {
     maxSize: 5 * 1024 * 1024, // 5MB
   }),
 
-  // Untuk upload evidence (dokumen + gambar)
-  evidenceUpload: createUploadMiddleware({
-    category: "evidence",
+  // Untuk upload application (dokumen + gambar)
+  applicationUpload: createUploadMiddleware({
+    category: "applications",
     fileType: "mixed",
     maxSize: 10 * 1024 * 1024, // 10MB
   }),
