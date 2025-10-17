@@ -5,6 +5,7 @@ const {
   ScholarshipDocument,
   ScholarshipRequirement,
   ScholarshipBenefit,
+  ScholarshipStage,
   FormField,
 } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
@@ -50,6 +51,7 @@ const createScholarship = async (req, res) => {
       website_url,
       faculties,
       departments,
+      stages,
     } = req.body;
 
     if (
@@ -62,7 +64,8 @@ const createScholarship = async (req, res) => {
       !contact_person_email ||
       !contact_person_phone ||
       !scholarship_value ||
-      !duration_semesters
+      !duration_semesters ||
+      !stages
     ) {
       return errorResponse(res, "Field wajib harus diisi", 400);
     }
@@ -71,7 +74,6 @@ const createScholarship = async (req, res) => {
     if (req.files && req.files.logo_file && req.files.logo_file[0]) {
       const logoFileInfo = req.filesInfo.logo_file[0];
       logoPath = logoFileInfo.url;
-      console.log("Logo uploaded:", logoPath);
     }
 
     const scholarship = await Scholarship.create(
@@ -97,6 +99,21 @@ const createScholarship = async (req, res) => {
       },
       { transaction }
     );
+
+    if (stages) {
+      const parsedStages = JSON.parse(stages);
+
+      if (Array.isArray(parsedStages) && parsedStages.length > 0) {
+        const stageData = parsedStages.map((stage) => ({
+          scholarship_id: scholarship.id,
+          stage_name: stage.name,
+          order_no: stage.order_no,
+        }));
+        await ScholarshipStage.bulkCreate(stageData, { transaction });
+      } else {
+        throw new Error("Tahapan seleksi harus berupa array yang valid");
+      }
+    }
 
     if (requirements) {
       const parsedRequirements = JSON.parse(requirements);
@@ -197,6 +214,7 @@ const createScholarship = async (req, res) => {
         { association: "benefits" },
         { association: "faculties" },
         { association: "departments" },
+        { association: "stages" },
       ],
     });
 
@@ -218,6 +236,7 @@ const getBeasiswaById = async (req, res) => {
         { association: "benefits" },
         { association: "faculties" },
         { association: "departments" },
+        { association: "stages" },
       ],
     });
     if (!scholarship) {
@@ -259,6 +278,7 @@ const updateScholarship = async (req, res) => {
       website_url,
       faculties,
       departments,
+      stages,
     } = req.body;
 
     const scholarship = await Scholarship.findByPk(id);
@@ -276,7 +296,8 @@ const updateScholarship = async (req, res) => {
       !contact_person_email ||
       !contact_person_phone ||
       !scholarship_value ||
-      !duration_semesters
+      !duration_semesters ||
+      !stages
     ) {
       return errorResponse(res, "Field wajib harus diisi", 400);
     }
@@ -331,6 +352,25 @@ const updateScholarship = async (req, res) => {
       where: { scholarship_id: id },
       transaction,
     });
+    await ScholarshipStage.destroy({
+      where: { scholarship_id: id },
+      transaction,
+    });
+
+    if (stages) {
+      const parsedStages = JSON.parse(stages);
+
+      if (Array.isArray(parsedStages) && parsedStages.length > 0) {
+        const stageData = parsedStages.map((stage) => ({
+          scholarship_id: scholarship.id,
+          stage_name: stage.stage_name,
+          order_no: stage.order_no,
+        }));
+        await ScholarshipStage.bulkCreate(stageData, { transaction });
+      } else {
+        throw new Error("Tahapan seleksi harus berupa array yang valid");
+      }
+    }
 
     if (requirements) {
       const parsedRequirements = JSON.parse(requirements);
@@ -422,6 +462,7 @@ const updateScholarship = async (req, res) => {
         { association: "benefits" },
         { association: "faculties" },
         { association: "departments" },
+        { association: "stages" },
       ],
     });
 

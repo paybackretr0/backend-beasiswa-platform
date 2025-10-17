@@ -19,6 +19,10 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "application_id",
       });
       Application.hasMany(models.FormAnswer, { foreignKey: "application_id" });
+      Application.hasMany(models.ApplicationStageProgress, {
+        foreignKey: "application_id",
+        as: "stages_progress",
+      });
     }
   }
   Application.init(
@@ -76,5 +80,30 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
     }
   );
+  Application.afterUpdate(async (application, options) => {
+    if (application.changed("status") && application.status === "VALIDATED") {
+      const scholarship = await application.getScholarship({
+        include: [
+          { model: options.sequelize.models.ScholarshipStage, as: "stages" },
+        ],
+      });
+
+      if (!scholarship || !scholarship.stages) return;
+
+      const progressModel = options.sequelize.models.ApplicationStageProgress;
+
+      await Promise.all(
+        scholarship.stages.map((stage) =>
+          progressModel.create({
+            application_id: application.id,
+            stage_id: stage.id,
+            status:
+              stage.order_no === 1 ? "SEDANG_BERLANGSUNG" : "BELUM_DIMULAI",
+          })
+        )
+      );
+    }
+  });
+
   return Application;
 };

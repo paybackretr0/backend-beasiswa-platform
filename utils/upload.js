@@ -45,8 +45,15 @@ const getUploadDirectory = (category = "general", mimeType, userId = null) => {
   const subDir = isImage(mimeType) ? "images" : "documents";
 
   // Gabungkan path: uploads/applications/<IDUSERPENDAFTAR>/images atau documents
-  const userFolder = userId ? `applications/${userId}` : cleanCategory;
-  const uploadDir = path.join("uploads", userFolder, subDir);
+  const baseFolder =
+    cleanCategory === "scholarships"
+      ? cleanCategory
+      : userId
+      ? `applications/${userId}`
+      : cleanCategory;
+
+  // Gabungkan path: uploads/scholarships/documents atau uploads/applications/<IDUSERPENDAFTAR>/documents
+  const uploadDir = path.join("uploads", baseFolder, subDir);
 
   // Pastikan direktori ada
   ensureDirectoryExists(uploadDir);

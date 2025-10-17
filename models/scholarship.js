@@ -29,6 +29,10 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "scholarship_id",
         as: "benefits",
       });
+      Scholarship.hasMany(models.ScholarshipStage, {
+        foreignKey: "scholarship_id",
+        as: "stages",
+      });
 
       // Many-to-many relations through junction tables
       Scholarship.belongsToMany(models.Faculty, {
