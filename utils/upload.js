@@ -33,8 +33,8 @@ const isDocument = (mimeType) => {
  * @param {string} mimeType - MIME type file
  * @returns {string} - Path direktori penyimpanan
  */
-const getUploadDirectory = (category = "general", mimeType) => {
-  // Bersihkan category name (hapus spasi, karakter khusus)
+const getUploadDirectory = (category = "general", mimeType, userId = null) => {
+  // Bersihkan nama kategori
   const cleanCategory = category
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "-")
@@ -44,8 +44,16 @@ const getUploadDirectory = (category = "general", mimeType) => {
   // Tentukan subfolder berdasarkan jenis file
   const subDir = isImage(mimeType) ? "images" : "documents";
 
-  // Gabungkan path: uploads/category/images atau uploads/category/documents
-  const uploadDir = path.join("uploads", cleanCategory, subDir);
+  // Gabungkan path: uploads/applications/<IDUSERPENDAFTAR>/images atau documents
+  const baseFolder =
+    cleanCategory === "scholarships"
+      ? cleanCategory
+      : userId
+      ? `applications/${userId}`
+      : cleanCategory;
+
+  // Gabungkan path: uploads/scholarships/documents atau uploads/applications/<IDUSERPENDAFTAR>/documents
+  const uploadDir = path.join("uploads", baseFolder, subDir);
 
   // Pastikan direktori ada
   ensureDirectoryExists(uploadDir);
@@ -104,8 +112,7 @@ const getFileInfo = (file) => {
 const UPLOAD_CATEGORIES = {
   NEWS: "news",
   ARTICLES: "articles",
-  EVIDENCE: "evidence",
-  HANDLING: "handling",
+  APPLICATIONS: "applications",
   PROFILES: "profiles",
   SCHOLARSHIPS: "scholarships",
   GENERAL: "general",
