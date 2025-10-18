@@ -3,6 +3,7 @@ const {
   Scholarship,
   Application,
   FormAnswer,
+  ApplicationDocument,
 } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 
@@ -84,7 +85,6 @@ const getScholarshipForm = async (req, res) => {
       order_no: field.order_no,
     }));
 
-    // Get existing answers if application exists
     let existingAnswers = {};
     if (existingApplication && existingApplication.FormAnswers) {
       existingApplication.FormAnswers.forEach((answer) => {
@@ -123,11 +123,9 @@ const submitApplication = async (req, res) => {
     const userId = req.user.id;
     const isDraft = req.body.isDraft === "true" || req.body.isDraft === true;
 
-    // Parse answers jika masih string
     const parsedAnswers =
       typeof answers === "string" ? JSON.parse(answers) : answers;
 
-    // Validasi beasiswa
     const scholarship = await Scholarship.findOne({
       where: { id: scholarshipId, is_active: true },
     });
@@ -140,7 +138,6 @@ const submitApplication = async (req, res) => {
       );
     }
 
-    // Cek batas waktu
     if (scholarship.end_date) {
       const today = new Date();
       const endDate = new Date(scholarship.end_date);
@@ -153,12 +150,10 @@ const submitApplication = async (req, res) => {
       }
     }
 
-    // Get form fields untuk validasi
     const formFields = await FormField.findAll({
       where: { scholarship_id: scholarshipId },
     });
 
-    // Validasi answers jika bukan draft
     if (!isDraft) {
       const requiredFields = formFields.filter((field) => field.is_required);
 
@@ -175,7 +170,7 @@ const submitApplication = async (req, res) => {
 
         if (
           field.type === "FILE" &&
-          !fieldAnswer.file_path &&
+          !fieldAnswer?.file_path &&
           !req.files?.find((file) => file.fieldname === `field_${field.id}`)
         ) {
           return errorResponse(
@@ -187,7 +182,6 @@ const submitApplication = async (req, res) => {
       }
     }
 
-    // Cek atau buat application
     let application = await Application.findOne({
       where: {
         scholarship_id: scholarshipId,
@@ -203,7 +197,6 @@ const submitApplication = async (req, res) => {
         submitted_at: isDraft ? null : new Date(),
       });
     } else {
-      // Update status jika diperlukan
       if (!isDraft && application.status === "DRAFT") {
         await application.update({
           status: "MENUNGGU_VERIFIKASI",
@@ -212,12 +205,10 @@ const submitApplication = async (req, res) => {
       }
     }
 
-    // Hapus jawaban lama
     await FormAnswer.destroy({
       where: { application_id: application.id },
     });
 
-    // Simpan jawaban baru
     const answerPromises = formFields.map(async (field) => {
       const fieldAnswer = parsedAnswers[field.id];
 
@@ -238,7 +229,6 @@ const submitApplication = async (req, res) => {
       };
 
       if (field.type === "FILE") {
-        // Handle file upload
         const uploadedFile = req.files?.find(
           (file) => file.fieldname === `field_${field.id}`
         );
@@ -247,19 +237,16 @@ const submitApplication = async (req, res) => {
           answerData.mime_type = uploadedFile.mimetype;
           answerData.uploaded_at = new Date();
         } else if (fieldAnswer?.file_path) {
-          // Keep existing file if no new file uploaded
           answerData.file_path = fieldAnswer.file_path;
           answerData.mime_type = fieldAnswer.mime_type;
           answerData.uploaded_at = new Date();
         }
       } else {
-        // Handle text-based answers
         if (fieldAnswer?.answer_text) {
           answerData.answer_text = fieldAnswer.answer_text;
         }
       }
 
-      // Only create if we have some data
       if (answerData.answer_text || answerData.file_path) {
         return FormAnswer.create(answerData);
       }
@@ -268,6 +255,55 @@ const submitApplication = async (req, res) => {
     });
 
     await Promise.all(answerPromises);
+
+    const documentPromises = formFields
+      .filter((field) => field.type === "FILE")
+      .map(async (field) => {
+        const fieldAnswer = parsedAnswers[field.id];
+
+        if (
+          !fieldAnswer &&
+          !req.files?.find((file) => file.fieldname === `field_${field.id}`)
+        ) {
+          return null;
+        }
+
+        let documentData = {
+          application_id: application.id,
+          document_type: field.label,
+          file_path: null,
+          mime_type: null,
+          size_bytes: null,
+          is_valid: false,
+          checked_by: null,
+          checked_at: null,
+        };
+
+        if (req.files) {
+          const uploadedFile = req.files.find(
+            (file) => file.fieldname === `field_${field.id}`
+          );
+          if (uploadedFile) {
+            documentData.file_path = uploadedFile.path;
+            documentData.mime_type = uploadedFile.mimetype;
+            documentData.size_bytes = uploadedFile.size;
+          }
+        }
+
+        if (fieldAnswer?.file_path) {
+          documentData.file_path = fieldAnswer.file_path;
+          documentData.mime_type = fieldAnswer.mime_type || null;
+          documentData.size_bytes = fieldAnswer.size_bytes || null;
+        }
+
+        if (documentData.file_path) {
+          return ApplicationDocument.create(documentData);
+        }
+
+        return null;
+      });
+
+    await Promise.all(documentPromises);
 
     const message = isDraft
       ? "Draft berhasil disimpan"
