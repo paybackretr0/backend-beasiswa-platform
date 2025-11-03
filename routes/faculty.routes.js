@@ -1,6 +1,9 @@
 const express = require("express");
 const router = express.Router();
-const { authenticate } = require("../middlewares/auth.middleware");
+const {
+  authenticate,
+  verifiedUser,
+} = require("../middlewares/auth.middleware");
 const {
   getAllFaculties,
   createFaculty,
@@ -10,7 +13,7 @@ const {
 } = require("../controllers/faculty.controller");
 const authorize = require("../middlewares/role.middleware");
 
-router.use(authenticate, authorize("SUPERADMIN"));
+router.use(authenticate, verifiedUser, authorize("SUPERADMIN"));
 router.get("/", getAllFaculties);
 router.post("/", createFaculty);
 router.put("/:id", editFaculty);

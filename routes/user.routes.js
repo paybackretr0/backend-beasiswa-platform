@@ -1,6 +1,9 @@
 const express = require("express");
 const router = express.Router();
-const { authenticate } = require("../middlewares/auth.middleware");
+const {
+  authenticate,
+  verifiedUser,
+} = require("../middlewares/auth.middleware");
 const authorize = require("../middlewares/role.middleware");
 const {
   addPimpinanVerifikator,
@@ -16,7 +19,7 @@ const {
 } = require("../controllers/user.controller");
 const { validateRegister } = require("../validators/auth.validator");
 
-router.use(authenticate, authorize(["SUPERADMIN"]));
+router.use(authenticate, verifiedUser, authorize(["SUPERADMIN"]));
 
 router.get("/mahasiswa", getMahasiswa);
 router.get("/pimpinan-fakultas", getPimpinanFakultas);

@@ -8,15 +8,25 @@ const {
   deleteInformation,
   publishInformation,
   archiveInformation,
+  getLatestInformation,
+  getInformationBySlug,
+  getAllInformations,
 } = require("../controllers/website.controller");
-const { authenticate } = require("../middlewares/auth.middleware");
+const {
+  authenticate,
+  verifiedUser,
+} = require("../middlewares/auth.middleware");
 const {
   newsUpload,
   articleUpload,
 } = require("../middlewares/upload.middleware");
 const authorize = require("../middlewares/role.middleware");
 
-router.use(authenticate, authorize("SUPERADMIN"));
+router.get("/informations/latest", getLatestInformation);
+router.get("/informations", getAllInformations);
+router.get("/informations/:slug", getInformationBySlug);
+
+router.use(authenticate, verifiedUser, authorize("SUPERADMIN"));
 router.get("/news", getAllNews);
 router.get("/articles", getAllArticles);
 

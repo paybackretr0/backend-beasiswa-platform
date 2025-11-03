@@ -1,6 +1,9 @@
 const express = require("express");
 const router = express.Router();
-const { authenticate } = require("../middlewares/auth.middleware");
+const {
+  authenticate,
+  verifiedUser,
+} = require("../middlewares/auth.middleware");
 const {
   getSummary,
   getSelectionSummary,
@@ -11,11 +14,15 @@ const {
   getStatusSummary,
   getActivities,
   getApplicationsList,
+  getMonthlyTrend,
+  getScholarshipPerformance,
+  getTopPerformingFaculties,
 } = require("../controllers/analytics.controller");
 const authorize = require("../middlewares/role.middleware");
 
 router.use(
   authenticate,
+  verifiedUser,
   authorize([
     "SUPERADMIN",
     "PIMPINAN_DITMAWA",
@@ -36,6 +43,11 @@ router.get("/gender-distribution", getGenderDistribution);
 
 // Trend endpoints
 router.get("/yearly-trend", getYearlyTrend);
+router.get("/monthly-trend", getMonthlyTrend);
+
+// Performance endpoints
+router.get("/scholarship-performance", getScholarshipPerformance);
+router.get("/top-performing-faculties", getTopPerformingFaculties);
 
 // List endpoints
 router.get("/applications-list", getApplicationsList);

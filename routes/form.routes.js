@@ -1,6 +1,9 @@
 const express = require("express");
 const router = express.Router();
-const { authenticate } = require("../middlewares/auth.middleware");
+const {
+  authenticate,
+  verifiedUser,
+} = require("../middlewares/auth.middleware");
 const authorize = require("../middlewares/role.middleware");
 const {
   checkScholarshipForm,
@@ -9,7 +12,11 @@ const {
   updateScholarshipForm,
 } = require("../controllers/form.controller");
 
-router.use(authenticate, authorize(["SUPERADMIN", "VERIFIKATOR"]));
+router.use(
+  authenticate,
+  verifiedUser,
+  authorize(["SUPERADMIN", "VERIFIKATOR"])
+);
 
 router.get("/check/:scholarshipId", checkScholarshipForm);
 router.get("/:scholarshipId", getScholarshipForm);
