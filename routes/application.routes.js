@@ -1,6 +1,9 @@
 const express = require("express");
 const router = express.Router();
-const { authenticate } = require("../middlewares/auth.middleware");
+const {
+  authenticate,
+  verifiedUser,
+} = require("../middlewares/auth.middleware");
 const {
   getAllApplications,
   getApplicationsSummary,
@@ -9,6 +12,7 @@ const authorize = require("../middlewares/role.middleware");
 
 router.use(
   authenticate,
+  verifiedUser,
   authorize(["SUPERADMIN", "PIMPINAN_DITMAWA", "VERIFIKATOR"])
 );
 router.get("/", getAllApplications);

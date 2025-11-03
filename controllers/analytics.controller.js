@@ -63,6 +63,151 @@ const getSummary = async (req, res) => {
   }
 };
 
+const getMonthlyTrend = async (req, res) => {
+  try {
+    const { year = new Date().getFullYear() } = req.query;
+
+    const monthlyData = await sequelize.query(
+      `
+      SELECT 
+        MONTH(createdAt) as month,
+        COUNT(*) as value
+      FROM applications 
+      WHERE status != 'DRAFT' 
+        AND YEAR(createdAt) = :year
+      GROUP BY MONTH(createdAt)
+      ORDER BY month
+      `,
+      {
+        replacements: { year },
+        type: sequelize.QueryTypes.SELECT,
+      }
+    );
+
+    // Pastikan semua bulan ada
+    const months = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "Mei",
+      "Jun",
+      "Jul",
+      "Agu",
+      "Sep",
+      "Okt",
+      "Nov",
+      "Des",
+    ];
+
+    const result = months.map((month, index) => {
+      const data = monthlyData.find((item) => item.month === index + 1);
+      return {
+        label: month,
+        value: data ? data.value : 0,
+      };
+    });
+
+    return successResponse(res, "Monthly trend retrieved successfully", result);
+  } catch (error) {
+    console.error("Error fetching monthly trend:", error);
+    return errorResponse(res, "Failed to retrieve monthly trend", 500);
+  }
+};
+
+const getScholarshipPerformance = async (req, res) => {
+  try {
+    const { year = new Date().getFullYear() } = req.query;
+
+    const scholarshipData = await sequelize.query(
+      `
+      SELECT 
+        s.name as label,
+        COUNT(a.id) as pendaftar,
+        COUNT(CASE WHEN a.status = 'VALIDATED' THEN 1 END) as diterima,
+        ROUND(
+          (COUNT(CASE WHEN a.status = 'VALIDATED' THEN 1 END) * 100.0 / NULLIF(COUNT(a.id), 0)),
+          1
+        ) as tingkat_penerimaan
+      FROM scholarships s
+      LEFT JOIN applications a ON s.id = a.scholarship_id 
+        AND a.status != 'DRAFT'
+        AND YEAR(a.createdAt) = :year
+      WHERE s.year = :year AND s.is_active = true
+      GROUP BY s.id, s.name
+      HAVING COUNT(a.id) > 0
+      ORDER BY pendaftar DESC
+      LIMIT 10
+      `,
+      {
+        replacements: { year },
+        type: sequelize.QueryTypes.SELECT,
+      }
+    );
+
+    return successResponse(
+      res,
+      "Scholarship performance retrieved successfully",
+      scholarshipData
+    );
+  } catch (error) {
+    console.error("Error fetching scholarship performance:", error);
+    return errorResponse(
+      res,
+      "Failed to retrieve scholarship performance",
+      500
+    );
+  }
+};
+
+const getTopPerformingFaculties = async (req, res) => {
+  try {
+    const { year = new Date().getFullYear() } = req.query;
+
+    const facultyPerformance = await sequelize.query(
+      `
+      SELECT 
+        f.name as label,
+        COUNT(a.id) as total_pendaftar,
+        COUNT(CASE WHEN a.status = 'VALIDATED' THEN 1 END) as diterima,
+        ROUND(
+          (COUNT(CASE WHEN a.status = 'VALIDATED' THEN 1 END) * 100.0 / NULLIF(COUNT(a.id), 0)),
+          1
+        ) as tingkat_keberhasilan,
+        '#2D60FF' as color
+      FROM faculties f
+      LEFT JOIN departments d ON f.id = d.faculty_id
+      LEFT JOIN users u ON u.department_id = d.id AND u.role = 'MAHASISWA'
+      LEFT JOIN applications a ON u.id = a.student_id 
+        AND a.status != 'DRAFT'
+        AND YEAR(a.createdAt) = :year
+      WHERE f.is_active = true
+      GROUP BY f.id, f.name
+      HAVING COUNT(a.id) >= 5
+      ORDER BY tingkat_keberhasilan DESC, total_pendaftar DESC
+      LIMIT 5
+      `,
+      {
+        replacements: { year },
+        type: sequelize.QueryTypes.SELECT,
+      }
+    );
+
+    return successResponse(
+      res,
+      "Top performing faculties retrieved successfully",
+      facultyPerformance
+    );
+  } catch (error) {
+    console.error("Error fetching top performing faculties:", error);
+    return errorResponse(
+      res,
+      "Failed to retrieve top performing faculties",
+      500
+    );
+  }
+};
+
 // Selection Summary Data
 const getSelectionSummary = async (req, res) => {
   try {
@@ -577,6 +722,7 @@ const getStatusLabel = (status) => {
 
 module.exports = {
   getSummary,
+  getMonthlyTrend,
   getSelectionSummary,
   getFacultyDistribution,
   getDepartmentDistribution,
@@ -585,4 +731,6 @@ module.exports = {
   getStatusSummary,
   getActivities,
   getApplicationsList,
+  getScholarshipPerformance,
+  getTopPerformingFaculties,
 };

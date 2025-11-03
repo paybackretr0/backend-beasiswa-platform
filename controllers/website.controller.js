@@ -1,6 +1,7 @@
 const { Information } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 const { getFileInfo } = require("../utils/upload");
+const { generateUniqueSlug } = require("../utils/slug");
 
 const getAllNews = async (req, res) => {
   try {
@@ -43,10 +44,12 @@ const createInformation = async (req, res) => {
     const fileInfo = getFileInfo(req.file);
     const cover_url = fileInfo.url;
 
-    const slug = title
+    const baseSlug = title
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)/g, "");
+
+    const slug = await generateUniqueSlug(Information, baseSlug);
 
     let parsedMeta = {};
     if (meta) {
@@ -92,18 +95,17 @@ const editInformation = async (req, res) => {
       return errorResponse(res, "Informasi tidak ditemukan", 404);
     }
 
-    // Build update object only with provided fields
     const updateData = {};
 
     if (title !== undefined && title !== null) {
       updateData.title = title;
 
-      // Generate slug only if title is provided and different from current
       if (title && title !== information.title) {
-        updateData.slug = String(title)
+        const baseSlug = title
           .toLowerCase()
           .replace(/[^a-z0-9]+/g, "-")
           .replace(/(^-|-$)/g, "");
+        updateData.slug = await generateUniqueSlug(Information, baseSlug, id);
       }
     }
 
@@ -117,19 +119,16 @@ const editInformation = async (req, res) => {
         status === "PUBLISHED" ? new Date() : information.published_at;
     }
 
-    // If file uploaded, update cover_url
     if (req.file) {
       const fileInfo = getFileInfo(req.file);
       updateData.cover_url = fileInfo.url;
     }
 
-    // Parse meta if provided
     if (meta !== undefined && meta !== null) {
       try {
         updateData.meta = typeof meta === "string" ? JSON.parse(meta) : meta;
       } catch (error) {
         console.error("Error parsing meta:", error);
-        // Keep existing meta if parse fails
       }
     }
 
@@ -199,6 +198,55 @@ const archiveInformation = async (req, res) => {
   }
 };
 
+const getLatestInformation = async (req, res) => {
+  try {
+    const information = await Information.findAll({
+      where: { status: "PUBLISHED" },
+      order: [["published_at", "DESC"]],
+      limit: 3,
+    });
+    return successResponse(
+      res,
+      "Informasi terbaru berhasil diambil",
+      information
+    );
+  } catch (error) {
+    console.error("Error fetching latest information:", error);
+    return errorResponse(res, "Gagal mengambil informasi terbaru", 500);
+  }
+};
+
+const getInformationBySlug = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    console.log("Fetching information for slug:", slug);
+    const information = await Information.findOne({ where: { slug } });
+    if (!information) {
+      return errorResponse(res, "Informasi tidak ditemukan", 404);
+    }
+    return successResponse(res, "Informasi berhasil diambil", information);
+  } catch (error) {
+    console.error("Error fetching information by slug:", error);
+    return errorResponse(res, "Gagal mengambil informasi", 500);
+  }
+};
+
+const getAllInformations = async (req, res) => {
+  try {
+    const informations = await Information.findAll({
+      order: [["createdAt", "DESC"]],
+    });
+    return successResponse(
+      res,
+      "Semua informasi berhasil diambil",
+      informations
+    );
+  } catch (error) {
+    console.error("Error fetching all informations:", error);
+    return errorResponse(res, "Gagal mengambil informasi", 500);
+  }
+};
+
 module.exports = {
   getAllNews,
   getAllArticles,
@@ -207,4 +255,7 @@ module.exports = {
   deleteInformation,
   publishInformation,
   archiveInformation,
+  getLatestInformation,
+  getInformationBySlug,
+  getAllInformations,
 };

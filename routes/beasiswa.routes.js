@@ -1,7 +1,10 @@
 const express = require("express");
 const router = express.Router();
 
-const { authenticate } = require("../middlewares/auth.middleware");
+const {
+  authenticate,
+  verifiedUser,
+} = require("../middlewares/auth.middleware");
 const { createUploadMiddleware } = require("../middlewares/upload.middleware");
 const {
   getAllScholarships,
@@ -24,7 +27,7 @@ router.get("/user", getAllScholarships);
 router.get("/user/:id", getBeasiswaById);
 router.get("/user/:id/others", getOtherScholarships);
 
-router.use(authenticate, authorize("SUPERADMIN"));
+router.use(authenticate, verifiedUser, authorize("SUPERADMIN"));
 
 router.get("/", getAllScholarships);
 router.post(

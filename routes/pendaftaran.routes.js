@@ -1,6 +1,9 @@
 const express = require("express");
 const router = express.Router();
-const { authenticate } = require("../middlewares/auth.middleware");
+const {
+  authenticate,
+  verifiedUser,
+} = require("../middlewares/auth.middleware");
 const authorize = require("../middlewares/role.middleware");
 const { applicationUpload } = require("../middlewares/upload.middleware");
 const {
@@ -9,7 +12,7 @@ const {
 } = require("../controllers/pendaftaran.controller");
 
 // Middleware autentikasi untuk semua route
-router.use(authenticate);
+router.use(authenticate, verifiedUser);
 
 // Get form untuk beasiswa tertentu (hanya mahasiswa)
 router.get(
