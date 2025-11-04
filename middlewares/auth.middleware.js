@@ -8,6 +8,7 @@ const verifiedUser = async (req, res, next) => {
       message: "Email belum diverifikasi, silakan lakukan verifikasi dahulu.",
     });
   }
+  req.user = user;
   next();
 };
 

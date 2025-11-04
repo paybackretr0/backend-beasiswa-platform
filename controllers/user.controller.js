@@ -1,4 +1,4 @@
-const { User, Faculty, Department } = require("../models");
+const { User, Faculty, Department, ActivityLog } = require("../models");
 const {
   successResponse,
   errorResponse,
@@ -135,6 +135,17 @@ const addPimpinanVerifikator = async (req, res) => {
       role,
     });
 
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "CREATE_PIMPINAN",
+      entity_type: "User",
+      entity_id: newUser.id,
+      description: `User "${newUser.name}" telah dibuat oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
+
     return successCreatedResponse(res, "User berhasil ditambahkan", newUser);
   } catch (error) {
     console.error("Error adding user:", error);
@@ -197,6 +208,17 @@ const addMahasiswa = async (req, res) => {
       department_id: department.id,
     });
 
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "CREATE_MAHASISWA",
+      entity_type: "User",
+      entity_id: newUser.id,
+      description: `User "${newUser.name}" telah dibuat oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
+
     return successCreatedResponse(
       res,
       "Mahasiswa berhasil ditambahkan",
@@ -236,6 +258,17 @@ const addPimpinanFakultas = async (req, res) => {
       full_name,
       role: "PIMPINAN_FAKULTAS",
       faculty_id,
+    });
+
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "CREATE_PIMPINAN_FAKULTAS",
+      entity_type: "User",
+      entity_id: newUser.id,
+      description: `User "${newUser.name}" telah dibuat oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
     });
 
     return successCreatedResponse(
@@ -278,6 +311,17 @@ const updateUser = async (req, res) => {
     // Update user
     await user.update({ full_name, phone_number, faculty_id, department_id });
 
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "UPDATE_USER",
+      entity_type: "User",
+      entity_id: newUser.id,
+      description: `User "${newUser.name}" telah diperbarui oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
+
     return successResponse(res, "User berhasil diperbarui", user);
   } catch (error) {
     console.error("Error updating user:", error);
@@ -297,6 +341,17 @@ const deactivateUser = async (req, res) => {
 
     await user.update({ is_active: false });
 
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "DEACTIVATE_USER",
+      entity_type: "User",
+      entity_id: newUser.id,
+      description: `User "${newUser.name}" telah dinonaktifkan oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
+
     return successResponse(res, "User berhasil dinonaktifkan", user);
   } catch (error) {
     console.error("Error deactivating user:", error);
@@ -312,6 +367,18 @@ const activateUser = async (req, res) => {
       return errorResponse(res, "User tidak ditemukan", 404);
     }
     await user.update({ is_active: true });
+
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "ACTIVATE_USER",
+      entity_type: "User",
+      entity_id: newUser.id,
+      description: `User "${newUser.name}" telah diaktifkan oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
+
     return successResponse(res, "User berhasil diaktifkan", user);
   } catch (error) {
     console.error("Error activating user:", error);

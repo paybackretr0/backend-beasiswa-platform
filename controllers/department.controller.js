@@ -1,4 +1,4 @@
-const { Department, Faculty } = require("../models");
+const { Department, Faculty, ActivityLog } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 
 const getAllDepartments = async (req, res) => {
@@ -54,6 +54,18 @@ const createDepartment = async (req, res) => {
       faculty_id,
       degree,
     });
+
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "CREATE_DEPARTMENT",
+      entity_type: "Department",
+      entity_id: newDepartment.id,
+      description: `Departemen "${newDepartment.name}" telah dibuat oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
+
     return successResponse(res, "Departemen berhasil dibuat", newDepartment);
   } catch (error) {
     console.error("Error creating department:", error);
@@ -99,6 +111,16 @@ const editDepartment = async (req, res) => {
     }
 
     await department.update({ name, code, faculty_id, degree });
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "EDIT_DEPARTMENT",
+      entity_type: "Department",
+      entity_id: department.id,
+      description: `Departemen "${department.name}" telah diperbarui oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
     return successResponse(res, "Departemen berhasil diperbarui", department);
   } catch (error) {
     console.error("Error updating department:", error);
@@ -114,6 +136,16 @@ const activateDepartment = async (req, res) => {
       return errorResponse(res, "Departemen tidak ditemukan", 404);
     }
     await department.update({ is_active: true });
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "ACTIVATE_DEPARTMENT",
+      entity_type: "Department",
+      entity_id: department.id,
+      description: `Departemen "${department.name}" telah diaktifkan oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
     return successResponse(res, "Departemen berhasil diaktifkan", department);
   } catch (error) {
     console.error("Error activating department:", error);
@@ -129,6 +161,16 @@ const deactivateDepartment = async (req, res) => {
       return errorResponse(res, "Departemen tidak ditemukan", 404);
     }
     await department.update({ is_active: false });
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "DEACTIVATE_DEPARTMENT",
+      entity_type: "Department",
+      entity_id: department.id,
+      description: `Departemen "${department.name}" telah dinonaktifkan oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
     return successResponse(
       res,
       "Departemen berhasil dinonaktifkan",

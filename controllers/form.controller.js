@@ -1,4 +1,4 @@
-const { FormField } = require("../models");
+const { FormField, ActivityLog, Scholarship } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 
 const checkScholarshipForm = async (req, res) => {
@@ -41,6 +41,19 @@ const createScholarshipForm = async (req, res) => {
     }));
 
     await FormField.bulkCreate(formFields);
+
+    const scholarship = await Scholarship.findByPk(scholarshipId);
+
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "CREATE_FORM",
+      entity_type: "Form_Field",
+      entity_id: scholarshipId,
+      description: `Form untuk beasiswa "${scholarship.name}" telah dibuat oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
 
     return successResponse(res, "Form berhasil dibuat", null);
   } catch (error) {
@@ -98,6 +111,19 @@ const updateScholarshipForm = async (req, res) => {
     }));
 
     await FormField.bulkCreate(formFields);
+
+    const scholarship = await Scholarship.findByPk(scholarshipId);
+
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "UPDATE_FORM",
+      entity_type: "Form_Field",
+      entity_id: scholarshipId,
+      description: `Form untuk beasiswa "${scholarship.name}" telah diubah oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
 
     return successResponse(res, "Form berhasil diupdate", null);
   } catch (error) {

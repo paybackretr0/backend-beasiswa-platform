@@ -1,6 +1,12 @@
 const { hashPassword, comparePassword } = require("../utils/password");
 const jwt = require("../utils/jwt");
-const { User, RefreshToken, Faculty, Department } = require("../models");
+const {
+  User,
+  RefreshToken,
+  Faculty,
+  Department,
+  ActivityLog,
+} = require("../models");
 const nodemailer = require("nodemailer");
 const { Op } = require("sequelize");
 const {
@@ -96,6 +102,16 @@ const register = async (req, res) => {
     });
 
     await sendVerificationEmail(newUser, verificationCode);
+
+    await ActivityLog.create({
+      user_id: newUser.id,
+      action: "REGISTER",
+      entity_type: "User",
+      entity_id: newUser.id,
+      description: `Pengguna dengan email ${newUser.email} melakukan registrasi.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
 
     return successCreatedResponse(
       res,
@@ -294,6 +310,16 @@ const resetPassword = async (req, res) => {
       resetPasswordExpires: null,
     });
 
+    await ActivityLog.create({
+      user_id: user.id,
+      action: "RESET_PASSWORD",
+      entity_type: "User",
+      entity_id: user.id,
+      description: `Pengguna dengan email ${user.email} melakukan reset password.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
+
     return successResponse(res, "Password berhasil direset, silakan login");
   } catch (error) {
     return errorResponse(res, "Internal server error", 500, error.message);
@@ -317,6 +343,16 @@ const updateProfile = async (req, res) => {
       full_name: full_name ?? user.full_name,
       phone_number: phone_number ?? user.phone_number,
       gender: gender ?? user.gender,
+    });
+
+    await ActivityLog.create({
+      user_id: user.id,
+      action: "UPDATE_PROFILE",
+      entity_type: "User",
+      entity_id: user.id,
+      description: `Pengguna dengan email ${user.email} memperbarui profilnya.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
     });
 
     return successResponse(res, "Profil berhasil diupdate", {
@@ -373,6 +409,16 @@ const updatePassword = async (req, res) => {
         user_id: user.id,
         token: { [Op.ne]: refresh_token },
       },
+    });
+
+    await ActivityLog.create({
+      user_id: user.id,
+      action: "UPDATE_PASSWORD",
+      entity_type: "User",
+      entity_id: user.id,
+      description: `Pengguna dengan email ${user.email} memperbarui passwordnya.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
     });
 
     return successResponse(res, "Password updated successfully");

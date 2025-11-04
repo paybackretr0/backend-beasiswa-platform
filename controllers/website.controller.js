@@ -1,4 +1,4 @@
-const { Information } = require("../models");
+const { Information, ActivityLog } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 const { getFileInfo } = require("../utils/upload");
 const { generateUniqueSlug } = require("../utils/slug");
@@ -73,6 +73,17 @@ const createInformation = async (req, res) => {
       published_at: status === "PUBLISHED" ? new Date() : null,
     });
 
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "CREATE_INFORMATION",
+      entity_type: "Information",
+      entity_id: newInformation.id,
+      description: `Informasi "${newInformation.title}" telah dibuat oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
+
     return successResponse(
       res,
       "Informasi berhasil dibuat",
@@ -134,6 +145,17 @@ const editInformation = async (req, res) => {
 
     await information.update(updateData);
 
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "UPDATE_INFORMATION",
+      entity_type: "Information",
+      entity_id: information.id,
+      description: `Informasi "${information.title}" telah diperbarui oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
+
     return successResponse(res, "Informasi berhasil diperbarui", information);
   } catch (error) {
     console.error("Error editing information:", error);
@@ -151,6 +173,18 @@ const deleteInformation = async (req, res) => {
     }
 
     await information.destroy();
+
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "DELETE_INFORMATION",
+      entity_type: "Information",
+      entity_id: information.id,
+      description: `Informasi "${information.title}" telah dihapus oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
+
     return successResponse(res, "Informasi berhasil dihapus");
   } catch (error) {
     console.error("Error deleting information:", error);
@@ -169,6 +203,18 @@ const publishInformation = async (req, res) => {
       status: "PUBLISHED",
       published_at: new Date(),
     });
+
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "PUBLISH_INFORMATION",
+      entity_type: "Information",
+      entity_id: information.id,
+      description: `Informasi "${information.title}" telah dipublish oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
+
     return successResponse(
       res,
       "Informasi berhasil dipublikasikan",
@@ -191,6 +237,18 @@ const archiveInformation = async (req, res) => {
       status: "ARCHIVED",
       archived_at: new Date(),
     });
+
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "ARCHIVE_INFORMATION",
+      entity_type: "Information",
+      entity_id: information.id,
+      description: `Informasi "${information.title}" telah diarsipkan oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
+
     return successResponse(res, "Informasi berhasil diarsipkan", information);
   } catch (error) {
     console.error("Error archiving information:", error);
