@@ -10,43 +10,78 @@ const {
 const { successResponse, errorResponse } = require("../utils/response");
 const { Op } = require("sequelize");
 
+const getUserFacultyFilter = (req) => {
+  const user = req.user; // Dari middleware auth
+  const role = user?.role;
+  const facultyId = user?.faculty_id;
+
+  if (role === "PIMPINAN_FAKULTAS" && facultyId) {
+    return { facultyId, isFiltered: true };
+  }
+  return { facultyId: null, isFiltered: false };
+};
+
 const getSummary = async (req, res) => {
   try {
     const { year = new Date().getFullYear() } = req.query;
-    const currentYear = new Date().getFullYear();
+    const { facultyId, isFiltered } = getUserFacultyFilter(req);
 
-    const totalPendaftar = await Application.count({
-      where: {
-        status: { [Op.ne]: "DRAFT" },
-        createdAt: {
-          [Op.gte]: new Date(`${year}-01-01`),
-          [Op.lte]: new Date(`${year}-12-31`),
-        },
+    let applicationFilter = {
+      status: { [Op.ne]: "DRAFT" },
+      createdAt: {
+        [Op.gte]: new Date(`${year}-01-01`),
+        [Op.lte]: new Date(`${year}-12-31`),
       },
-    });
+    };
 
-    const totalBeasiswa = await Scholarship.count({
-      where: {
-        year: year,
-      },
-    });
+    let scholarshipFilter = {
+      year: year,
+    };
 
-    const beasiswaMasihBuka = await Scholarship.count({
-      where: {
-        year: year,
-        is_active: true,
-        end_date: { [Op.gte]: new Date() },
-      },
-    });
+    let mahasiswaFilter = {
+      role: "MAHASISWA",
+      is_active: true,
+    };
+
+    // Filter berdasarkan fakultas jika PIMPINAN_FAKULTAS
+    if (isFiltered) {
+      mahasiswaFilter.faculty_id = facultyId;
+    }
+
+    const [totalPendaftar, totalBeasiswa, beasiswaMasihBuka, totalMahasiswa] =
+      await Promise.all([
+        // Total Pendaftar dengan join ke user dan fakultas
+        isFiltered
+          ? Application.count({
+              where: applicationFilter,
+              include: [
+                {
+                  model: User,
+                  as: "student",
+                  where: { faculty_id: facultyId },
+                  attributes: [],
+                },
+              ],
+            })
+          : Application.count({ where: applicationFilter }),
+
+        // Total Beasiswa
+        Scholarship.count({ where: scholarshipFilter }),
+
+        // Beasiswa Masih Buka
+        Scholarship.count({
+          where: {
+            ...scholarshipFilter,
+            is_active: true,
+            end_date: { [Op.gte]: new Date() },
+          },
+        }),
+
+        // Total Mahasiswa
+        User.count({ where: mahasiswaFilter }),
+      ]);
 
     const beasiswaSudahTutup = totalBeasiswa - beasiswaMasihBuka;
-
-    const totalMahasiswa = await User.count({
-      where: {
-        role: "MAHASISWA",
-        is_active: true,
-      },
-    });
 
     const summary = {
       totalPendaftar,
@@ -66,23 +101,39 @@ const getSummary = async (req, res) => {
 const getMonthlyTrend = async (req, res) => {
   try {
     const { year = new Date().getFullYear() } = req.query;
+    const { facultyId, isFiltered } = getUserFacultyFilter(req);
 
-    const monthlyData = await sequelize.query(
-      `
+    let query = `
       SELECT 
-        MONTH(createdAt) as month,
+        MONTH(a.createdAt) as month,
         COUNT(*) as value
-      FROM applications 
-      WHERE status != 'DRAFT' 
-        AND YEAR(createdAt) = :year
-      GROUP BY MONTH(createdAt)
+      FROM applications a 
+    `;
+
+    let whereClause = "WHERE a.status != 'DRAFT' AND YEAR(a.createdAt) = :year";
+    let replacements = { year };
+
+    // Jika PIMPINAN_FAKULTAS, tambahkan JOIN dan filter fakultas
+    if (isFiltered) {
+      query += `
+        LEFT JOIN users u ON a.student_id = u.id
+        LEFT JOIN departments d ON u.department_id = d.id
+      `;
+      whereClause += " AND d.faculty_id = :facultyId";
+      replacements.facultyId = facultyId;
+    }
+
+    query +=
+      whereClause +
+      `
+      GROUP BY MONTH(a.createdAt)
       ORDER BY month
-      `,
-      {
-        replacements: { year },
-        type: sequelize.QueryTypes.SELECT,
-      }
-    );
+    `;
+
+    const monthlyData = await sequelize.query(query, {
+      replacements,
+      type: sequelize.QueryTypes.SELECT,
+    });
 
     // Pastikan semua bulan ada
     const months = [
@@ -118,9 +169,9 @@ const getMonthlyTrend = async (req, res) => {
 const getScholarshipPerformance = async (req, res) => {
   try {
     const { year = new Date().getFullYear() } = req.query;
+    const { facultyId, isFiltered } = getUserFacultyFilter(req);
 
-    const scholarshipData = await sequelize.query(
-      `
+    let query = `
       SELECT 
         s.name as label,
         COUNT(a.id) as pendaftar,
@@ -133,17 +184,34 @@ const getScholarshipPerformance = async (req, res) => {
       LEFT JOIN applications a ON s.id = a.scholarship_id 
         AND a.status != 'DRAFT'
         AND YEAR(a.createdAt) = :year
-      WHERE s.year = :year AND s.is_active = true
+    `;
+
+    let whereClause = "WHERE s.year = :year AND s.is_active = true";
+    let replacements = { year };
+
+    // Jika PIMPINAN_FAKULTAS, tambahkan JOIN dan filter fakultas
+    if (isFiltered) {
+      query += `
+        LEFT JOIN users u ON a.student_id = u.id
+        LEFT JOIN departments d ON u.department_id = d.id
+      `;
+      whereClause += " AND (a.id IS NULL OR d.faculty_id = :facultyId)";
+      replacements.facultyId = facultyId;
+    }
+
+    query +=
+      whereClause +
+      `
       GROUP BY s.id, s.name
       HAVING COUNT(a.id) > 0
       ORDER BY pendaftar DESC
       LIMIT 10
-      `,
-      {
-        replacements: { year },
-        type: sequelize.QueryTypes.SELECT,
-      }
-    );
+    `;
+
+    const scholarshipData = await sequelize.query(query, {
+      replacements,
+      type: sequelize.QueryTypes.SELECT,
+    });
 
     return successResponse(
       res,
@@ -208,10 +276,28 @@ const getTopPerformingFaculties = async (req, res) => {
   }
 };
 
-// Selection Summary Data
 const getSelectionSummary = async (req, res) => {
   try {
     const { year = new Date().getFullYear() } = req.query;
+    const { facultyId, isFiltered } = getUserFacultyFilter(req);
+
+    let baseWhere = {
+      createdAt: {
+        [Op.gte]: new Date(`${year}-01-01`),
+        [Op.lte]: new Date(`${year}-12-31`),
+      },
+    };
+
+    let includeUser = isFiltered
+      ? [
+          {
+            model: User,
+            as: "student",
+            where: { faculty_id: facultyId },
+            attributes: [],
+          },
+        ]
+      : [];
 
     const [
       lolosSeleksiBerkas,
@@ -220,40 +306,20 @@ const getSelectionSummary = async (req, res) => {
       tidakLolosSeleksi,
     ] = await Promise.all([
       Application.count({
-        where: {
-          status: "VALIDATED",
-          createdAt: {
-            [Op.gte]: new Date(`${year}-01-01`),
-            [Op.lte]: new Date(`${year}-12-31`),
-          },
-        },
+        where: { ...baseWhere, status: "VALIDATED" },
+        include: includeUser,
       }),
       Application.count({
-        where: {
-          status: "MENUNGGU_VERIFIKASI",
-          createdAt: {
-            [Op.gte]: new Date(`${year}-01-01`),
-            [Op.lte]: new Date(`${year}-12-31`),
-          },
-        },
+        where: { ...baseWhere, status: "MENUNGGU_VERIFIKASI" },
+        include: includeUser,
       }),
       Application.count({
-        where: {
-          status: "MENUNGGU_VALIDASI",
-          createdAt: {
-            [Op.gte]: new Date(`${year}-01-01`),
-            [Op.lte]: new Date(`${year}-12-31`),
-          },
-        },
+        where: { ...baseWhere, status: "MENUNGGU_VALIDASI" },
+        include: includeUser,
       }),
       Application.count({
-        where: {
-          status: "REJECTED",
-          createdAt: {
-            [Op.gte]: new Date(`${year}-01-01`),
-            [Op.lte]: new Date(`${year}-12-31`),
-          },
-        },
+        where: { ...baseWhere, status: "REJECTED" },
+        include: includeUser,
       }),
     ]);
 
@@ -275,9 +341,19 @@ const getSelectionSummary = async (req, res) => {
   }
 };
 
+// Update getFacultyDistribution
 const getFacultyDistribution = async (req, res) => {
   try {
     const { year = new Date().getFullYear() } = req.query;
+    const { facultyId, isFiltered } = getUserFacultyFilter(req);
+
+    let facultyWhere = "f.is_active = true";
+    let replacements = { year };
+
+    if (isFiltered) {
+      facultyWhere += " AND f.id = :facultyId";
+      replacements.facultyId = facultyId;
+    }
 
     const facultyData = await sequelize.query(
       `
@@ -290,14 +366,14 @@ const getFacultyDistribution = async (req, res) => {
       LEFT JOIN applications a ON u.id = a.student_id 
         AND a.status != 'DRAFT'
         AND YEAR(a.createdAt) = :year
-      WHERE f.is_active = true
+      WHERE ${facultyWhere}
       GROUP BY f.id, f.name
       HAVING COUNT(a.id) > 0
       ORDER BY value DESC
       LIMIT 10
       `,
       {
-        replacements: { year },
+        replacements,
         type: sequelize.QueryTypes.SELECT,
       }
     );
@@ -313,9 +389,19 @@ const getFacultyDistribution = async (req, res) => {
   }
 };
 
+// Update getDepartmentDistribution
 const getDepartmentDistribution = async (req, res) => {
   try {
     const { year = new Date().getFullYear() } = req.query;
+    const { facultyId, isFiltered } = getUserFacultyFilter(req);
+
+    let departmentWhere = "d.is_active = true";
+    let replacements = { year };
+
+    if (isFiltered) {
+      departmentWhere += " AND d.faculty_id = :facultyId";
+      replacements.facultyId = facultyId;
+    }
 
     const departmentData = await sequelize.query(
       `
@@ -327,14 +413,14 @@ const getDepartmentDistribution = async (req, res) => {
       LEFT JOIN applications a ON u.id = a.student_id 
         AND a.status != 'DRAFT'
         AND YEAR(a.createdAt) = :year
-      WHERE d.is_active = true
+      WHERE ${departmentWhere}
       GROUP BY d.id, d.name
       HAVING COUNT(a.id) > 0
       ORDER BY value DESC
       LIMIT 10
       `,
       {
-        replacements: { year },
+        replacements,
         type: sequelize.QueryTypes.SELECT,
       }
     );
@@ -356,20 +442,48 @@ const getDepartmentDistribution = async (req, res) => {
 
 const getYearlyTrend = async (req, res) => {
   try {
+    const { facultyId, isFiltered } = getUserFacultyFilter(req);
     const currentYear = new Date().getFullYear();
     const years = Array.from({ length: 5 }, (_, i) => currentYear - 4 + i);
 
     const yearlyData = await Promise.all(
       years.map(async (year) => {
-        const count = await Application.count({
-          where: {
-            status: { [Op.ne]: "DRAFT" },
-            createdAt: {
-              [Op.gte]: new Date(`${year}-01-01`),
-              [Op.lte]: new Date(`${year}-12-31`),
-            },
+        let whereCondition = {
+          status: { [Op.ne]: "DRAFT" },
+          createdAt: {
+            [Op.gte]: new Date(`${year}-01-01`),
+            [Op.lte]: new Date(`${year}-12-31`),
           },
+        };
+
+        let includeOptions = [];
+
+        // Jika PIMPINAN_FAKULTAS, filter berdasarkan fakultas
+        if (isFiltered) {
+          includeOptions = [
+            {
+              model: User,
+              as: "student",
+              attributes: [],
+              include: [
+                {
+                  model: Department,
+                  as: "department",
+                  where: { faculty_id: facultyId },
+                  attributes: [],
+                  required: true,
+                },
+              ],
+              required: true,
+            },
+          ];
+        }
+
+        const count = await Application.count({
+          where: whereCondition,
+          include: includeOptions,
         });
+
         return { label: year.toString(), value: count };
       })
     );
@@ -388,6 +502,15 @@ const getYearlyTrend = async (req, res) => {
 const getGenderDistribution = async (req, res) => {
   try {
     const { year = new Date().getFullYear() } = req.query;
+    const { facultyId, isFiltered } = getUserFacultyFilter(req);
+
+    let userWhere = "u.role = 'MAHASISWA' AND a.id IS NOT NULL";
+    let replacements = { year };
+
+    if (isFiltered) {
+      userWhere += " AND u.faculty_id = :facultyId";
+      replacements.facultyId = facultyId;
+    }
 
     const genderData = await sequelize.query(
       `
@@ -403,12 +526,12 @@ const getGenderDistribution = async (req, res) => {
       LEFT JOIN applications a ON u.id = a.student_id 
         AND a.status != 'DRAFT'
         AND YEAR(a.createdAt) = :year
-      WHERE u.role = 'MAHASISWA' AND a.id IS NOT NULL
+      WHERE ${userWhere}
       GROUP BY u.gender
       HAVING COUNT(a.id) > 0
       `,
       {
-        replacements: { year },
+        replacements,
         type: sequelize.QueryTypes.SELECT,
       }
     );
@@ -432,44 +555,43 @@ const getGenderDistribution = async (req, res) => {
 const getStatusSummary = async (req, res) => {
   try {
     const { year = new Date().getFullYear() } = req.query;
+    const { facultyId, isFiltered } = getUserFacultyFilter(req);
+
+    let baseWhere = {
+      createdAt: {
+        [Op.gte]: new Date(`${year}-01-01`),
+        [Op.lte]: new Date(`${year}-12-31`),
+      },
+    };
+
+    let includeUser = isFiltered
+      ? [
+          {
+            model: User,
+            as: "student",
+            where: { faculty_id: facultyId },
+            attributes: [],
+          },
+        ]
+      : [];
 
     const [menungguVerifikasi, menungguValidasi, disetujui, ditolak] =
       await Promise.all([
         Application.count({
-          where: {
-            status: "MENUNGGU_VERIFIKASI",
-            createdAt: {
-              [Op.gte]: new Date(`${year}-01-01`),
-              [Op.lte]: new Date(`${year}-12-31`),
-            },
-          },
+          where: { ...baseWhere, status: "MENUNGGU_VERIFIKASI" },
+          include: includeUser,
         }),
         Application.count({
-          where: {
-            status: "MENUNGGU_VALIDASI",
-            createdAt: {
-              [Op.gte]: new Date(`${year}-01-01`),
-              [Op.lte]: new Date(`${year}-12-31`),
-            },
-          },
+          where: { ...baseWhere, status: "MENUNGGU_VALIDASI" },
+          include: includeUser,
         }),
         Application.count({
-          where: {
-            status: "VALIDATED",
-            createdAt: {
-              [Op.gte]: new Date(`${year}-01-01`),
-              [Op.lte]: new Date(`${year}-12-31`),
-            },
-          },
+          where: { ...baseWhere, status: "VALIDATED" },
+          include: includeUser,
         }),
         Application.count({
-          where: {
-            status: "REJECTED",
-            createdAt: {
-              [Op.gte]: new Date(`${year}-01-01`),
-              [Op.lte]: new Date(`${year}-12-31`),
-            },
-          },
+          where: { ...baseWhere, status: "REJECTED" },
+          include: includeUser,
         }),
       ]);
 
@@ -594,6 +716,7 @@ const getApplicationsList = async (req, res) => {
       gender,
       search,
     } = req.query;
+    const { facultyId, isFiltered } = getUserFacultyFilter(req);
 
     let whereCondition = {
       status: { [Op.ne]: "DRAFT" },
@@ -606,6 +729,12 @@ const getApplicationsList = async (req, res) => {
     let userWhereCondition = {
       role: "MAHASISWA",
     };
+
+    // Filter berdasarkan fakultas jika PIMPINAN_FAKULTAS
+    if (isFiltered) {
+      userWhereCondition.faculty_id = facultyId;
+    }
+
     let departmentWhereCondition = {};
     let facultyWhereCondition = {};
 
@@ -675,7 +804,8 @@ const getApplicationsList = async (req, res) => {
       fakultas: app.student?.department?.faculty?.name || "N/A",
       departemen: app.student?.department?.name || "N/A",
       gender: app.student?.gender === "L" ? "Laki-laki" : "Perempuan",
-      status: getStatusLabel(app.status),
+      status: app.status,
+      rawStatus: app.status,
       beasiswa: app.scholarship?.name || "N/A",
       tanggalDaftar: app.createdAt,
     }));
@@ -707,17 +837,6 @@ const getTimeAgo = (date) => {
     const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24));
     return `${diffInDays} hari lalu`;
   }
-};
-
-const getStatusLabel = (status) => {
-  const statusMap = {
-    MENUNGGU_VERIFIKASI: "Menunggu Verifikasi",
-    VERIFIED: "Terverifikasi",
-    MENUNGGU_VALIDASI: "Menunggu Validasi",
-    REJECTED: "Ditolak",
-    VALIDATED: "Disetujui",
-  };
-  return statusMap[status] || status;
 };
 
 module.exports = {
