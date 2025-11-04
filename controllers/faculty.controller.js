@@ -54,6 +54,16 @@ const createFaculty = async (req, res) => {
     }
 
     const newFaculty = await Faculty.create({ name, code });
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "ACTIVATE_FACULTY",
+      entity_type: "Faculty",
+      entity_id: newFaculty.id,
+      description: `Fakultas "${newFaculty.name}" telah dibuat oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
     return successResponse(res, "Fakultas berhasil dibuat", newFaculty, 201);
   } catch (error) {
     console.error("Error creating faculty:", error);
@@ -89,6 +99,16 @@ const editFaculty = async (req, res) => {
     }
 
     await faculty.update({ name, code });
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "EDIT_FACULTY",
+      entity_type: "Faculty",
+      entity_id: faculty.id,
+      description: `Fakultas "${faculty.name}" telah diperbarui oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
 
     return successResponse(res, "Fakultas berhasil diperbarui", faculty);
   } catch (error) {
@@ -108,6 +128,16 @@ const activateFaculty = async (req, res) => {
 
     faculty.is_active = true;
     await faculty.save();
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "ACTIVATE_FACULTY",
+      entity_type: "Faculty",
+      entity_id: faculty.id,
+      description: `Fakultas "${faculty.name}" telah diaktifkan oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
     return successResponse(res, "Fakultas berhasil diaktifkan", faculty);
   } catch (error) {
     console.error("Error activating faculty:", error);
@@ -125,6 +155,16 @@ const deactivateFaculty = async (req, res) => {
     }
     faculty.is_active = false;
     await faculty.save();
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "DEACTIVATE_FACULTY",
+      entity_type: "Faculty",
+      entity_id: faculty.id,
+      description: `Fakultas "${faculty.name}" telah dinonaktifkan oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
     return successResponse(res, "Fakultas berhasil dinonaktifkan", faculty);
   } catch (error) {
     console.error("Error deactivating faculty:", error);

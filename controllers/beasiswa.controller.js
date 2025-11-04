@@ -7,6 +7,7 @@ const {
   ScholarshipBenefit,
   ScholarshipStage,
   FormField,
+  ActivityLog,
 } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 const { sequelize } = require("../models");
@@ -216,6 +217,17 @@ const createScholarship = async (req, res) => {
         { association: "departments" },
         { association: "stages" },
       ],
+    });
+
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "CREATE_SCHOLARSHIP",
+      entity_type: "Scholarship",
+      entity_id: scholarship.id,
+      description: `Beasiswa dengan nama ${scholarship.name} telah dibuat oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
     });
 
     successResponse(res, "Beasiswa berhasil dibuat", createdScholarship);
@@ -466,6 +478,17 @@ const updateScholarship = async (req, res) => {
       ],
     });
 
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "UPDATE_SCHOLARSHIP",
+      entity_type: "Scholarship",
+      entity_id: scholarship.id,
+      description: `Beasiswa dengan nama ${scholarship.name} telah diperbarui oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
+
     successResponse(res, "Beasiswa berhasil diperbarui", updatedScholarship);
   } catch (error) {
     await transaction.rollback();
@@ -484,6 +507,18 @@ const deactivateScholarship = async (req, res) => {
     await scholarship.update({
       is_active: false,
     });
+
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "DEACTIVATE_SCHOLARSHIP",
+      entity_type: "Scholarship",
+      entity_id: scholarship.id,
+      description: `Beasiswa "${scholarship.name}" telah dinonaktifkan oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
+
     successResponse(res, "Beasiswa berhasil dinonaktifkan", scholarship);
   } catch (error) {
     console.error("Error deactivating scholarship:", error);
@@ -501,6 +536,18 @@ const activateScholarship = async (req, res) => {
     await scholarship.update({
       is_active: true,
     });
+
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "ACTIVATE_SCHOLARSHIP",
+      entity_type: "Scholarship",
+      entity_id: scholarship.id,
+      description: `Beasiswa "${scholarship.name}" telah diaktifkan oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
+
     successResponse(res, "Beasiswa berhasil diaktifkan", scholarship);
   } catch (error) {
     console.error("Error activating scholarship:", error);

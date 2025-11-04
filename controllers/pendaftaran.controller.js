@@ -4,6 +4,7 @@ const {
   Application,
   FormAnswer,
   ApplicationDocument,
+  ActivityLog,
 } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 
@@ -308,6 +309,17 @@ const submitApplication = async (req, res) => {
     const message = isDraft
       ? "Draft berhasil disimpan"
       : "Aplikasi berhasil disubmit";
+
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "SUBMIT_APPLICATION",
+      entity_type: "Application",
+      entity_id: application.id,
+      description: `${userName} mendaftar ke beasiswa "${scholarship.name}"`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
 
     return successResponse(res, message, {
       application_id: application.id,

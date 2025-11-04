@@ -523,7 +523,7 @@ const getActivities = async (req, res) => {
         },
       ],
       order: [["createdAt", "DESC"]],
-      limit: 15,
+      limit: 5,
     });
 
     const activities = [];
