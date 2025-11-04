@@ -18,6 +18,7 @@ const {
   getScholarshipPerformance,
   getTopPerformingFaculties,
 } = require("../controllers/analytics.controller");
+const { exportLaporanBeasiswa } = require("../controllers/report.controller");
 const authorize = require("../middlewares/role.middleware");
 
 router.use(
@@ -52,5 +53,7 @@ router.get("/top-performing-faculties", getTopPerformingFaculties);
 // List endpoints
 router.get("/applications-list", getApplicationsList);
 router.get("/activities", getActivities);
+
+router.get("/export-laporan", exportLaporanBeasiswa);
 
 module.exports = router;
