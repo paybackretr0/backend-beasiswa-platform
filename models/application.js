@@ -17,8 +17,12 @@ module.exports = (sequelize, DataTypes) => {
       });
       Application.hasMany(models.ApplicationDocument, {
         foreignKey: "application_id",
+        as: "documents",
       });
-      Application.hasMany(models.FormAnswer, { foreignKey: "application_id" });
+      Application.hasMany(models.FormAnswer, {
+        foreignKey: "application_id",
+        as: "FormAnswers",
+      });
       Application.hasMany(models.ApplicationStageProgress, {
         foreignKey: "application_id",
         as: "stages_progress",
@@ -82,19 +86,18 @@ module.exports = (sequelize, DataTypes) => {
   );
   Application.afterUpdate(async (application, options) => {
     if (application.changed("status") && application.status === "VALIDATED") {
+      const { ScholarshipStage, ApplicationStageProgress } =
+        application.sequelize.models;
+
       const scholarship = await application.getScholarship({
-        include: [
-          { model: options.sequelize.models.ScholarshipStage, as: "stages" },
-        ],
+        include: [{ model: ScholarshipStage, as: "stages" }],
       });
 
       if (!scholarship || !scholarship.stages) return;
 
-      const progressModel = options.sequelize.models.ApplicationStageProgress;
-
       await Promise.all(
         scholarship.stages.map((stage) =>
-          progressModel.create({
+          ApplicationStageProgress.create({
             application_id: application.id,
             stage_id: stage.id,
             status:

@@ -3,12 +3,14 @@ const { Model } = require("sequelize");
 module.exports = (sequelize, DataTypes) => {
   class FormAnswer extends Model {
     static associate(models) {
-      // FormAnswer belongs to Application
       FormAnswer.belongsTo(models.Application, {
         foreignKey: "application_id",
+        as: "application",
       });
-      // FormAnswer belongs to FormField
-      FormAnswer.belongsTo(models.FormField, { foreignKey: "field_id" });
+      FormAnswer.belongsTo(models.FormField, {
+        foreignKey: "field_id",
+        as: "FormField",
+      });
     }
   }
   FormAnswer.init(
@@ -49,7 +51,7 @@ module.exports = (sequelize, DataTypes) => {
       sequelize,
       modelName: "FormAnswer",
       tableName: "form_answers",
-      timestamps: true, // createdAt & updatedAt otomatis
+      timestamps: true,
     }
   );
   return FormAnswer;

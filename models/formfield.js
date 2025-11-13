@@ -3,7 +3,6 @@ const { Model } = require("sequelize");
 module.exports = (sequelize, DataTypes) => {
   class FormField extends Model {
     static associate(models) {
-      // FormField belongs to Scholarship
       FormField.belongsTo(models.Scholarship, { foreignKey: "scholarship_id" });
       FormField.hasMany(models.FormAnswer, { foreignKey: "field_id" });
     }
@@ -54,7 +53,7 @@ module.exports = (sequelize, DataTypes) => {
       sequelize,
       modelName: "FormField",
       tableName: "form_fields",
-      timestamps: true, // createdAt & updatedAt otomatis
+      timestamps: true,
     }
   );
   return FormField;

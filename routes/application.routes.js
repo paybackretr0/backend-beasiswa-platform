@@ -7,8 +7,17 @@ const {
 const {
   getAllApplications,
   getApplicationsSummary,
+  getApplicationDetail,
 } = require("../controllers/application.controller");
 const authorize = require("../middlewares/role.middleware");
+
+router.get(
+  "/user/:id",
+  authenticate,
+  verifiedUser,
+  authorize(["MAHASISWA"]),
+  getApplicationDetail
+);
 
 router.use(
   authenticate,
@@ -17,5 +26,6 @@ router.use(
 );
 router.get("/", getAllApplications);
 router.get("/summary", getApplicationsSummary);
+router.get("/:id", getApplicationDetail);
 
 module.exports = router;

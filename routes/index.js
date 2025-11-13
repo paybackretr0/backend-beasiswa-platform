@@ -12,6 +12,8 @@ const analyticsRoutes = require("./analytics.routes");
 const formRoutes = require("./form.routes");
 const pendaftaranRoutes = require("./pendaftaran.routes");
 const historyRoutes = require("./history.routes");
+const verifikatorRoutes = require("./verifikator.routes");
+const validatorRoutes = require("./validator.routes");
 
 router.use("/auth", authRoutes);
 router.use("/users", userRoutes);
@@ -25,5 +27,7 @@ router.use("/analytics", analyticsRoutes);
 router.use("/forms", formRoutes);
 router.use("/pendaftaran", pendaftaranRoutes);
 router.use("/history", historyRoutes);
+router.use("/verifikator", verifikatorRoutes);
+router.use("/validator", validatorRoutes);
 
 module.exports = router;

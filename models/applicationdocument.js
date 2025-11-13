@@ -6,6 +6,7 @@ module.exports = (sequelize, DataTypes) => {
       // ApplicationDocument belongs to Application
       ApplicationDocument.belongsTo(models.Application, {
         foreignKey: "application_id",
+        as: "application",
       });
       // ApplicationDocument checked by User
       ApplicationDocument.belongsTo(models.User, {
