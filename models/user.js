@@ -57,6 +57,14 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(191),
         allowNull: false,
       },
+      birth_date: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      birth_place: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+      },
       role: {
         type: DataTypes.ENUM(
           "MAHASISWA",

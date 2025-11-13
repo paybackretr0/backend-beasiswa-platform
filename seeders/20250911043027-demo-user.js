@@ -110,6 +110,8 @@ module.exports = {
           email: "2211523030_khalied@student.unand.ac.id",
           password: hashedPassword,
           full_name: "Khalied Nauly Maturino",
+          birth_date: new Date("2000-01-01"),
+          birth_place: "Padang",
           role: "MAHASISWA",
           nim: "2211523030",
           department_id: "22222222-2222-2222-2222-222222222222",

@@ -46,9 +46,11 @@ const getScholarshipForm = async (req, res) => {
       include: [
         {
           model: FormAnswer,
+          as: "FormAnswers",
           include: [
             {
               model: FormField,
+              as: "FormField",
               attributes: ["id", "type", "label"],
             },
           ],

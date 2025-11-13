@@ -23,6 +23,14 @@ module.exports = {
         type: Sequelize.STRING(191),
         allowNull: false,
       },
+      birth_date: {
+        type: Sequelize.DATE,
+        allowNull: true,
+      },
+      birth_place: {
+        type: Sequelize.STRING(100),
+        allowNull: true,
+      },
       role: {
         type: Sequelize.ENUM(
           "MAHASISWA",
