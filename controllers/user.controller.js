@@ -114,7 +114,6 @@ const getVerifikator = async (req, res) => {
   }
 };
 
-// Add new user
 const addPimpinanVerifikator = async (req, res) => {
   const { email, password, full_name, role } = req.body;
 
@@ -124,10 +123,8 @@ const addPimpinanVerifikator = async (req, res) => {
       return errorResponse(res, "Email sudah digunakan", 400);
     }
 
-    // Hash password
     const hashedPassword = await hashPassword(password);
 
-    // Buat user baru
     const newUser = await User.create({
       email,
       password: hashedPassword,
@@ -141,7 +138,7 @@ const addPimpinanVerifikator = async (req, res) => {
       action: "CREATE_PIMPINAN",
       entity_type: "User",
       entity_id: newUser.id,
-      description: `User "${newUser.name}" telah dibuat oleh ${userName}.`,
+      description: `User "${newUser.full_name}" telah dibuat oleh ${userName}.`,
       ip_address: req.ip,
       user_agent: req.headers["user-agent"],
     });
@@ -178,13 +175,11 @@ const addMahasiswa = async (req, res) => {
       return errorResponse(res, "Format NIM tidak valid", 400);
     }
 
-    // Cari fakultas berdasarkan kode
     const faculty = await Faculty.findOne({ where: { code: kodeFakultas } });
     if (!faculty) {
       return errorResponse(res, "Fakultas tidak ditemukan", 404);
     }
 
-    // Cari departemen di fakultas tersebut berdasarkan kode
     const department = await Department.findOne({
       where: {
         faculty_id: faculty.id,
@@ -195,10 +190,8 @@ const addMahasiswa = async (req, res) => {
       return errorResponse(res, "Departemen tidak ditemukan", 404);
     }
 
-    // Hash password
     const hashedPassword = await hashPassword(password);
 
-    // Buat user baru
     const newUser = await User.create({
       email,
       password: hashedPassword,
@@ -214,7 +207,7 @@ const addMahasiswa = async (req, res) => {
       action: "CREATE_MAHASISWA",
       entity_type: "User",
       entity_id: newUser.id,
-      description: `User "${newUser.name}" telah dibuat oleh ${userName}.`,
+      description: `User "${newUser.full_name}" telah dibuat oleh ${userName}.`,
       ip_address: req.ip,
       user_agent: req.headers["user-agent"],
     });
@@ -248,10 +241,8 @@ const addPimpinanFakultas = async (req, res) => {
       return errorResponse(res, "Fakultas tidak ditemukan", 404);
     }
 
-    // Hash password
     const hashedPassword = await hashPassword(password);
 
-    // Buat user baru
     const newUser = await User.create({
       email,
       password: hashedPassword,
@@ -266,7 +257,7 @@ const addPimpinanFakultas = async (req, res) => {
       action: "CREATE_PIMPINAN_FAKULTAS",
       entity_type: "User",
       entity_id: newUser.id,
-      description: `User "${newUser.name}" telah dibuat oleh ${userName}.`,
+      description: `User "${newUser.full_name}" telah dibuat oleh ${userName}.`,
       ip_address: req.ip,
       user_agent: req.headers["user-agent"],
     });
@@ -282,7 +273,6 @@ const addPimpinanFakultas = async (req, res) => {
   }
 };
 
-// Update user
 const updateUser = async (req, res) => {
   const { id } = req.params;
   const { full_name, phone_number, faculty_id, department_id } = req.body;
@@ -293,7 +283,6 @@ const updateUser = async (req, res) => {
       return errorResponse(res, "User tidak ditemukan", 404);
     }
 
-    // Validasi fakultas dan departemen jika diberikan
     if (faculty_id) {
       const faculty = await Faculty.findByPk(faculty_id);
       if (!faculty) {
@@ -308,7 +297,6 @@ const updateUser = async (req, res) => {
       }
     }
 
-    // Update user
     await user.update({ full_name, phone_number, faculty_id, department_id });
 
     const userName = req.user.full_name || "User";
@@ -316,8 +304,8 @@ const updateUser = async (req, res) => {
       user_id: req.user.id,
       action: "UPDATE_USER",
       entity_type: "User",
-      entity_id: newUser.id,
-      description: `User "${newUser.name}" telah diperbarui oleh ${userName}.`,
+      entity_id: user.id,
+      description: `User "${user.full_name}" telah diperbarui oleh ${userName}.`,
       ip_address: req.ip,
       user_agent: req.headers["user-agent"],
     });
@@ -329,7 +317,6 @@ const updateUser = async (req, res) => {
   }
 };
 
-// Deactivate user
 const deactivateUser = async (req, res) => {
   const { id } = req.params;
 
@@ -346,8 +333,8 @@ const deactivateUser = async (req, res) => {
       user_id: req.user.id,
       action: "DEACTIVATE_USER",
       entity_type: "User",
-      entity_id: newUser.id,
-      description: `User "${newUser.name}" telah dinonaktifkan oleh ${userName}.`,
+      entity_id: user.id,
+      description: `User "${user.full_name}" telah dinonaktifkan oleh ${userName}.`,
       ip_address: req.ip,
       user_agent: req.headers["user-agent"],
     });
@@ -373,8 +360,8 @@ const activateUser = async (req, res) => {
       user_id: req.user.id,
       action: "ACTIVATE_USER",
       entity_type: "User",
-      entity_id: newUser.id,
-      description: `User "${newUser.name}" telah diaktifkan oleh ${userName}.`,
+      entity_id: user.id,
+      description: `User "${user.full_name}" telah diaktifkan oleh ${userName}.`,
       ip_address: req.ip,
       user_agent: req.headers["user-agent"],
     });
