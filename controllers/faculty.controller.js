@@ -1,4 +1,4 @@
-const { Faculty, Department } = require("../models");
+const { Faculty, Department, ActivityLog } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 const { sequelize } = require("../models");
 
