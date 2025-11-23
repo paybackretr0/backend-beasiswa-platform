@@ -147,6 +147,34 @@ const verifyEmail = async (req, res) => {
   }
 };
 
+const resendVerificationCode = async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    const user = await User.findOne({ where: { email } });
+
+    if (!user) {
+      return errorResponse(res, "User tidak ditemukan", 404);
+    }
+
+    if (user.emailVerified) {
+      return errorResponse(res, "Email sudah diverifikasi", 400);
+    }
+
+    const verificationCode = generateVerificationCode();
+
+    await user.update({
+      emailVerificationCode: verificationCode,
+    });
+
+    await sendVerificationEmail(user, verificationCode);
+
+    return successResponse(res, "Kode verifikasi baru telah dikirim");
+  } catch (error) {
+    return errorResponse(res, "Internal server error", 500, error.message);
+  }
+};
+
 const login = async (req, res) => {
   const { email, password } = req.body;
 
@@ -506,6 +534,7 @@ const getToken = async (req, res) => {
 module.exports = {
   register,
   verifyEmail,
+  resendVerificationCode,
   login,
   forgotPassword,
   verifyResetCode,
