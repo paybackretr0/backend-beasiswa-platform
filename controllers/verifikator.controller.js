@@ -33,12 +33,13 @@ const verifyApplication = async (req, res) => {
       status: "VERIFIED",
       verified_by: verifikatorId,
       verified_at: new Date(),
-      notes: notes || null,
     });
 
     await ActivityLog.create({
       user_id: verifikatorId,
       action: "VERIFY_APPLICATION",
+      entity_type: "Application",
+      entity_id: application.id,
       description: `Memverifikasi pendaftaran ${application.student?.full_name}`,
       ip_address: req.ip,
       user_agent: req.get("User-Agent"),
@@ -48,7 +49,6 @@ const verifyApplication = async (req, res) => {
       id: application.id,
       status: "VERIFIED",
       verified_at: application.verified_at,
-      notes: application.notes,
     });
   } catch (error) {
     console.error("Error verifying application:", error);
@@ -90,14 +90,16 @@ const rejectApplication = async (req, res) => {
 
     await application.update({
       status: "REJECTED",
-      verified_by: verifikatorId,
-      verified_at: new Date(),
+      rejected_by: verifikatorId,
+      rejected_at: new Date(),
       notes: notes,
     });
 
     await ActivityLog.create({
       user_id: verifikatorId,
       action: "REJECT_APPLICATION",
+      entity_type: "Application",
+      entity_id: application.id,
       description: `Menolak pendaftaran ${application.student?.full_name}: ${notes}`,
       ip_address: req.ip,
       user_agent: req.get("User-Agent"),
@@ -106,7 +108,7 @@ const rejectApplication = async (req, res) => {
     return successResponse(res, "Application rejected successfully", {
       id: application.id,
       status: "REJECTED",
-      verified_at: application.verified_at,
+      rejected_at: application.rejected_at,
       notes: application.notes,
     });
   } catch (error) {

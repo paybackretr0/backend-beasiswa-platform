@@ -292,6 +292,7 @@ const getInformationBySlug = async (req, res) => {
 const getAllInformations = async (req, res) => {
   try {
     const informations = await Information.findAll({
+      where: { status: "PUBLISHED" },
       order: [["createdAt", "DESC"]],
     });
     return successResponse(

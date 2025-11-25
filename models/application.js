@@ -15,6 +15,14 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "verified_by",
         as: "verificator",
       });
+      Application.belongsTo(models.User, {
+        foreignKey: "validated_by",
+        as: "validator",
+      });
+      Application.belongsTo(models.User, {
+        foreignKey: "rejected_by",
+        as: "rejector",
+      });
       Application.hasMany(models.ApplicationDocument, {
         foreignKey: "application_id",
         as: "documents",
@@ -49,7 +57,6 @@ module.exports = (sequelize, DataTypes) => {
           "DRAFT",
           "MENUNGGU_VERIFIKASI",
           "VERIFIED",
-          "MENUNGGU_VALIDASI",
           "REJECTED",
           "VALIDATED"
         ),
@@ -68,12 +75,24 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.DATE,
         allowNull: true,
       },
-      notes: {
-        type: DataTypes.TEXT,
+      validated_by: {
+        type: DataTypes.UUID,
         allowNull: true,
       },
-      score_json: {
-        type: DataTypes.JSON,
+      validated_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      rejected_by: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      rejected_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      notes: {
+        type: DataTypes.TEXT,
         allowNull: true,
       },
     },
