@@ -35,7 +35,6 @@ module.exports = {
           "DRAFT",
           "MENUNGGU_VERIFIKASI",
           "VERIFIED",
-          "MENUNGGU_VALIDASI",
           "REJECTED",
           "VALIDATED"
         ),
@@ -60,12 +59,36 @@ module.exports = {
         type: Sequelize.DATE,
         allowNull: true,
       },
-      notes: {
-        type: Sequelize.TEXT,
+      validated_by: {
+        type: Sequelize.UUID,
+        allowNull: true,
+        references: {
+          model: "users",
+          key: "id",
+        },
+        onUpdate: "CASCADE",
+        onDelete: "SET NULL",
+      },
+      validated_at: {
+        type: Sequelize.DATE,
         allowNull: true,
       },
-      score_json: {
-        type: Sequelize.JSON,
+      rejected_by: {
+        type: Sequelize.UUID,
+        allowNull: true,
+        references: {
+          model: "users",
+          key: "id",
+        },
+        onUpdate: "CASCADE",
+        onDelete: "SET NULL",
+      },
+      rejected_at: {
+        type: Sequelize.DATE,
+        allowNull: true,
+      },
+      notes: {
+        type: Sequelize.TEXT,
         allowNull: true,
       },
       createdAt: {

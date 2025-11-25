@@ -9,6 +9,7 @@ const {
   ScholarshipRequirement,
   ScholarshipBenefit,
   ScholarshipDocument,
+  ApplicationDocument,
 } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 const { Op } = require("sequelize");
@@ -69,7 +70,7 @@ const getApplicationsSummary = async (req, res) => {
     });
 
     const menungguValidasi = await Application.count({
-      where: { status: "MENUNGGU_VALIDASI" },
+      where: { status: "VERIFIED" },
     });
 
     const dikembalikan = await Application.count({
@@ -183,6 +184,21 @@ const getApplicationDetail = async (req, res) => {
             },
           ],
         },
+        {
+          model: User,
+          as: "verificator",
+          attributes: ["id", "full_name", "email", "role"],
+        },
+        {
+          model: User,
+          as: "validator",
+          attributes: ["id", "full_name", "email", "role"],
+        },
+        {
+          model: User,
+          as: "rejector",
+          attributes: ["id", "full_name", "email", "role"],
+        },
       ],
     });
 
@@ -240,6 +256,7 @@ const getApplicationDetail = async (req, res) => {
       submitted_at: application.submitted_at,
       verified_at: application.verified_at,
       validated_at: application.validated_at,
+      rejected_at: application.rejected_at,
       form_data: formAnswers,
 
       student: {
@@ -254,6 +271,10 @@ const getApplicationDetail = async (req, res) => {
         fakultas: application.student?.department?.faculty?.name || "N/A",
         departemen: application.student?.department?.name || "N/A",
       },
+
+      verificator: application.verificator,
+      validator: application.validator,
+      rejector: application.rejector,
 
       scholarship: {
         id: application.scholarship?.id,

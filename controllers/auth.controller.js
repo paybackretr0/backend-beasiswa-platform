@@ -45,7 +45,16 @@ const sendVerificationEmail = async (user, code) => {
 };
 
 const register = async (req, res) => {
-  const { full_name, email, password, password_confirmation } = req.body;
+  const {
+    full_name,
+    email,
+    password,
+    password_confirmation,
+    birth_date,
+    birth_place,
+    gender,
+    phone_number,
+  } = req.body;
   try {
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
@@ -97,6 +106,10 @@ const register = async (req, res) => {
       nim,
       faculty_id,
       department_id,
+      phone_number,
+      gender,
+      birth_date,
+      birth_place,
       emailVerificationCode: verificationCode,
       emailVerified: false,
     });
@@ -355,7 +368,7 @@ const resetPassword = async (req, res) => {
 };
 
 const updateProfile = async (req, res) => {
-  const { full_name, phone_number, gender } = req.body;
+  const { phone_number, gender } = req.body;
 
   try {
     const user = await User.findByPk(req.user.id);
@@ -368,7 +381,6 @@ const updateProfile = async (req, res) => {
     }
 
     await user.update({
-      full_name: full_name ?? user.full_name,
       phone_number: phone_number ?? user.phone_number,
       gender: gender ?? user.gender,
     });

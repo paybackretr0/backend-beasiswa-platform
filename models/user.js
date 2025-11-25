@@ -25,6 +25,14 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "verified_by",
         as: "verificator",
       });
+      User.hasMany(models.Application, {
+        foreignKey: "validated_by",
+        as: "validator",
+      });
+      User.hasMany(models.Application, {
+        foreignKey: "rejected_by",
+        as: "rejector",
+      });
       User.hasMany(models.ApplicationDocument, {
         foreignKey: "checked_by",
         as: "checker",
@@ -127,7 +135,7 @@ module.exports = (sequelize, DataTypes) => {
       sequelize,
       modelName: "User",
       tableName: "users",
-      timestamps: true, // createdAt & updatedAt otomatis
+      timestamps: true,
     }
   );
   return User;

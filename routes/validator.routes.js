@@ -5,10 +5,14 @@ const {
   verifiedUser,
 } = require("../middlewares/auth.middleware");
 const authorize = require("../middlewares/role.middleware");
-const { validateApplication } = require("../controllers/validator.controller");
+const {
+  validateApplication,
+  rejectApplication,
+} = require("../controllers/validator.controller");
 
 router.use(authenticate, verifiedUser, authorize(["PIMPINAN_DITMAWA"]));
 
 router.put("/applications/:id/validate", validateApplication);
+router.put("/applications/:id/reject", rejectApplication);
 
 module.exports = router;

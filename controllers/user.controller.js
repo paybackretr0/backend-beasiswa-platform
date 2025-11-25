@@ -199,6 +199,8 @@ const addMahasiswa = async (req, res) => {
       role: "MAHASISWA",
       faculty_id: faculty.id,
       department_id: department.id,
+      is_active: true,
+      emailVerified: true,
     });
 
     const userName = req.user.full_name || "User";
@@ -275,7 +277,8 @@ const addPimpinanFakultas = async (req, res) => {
 
 const updateUser = async (req, res) => {
   const { id } = req.params;
-  const { full_name, phone_number, faculty_id, department_id } = req.body;
+  const { full_name, phone_number, email, faculty_id, department_id } =
+    req.body;
 
   try {
     const user = await User.findByPk(id);
