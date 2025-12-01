@@ -1,26 +1,26 @@
 "use strict";
 const { Model } = require("sequelize");
 module.exports = (sequelize, DataTypes) => {
-  class Department extends Model {
+  class StudyProgram extends Model {
     static associate(models) {
-      Department.belongsTo(models.Faculty, {
-        foreignKey: "faculty_id",
-        as: "faculty",
-      });
-      Department.hasMany(models.User, {
+      StudyProgram.belongsTo(models.Department, {
         foreignKey: "department_id",
+        as: "department",
+      });
+      StudyProgram.hasMany(models.User, {
+        foreignKey: "study_program_id",
         as: "users",
       });
     }
   }
-  Department.init(
+  StudyProgram.init(
     {
       id: {
         type: DataTypes.UUID,
         primaryKey: true,
         defaultValue: DataTypes.UUIDV4,
       },
-      faculty_id: {
+      department_id: {
         type: DataTypes.UUID,
         allowNull: false,
       },
@@ -28,9 +28,9 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(50),
         allowNull: false,
       },
-      name: {
-        type: DataTypes.STRING(191),
-        allowNull: false,
+      degree: {
+        type: DataTypes.ENUM("D3", "D4", "S1", "S2", "S3", "Profesi"),
+        allowNull: true,
       },
       is_active: {
         type: DataTypes.BOOLEAN,
@@ -40,10 +40,10 @@ module.exports = (sequelize, DataTypes) => {
     },
     {
       sequelize,
-      modelName: "Department",
-      tableName: "departments",
+      modelName: "StudyProgram",
+      tableName: "study_programs",
       timestamps: true,
     }
   );
-  return Department;
+  return StudyProgram;
 };

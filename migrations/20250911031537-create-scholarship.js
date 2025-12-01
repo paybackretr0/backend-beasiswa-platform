@@ -43,6 +43,12 @@ module.exports = {
         allowNull: false,
         defaultValue: true,
       },
+      is_external: {
+        type: Sequelize.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        comment: "Apakah beasiswa eksternal (tidak dikelola UNAND)",
+      },
       contact_person_name: {
         type: Sequelize.STRING(191),
         allowNull: false,

@@ -1,20 +1,19 @@
 "use strict";
-
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.createTable("departments", {
+    await queryInterface.createTable("study_programs", {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
         primaryKey: true,
         allowNull: false,
       },
-      faculty_id: {
+      department_id: {
         type: Sequelize.UUID,
         allowNull: false,
         references: {
-          model: "faculties",
+          model: "departments",
           key: "id",
         },
         onUpdate: "CASCADE",
@@ -24,9 +23,8 @@ module.exports = {
         type: Sequelize.STRING(50),
         allowNull: false,
       },
-      name: {
-        type: Sequelize.STRING(191),
-        allowNull: false,
+      degree: {
+        type: Sequelize.ENUM("D3", "D4", "S1", "S2", "S3", "Profesi"),
       },
       is_active: {
         type: Sequelize.BOOLEAN,
@@ -45,8 +43,7 @@ module.exports = {
       },
     });
   },
-
   async down(queryInterface, Sequelize) {
-    await queryInterface.dropTable("departments");
+    await queryInterface.dropTable("study_programs");
   },
 };

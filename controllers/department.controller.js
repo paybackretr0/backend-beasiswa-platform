@@ -4,7 +4,7 @@ const { successResponse, errorResponse } = require("../utils/response");
 const getAllDepartments = async (req, res) => {
   try {
     const departments = await Department.findAll({
-      attributes: ["id", "name", "code", "degree", "faculty_id", "is_active"],
+      attributes: ["id", "name", "code", "faculty_id", "is_active"],
       include: [
         {
           model: Faculty,
@@ -26,11 +26,11 @@ const getAllDepartments = async (req, res) => {
 
 const createDepartment = async (req, res) => {
   try {
-    const { name, code, faculty_id, degree } = req.body;
-    if (!name || !code || !faculty_id || !degree) {
+    const { name, code, faculty_id } = req.body;
+    if (!name || !code || !faculty_id) {
       return errorResponse(
         res,
-        "Nama, kode, fakultas, dan jenjang Departemen harus diisi",
+        "Nama, kode, dan fakultas Departemen harus diisi",
         400
       );
     }
@@ -39,7 +39,7 @@ const createDepartment = async (req, res) => {
       return errorResponse(res, "Fakultas tidak ditemukan", 404);
     }
     const existingDepartment = await Department.findOne({
-      where: { code: code, faculty_id: faculty_id, degree: degree },
+      where: { code: code, faculty_id: faculty_id },
     });
     if (existingDepartment) {
       return errorResponse(
@@ -52,7 +52,6 @@ const createDepartment = async (req, res) => {
       name,
       code,
       faculty_id,
-      degree,
     });
 
     const userName = req.user.full_name || "User";
@@ -76,11 +75,11 @@ const createDepartment = async (req, res) => {
 const editDepartment = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, code, faculty_id, degree } = req.body;
-    if (!name || !code || !faculty_id || !degree) {
+    const { name, code, faculty_id } = req.body;
+    if (!name || !code || !faculty_id) {
       return errorResponse(
         res,
-        "Nama, kode, fakultas, dan jenjang Departemen harus diisi",
+        "Nama, kode, dan fakultas Departemen harus diisi",
         400
       );
     }
@@ -99,18 +98,17 @@ const editDepartment = async (req, res) => {
       where: {
         code: code,
         faculty_id: faculty_id,
-        degree: degree,
       },
     });
     if (existingDepartment) {
       return errorResponse(
         res,
-        "Departemen dengan nama, kode, dan jenjang yang sama sudah ada di fakultas ini",
+        "Departemen dengan nama, kode, dan fakultas yang sama sudah ada di fakultas ini",
         409
       );
     }
 
-    await department.update({ name, code, faculty_id, degree });
+    await department.update({ name, code, faculty_id });
     const userName = req.user.full_name || "User";
     await ActivityLog.create({
       user_id: req.user.id,

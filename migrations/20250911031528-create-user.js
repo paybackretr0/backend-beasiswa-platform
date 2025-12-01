@@ -66,6 +66,16 @@ module.exports = {
         onUpdate: "CASCADE",
         onDelete: "SET NULL",
       },
+      study_program_id: {
+        type: Sequelize.UUID,
+        allowNull: true,
+        references: {
+          model: "study_programs",
+          key: "id",
+        },
+        onUpdate: "CASCADE",
+        onDelete: "SET NULL",
+      },
       gender: {
         type: Sequelize.ENUM("L", "P"),
         allowNull: true,
