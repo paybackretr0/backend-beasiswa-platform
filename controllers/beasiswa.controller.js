@@ -2,6 +2,7 @@ const {
   Scholarship,
   ScholarshipFaculty,
   ScholarshipDepartment,
+  ScholarshipStudyProgram,
   ScholarshipDocument,
   ScholarshipRequirement,
   ScholarshipBenefit,
@@ -47,13 +48,18 @@ const createScholarship = async (req, res) => {
       contact_person_email,
       contact_person_phone,
       is_active,
+      is_external,
+
       scholarship_value,
       duration_semesters,
       website_url,
       faculties,
       departments,
+      study_programs,
       stages,
     } = req.body;
+
+    const isExternalBeasiswa = is_external === true || is_external === "true";
 
     if (
       !name ||
@@ -69,6 +75,16 @@ const createScholarship = async (req, res) => {
       !stages
     ) {
       return errorResponse(res, "Field wajib harus diisi", 400);
+    }
+
+    if (isExternalBeasiswa) {
+      if (!website_url) {
+        return errorResponse(
+          res,
+          "Website URL wajib untuk beasiswa eksternal",
+          400
+        );
+      }
     }
 
     let logoPath = null;
@@ -87,6 +103,7 @@ const createScholarship = async (req, res) => {
         end_date,
         quota: quota ? parseInt(quota) : null,
         gpa_minimum: gpa_minimum ? parseFloat(gpa_minimum) : null,
+        is_external: isExternalBeasiswa,
         semester_minimum: parseInt(semester_minimum),
         scholarship_value: parseFloat(scholarship_value),
         duration_semesters: parseInt(duration_semesters),
@@ -152,7 +169,7 @@ const createScholarship = async (req, res) => {
       }
     }
 
-    if (documents) {
+    if (!isExternalBeasiswa && documents) {
       const parsedDocuments = JSON.parse(documents);
       if (parsedDocuments && parsedDocuments.length > 0) {
         const documentData = parsedDocuments.map((doc) => ({
@@ -170,6 +187,15 @@ const createScholarship = async (req, res) => {
         }));
 
         await FormField.bulkCreate(formFields, { transaction });
+      }
+    } else if (isExternalBeasiswa) {
+      const parsedDocuments = JSON.parse(documents);
+      if (parsedDocuments && parsedDocuments.length > 0) {
+        const documentData = parsedDocuments.map((doc) => ({
+          scholarship_id: scholarship.id,
+          document_name: doc,
+        }));
+        await ScholarshipDocument.bulkCreate(documentData, { transaction });
       }
     }
 
@@ -206,6 +232,19 @@ const createScholarship = async (req, res) => {
       }
     }
 
+    if (study_programs) {
+      const parsedStudyPrograms = JSON.parse(study_programs);
+      if (parsedStudyPrograms && parsedStudyPrograms.length > 0) {
+        const studyProgramData = parsedStudyPrograms.map((studyProgramId) => ({
+          scholarship_id: scholarship.id,
+          study_program_id: studyProgramId,
+        }));
+        await ScholarshipStudyProgram.bulkCreate(studyProgramData, {
+          transaction,
+        });
+      }
+    }
+
     await transaction.commit();
 
     const createdScholarship = await Scholarship.findByPk(scholarship.id, {
@@ -214,6 +253,7 @@ const createScholarship = async (req, res) => {
         { association: "scholarshipDocuments" },
         { association: "benefits" },
         { association: "faculties" },
+        { association: "study_programs" },
         { association: "departments" },
         { association: "stages" },
       ],
@@ -285,11 +325,13 @@ const updateScholarship = async (req, res) => {
       contact_person_email,
       contact_person_phone,
       is_active,
+      is_external,
       scholarship_value,
       duration_semesters,
       website_url,
       faculties,
       departments,
+      study_programs,
       stages,
     } = req.body;
 
@@ -297,6 +339,8 @@ const updateScholarship = async (req, res) => {
     if (!scholarship) {
       return errorResponse(res, "Beasiswa tidak ditemukan", 404);
     }
+
+    const isExternalBeasiswa = is_external === true || is_external === "true";
 
     if (
       !name ||
@@ -312,6 +356,16 @@ const updateScholarship = async (req, res) => {
       !stages
     ) {
       return errorResponse(res, "Field wajib harus diisi", 400);
+    }
+
+    if (isExternalBeasiswa) {
+      if (!website_url) {
+        return errorResponse(
+          res,
+          "Website URL wajib untuk beasiswa eksternal",
+          400
+        );
+      }
     }
 
     let logoPath = scholarship.logo_path;
@@ -331,6 +385,7 @@ const updateScholarship = async (req, res) => {
         end_date,
         quota: quota ? parseInt(quota) : null,
         gpa_minimum: gpa_minimum ? parseFloat(gpa_minimum) : null,
+        is_external: isExternalBeasiswa,
         semester_minimum: parseInt(semester_minimum),
         scholarship_value: parseFloat(scholarship_value),
         duration_semesters: parseInt(duration_semesters),
@@ -368,6 +423,13 @@ const updateScholarship = async (req, res) => {
       where: { scholarship_id: id },
       transaction,
     });
+
+    if (isExternalBeasiswa) {
+      await FormField.destroy({
+        where: { scholarship_id: id },
+        transaction,
+      });
+    }
 
     if (stages) {
       const parsedStages = JSON.parse(stages);
@@ -422,7 +484,25 @@ const updateScholarship = async (req, res) => {
       }
     }
 
-    if (documents) {
+    if (!isExternalBeasiswa && documents) {
+      const parsedDocuments = JSON.parse(documents);
+      if (parsedDocuments && parsedDocuments.length > 0) {
+        const documentData = parsedDocuments.map((doc) => ({
+          scholarship_id: id,
+          document_name: doc,
+        }));
+        await ScholarshipDocument.bulkCreate(documentData, { transaction });
+
+        const formFields = parsedDocuments.map((doc, index) => ({
+          scholarship_id: id,
+          label: doc,
+          type: "FILE",
+          is_required: true,
+          order_no: index + 1,
+        }));
+        await FormField.bulkCreate(formFields, { transaction });
+      }
+    } else if (isExternalBeasiswa) {
       const parsedDocuments = JSON.parse(documents);
       if (parsedDocuments && parsedDocuments.length > 0) {
         const documentData = parsedDocuments.map((doc) => ({
@@ -431,6 +511,10 @@ const updateScholarship = async (req, res) => {
         }));
         await ScholarshipDocument.bulkCreate(documentData, { transaction });
       }
+      await FormField.destroy({
+        where: { scholarship_id: id },
+        transaction,
+      });
     }
 
     if (benefits) {
@@ -466,6 +550,19 @@ const updateScholarship = async (req, res) => {
       }
     }
 
+    if (study_programs) {
+      const parsedStudyPrograms = JSON.parse(study_programs);
+      if (parsedStudyPrograms && parsedStudyPrograms.length > 0) {
+        const studyProgramData = parsedStudyPrograms.map((studyProgramId) => ({
+          scholarship_id: id,
+          study_program_id: studyProgramId,
+        }));
+        await ScholarshipStudyProgram.bulkCreate(studyProgramData, {
+          transaction,
+        });
+      }
+    }
+
     await transaction.commit();
     const updatedScholarship = await Scholarship.findByPk(id, {
       include: [
@@ -474,6 +571,7 @@ const updateScholarship = async (req, res) => {
         { association: "benefits" },
         { association: "faculties" },
         { association: "departments" },
+        { association: "study_programs" },
         { association: "stages" },
       ],
     });

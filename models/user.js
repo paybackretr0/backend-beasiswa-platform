@@ -11,6 +11,10 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "faculty_id",
         as: "faculty",
       });
+      User.belongsTo(models.StudyProgram, {
+        foreignKey: "study_program_id",
+        as: "study_program",
+      });
       User.hasMany(models.ActivityLog, { foreignKey: "user_id" });
       User.hasMany(models.BackupHistory, { foreignKey: "executed_by" });
       User.hasMany(models.Information, { foreignKey: "author_id" });
@@ -93,6 +97,10 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
       },
       department_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      study_program_id: {
         type: DataTypes.UUID,
         allowNull: true,
       },

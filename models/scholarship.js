@@ -17,6 +17,10 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "scholarship_id",
         as: "scholarshipDepartments",
       });
+      Scholarship.hasMany(models.ScholarshipStudyProgram, {
+        foreignKey: "scholarship_id",
+        as: "scholarshipStudyPrograms",
+      });
       Scholarship.hasMany(models.ScholarshipDocument, {
         foreignKey: "scholarship_id",
         as: "scholarshipDocuments",
@@ -47,6 +51,13 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "scholarship_id",
         otherKey: "department_id",
         as: "departments",
+      });
+
+      Scholarship.belongsToMany(models.StudyProgram, {
+        through: models.ScholarshipStudyProgram,
+        foreignKey: "scholarship_id",
+        otherKey: "study_program_id",
+        as: "study_programs",
       });
     }
   }
@@ -89,6 +100,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.BOOLEAN,
         allowNull: false,
         defaultValue: true,
+      },
+      is_external: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
       },
       contact_person_name: {
         type: DataTypes.STRING(191),

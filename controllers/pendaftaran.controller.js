@@ -26,6 +26,19 @@ const getScholarshipForm = async (req, res) => {
       );
     }
 
+    if (scholarship.is_external) {
+      return errorResponse(
+        res,
+        "Beasiswa ini merupakan beasiswa eksternal. Silakan mendaftar melalui website penyelenggara.",
+        400,
+        {
+          is_external: true,
+          external_url: scholarship.website_url,
+          message: `Pendaftaran beasiswa ini dilakukan di website ${scholarship.organizer}. Klik link berikut: ${scholarship.website_url}`,
+        }
+      );
+    }
+
     if (scholarship.end_date) {
       const today = new Date();
       const endDate = new Date(scholarship.end_date);
@@ -138,6 +151,18 @@ const submitApplication = async (req, res) => {
         res,
         "Beasiswa tidak ditemukan atau tidak aktif",
         404
+      );
+    }
+
+    if (scholarship.is_external) {
+      return errorResponse(
+        res,
+        "Tidak dapat mendaftar melalui platform ini. Pendaftaran beasiswa ini dilakukan di website penyelenggara.",
+        400,
+        {
+          is_external: true,
+          external_url: scholarship.website_url,
+        }
       );
     }
 
