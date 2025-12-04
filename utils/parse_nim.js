@@ -3,11 +3,11 @@ const parseNimFromEmail = (email) => {
   return match ? match[1] : null;
 };
 
-const extractKodeFakultasDepartemen = (nim) => {
+const extractKodeFakultasProdi = (nim) => {
   if (!nim || nim.length < 6) return {};
   const kodeFakultas = nim.substring(3, 5);
-  const kodeDepartemen = nim.substring(5, 6);
-  return { kodeFakultas, kodeDepartemen };
+  const kodeProdi = nim.substring(5, 6);
+  return { kodeFakultas, kodeProdi };
 };
 
 const generateVerificationCode = () =>
@@ -15,6 +15,6 @@ const generateVerificationCode = () =>
 
 module.exports = {
   parseNimFromEmail,
-  extractKodeFakultasDepartemen,
+  extractKodeFakultasProdi,
   generateVerificationCode,
 };
