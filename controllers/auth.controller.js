@@ -5,6 +5,7 @@ const {
   RefreshToken,
   Faculty,
   Department,
+  StudyProgram,
   ActivityLog,
 } = require("../models");
 const nodemailer = require("nodemailer");
@@ -16,7 +17,7 @@ const {
 } = require("../utils/response");
 const {
   parseNimFromEmail,
-  extractKodeFakultasDepartemen,
+  extractKodeFakultasProdi,
   generateVerificationCode,
 } = require("../utils/parse_nim");
 
@@ -69,29 +70,55 @@ const register = async (req, res) => {
 
     let faculty_id = null;
     let department_id = null;
+    let study_program_id = null;
 
     if (nim) {
-      const { kodeFakultas, kodeDepartemen } =
-        extractKodeFakultasDepartemen(nim);
-
-      if (!kodeFakultas || !kodeDepartemen) {
+      const { kodeFakultas, kodeProdi } = extractKodeFakultasProdi(nim);
+      if (!kodeFakultas || !kodeProdi) {
         return errorResponse(res, "Invalid NIM format", 400);
       }
 
       const faculty = await Faculty.findOne({ where: { code: kodeFakultas } });
-      if (faculty) {
-        faculty_id = faculty.id;
-
-        const department = await Department.findOne({
-          where: {
-            faculty_id: faculty.id,
-            code: kodeDepartemen,
-          },
-        });
-        if (department) {
-          department_id = department.id;
-        }
+      if (!faculty) {
+        return errorResponse(
+          res,
+          "Fakultas tidak ditemukan untuk kode: " + kodeFakultas,
+          400
+        );
       }
+
+      faculty_id = faculty.id;
+
+      const studyProgram = await StudyProgram.findOne({
+        where: {
+          code: kodeProdi,
+        },
+        include: [
+          {
+            model: Department,
+            as: "department",
+            where: {
+              faculty_id: faculty.id,
+            },
+            required: true,
+          },
+        ],
+      });
+
+      if (!studyProgram) {
+        return errorResponse(
+          res,
+          `Program studi tidak ditemukan untuk kode: ${kodeProdi} di fakultas: ${faculty.name}`,
+          400
+        );
+      }
+
+      study_program_id = studyProgram.id;
+      department_id = studyProgram.department.id;
+
+      console.log(
+        `User assignment - Faculty: ${faculty.name}, Department: ${studyProgram.department.name}, Study Program: ${studyProgram.name}`
+      );
     }
 
     const hashedPassword = await hashPassword(password);
@@ -106,6 +133,7 @@ const register = async (req, res) => {
       nim,
       faculty_id,
       department_id,
+      study_program_id,
       phone_number,
       gender,
       birth_date,
@@ -497,6 +525,11 @@ const getProfile = async (req, res) => {
           as: "department",
           attributes: ["name"],
         },
+        {
+          model: StudyProgram,
+          as: "study_program",
+          attributes: ["code", "degree"],
+        },
       ],
       attributes: {
         exclude: ["password", "emailVerificationCode", "resetPasswordCode"],
@@ -508,6 +541,22 @@ const getProfile = async (req, res) => {
     }
 
     return successResponse(res, "Profil berhasil diambil", user);
+  } catch (error) {
+    return errorResponse(res, "Internal server error", 500, error.message);
+  }
+};
+
+const getBasicProfile = async (req, res) => {
+  try {
+    const user = await User.findByPk(req.user.id, {
+      attributes: ["id", "email", "full_name", "emailVerified", "role"],
+    });
+
+    if (!user) {
+      return errorResponse(res, "User not found", 404);
+    }
+
+    return successResponse(res, "Basic profil berhasil diambil", user);
   } catch (error) {
     return errorResponse(res, "Internal server error", 500, error.message);
   }
@@ -558,4 +607,5 @@ module.exports = {
   getToken,
   sendVerificationEmail,
   sendResetEmail,
+  getBasicProfile,
 };

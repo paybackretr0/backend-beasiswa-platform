@@ -20,6 +20,7 @@ router.post("/verify-reset-code", authController.verifyResetCode);
 router.post("/reset-password", authController.resetPassword);
 
 router.post("/token", authController.getToken);
+router.get("/basic-profile", auth, authController.getBasicProfile);
 
 router.put("/profile", auth, verifiedUser, authController.updateProfile);
 router.put("/password", auth, verifiedUser, authController.updatePassword);
