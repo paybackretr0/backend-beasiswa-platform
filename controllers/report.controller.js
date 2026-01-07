@@ -55,7 +55,12 @@ const getSummaryData = async (year) => {
     },
   });
 
-  const beasiswaSudahTutup = totalBeasiswa - beasiswaMasihBuka;
+  const beasiswaSudahTutup = await Scholarship.count({
+    where: {
+      year: year,
+      end_date: { [Op.lt]: new Date() },
+    },
+  });
 
   const totalMahasiswa = await User.count({
     where: {

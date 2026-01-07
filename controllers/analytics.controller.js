@@ -47,36 +47,49 @@ const getSummary = async (req, res) => {
       mahasiswaFilter.faculty_id = facultyId;
     }
 
-    const [totalPendaftar, totalBeasiswa, beasiswaMasihBuka, totalMahasiswa] =
-      await Promise.all([
-        isFiltered
-          ? Application.count({
-              where: applicationFilter,
-              include: [
-                {
-                  model: User,
-                  as: "student",
-                  where: { faculty_id: facultyId },
-                  attributes: [],
-                },
-              ],
-            })
-          : Application.count({ where: applicationFilter }),
+    const [
+      totalPendaftar,
+      totalBeasiswa,
+      beasiswaMasihBuka,
+      totalMahasiswa,
+      beasiswaSudahTutup,
+    ] = await Promise.all([
+      isFiltered
+        ? Application.count({
+            where: applicationFilter,
+            include: [
+              {
+                model: User,
+                as: "student",
+                where: { faculty_id: facultyId },
+                attributes: [],
+              },
+            ],
+          })
+        : Application.count({ where: applicationFilter }),
 
-        Scholarship.count({ where: scholarshipFilter }),
+      Scholarship.count({ where: scholarshipFilter }),
 
-        Scholarship.count({
-          where: {
-            ...scholarshipFilter,
-            is_active: true,
-            end_date: { [Op.gte]: new Date() },
-          },
-        }),
+      Scholarship.count({
+        where: {
+          is_active: true,
+          end_date: { [Op.gte]: new Date() },
+        },
+      }),
 
-        User.count({ where: mahasiswaFilter }),
-      ]);
+      User.count({ where: mahasiswaFilter }),
 
-    const beasiswaSudahTutup = totalBeasiswa - beasiswaMasihBuka;
+      Scholarship.count({
+        where: {
+          year: year,
+          end_date: { [Op.lt]: new Date() },
+        },
+      }),
+    ]);
+
+    if (beasiswaSudahTutup < 0) {
+      beasiswaSudahTutup = 0;
+    }
 
     const summary = {
       totalPendaftar,

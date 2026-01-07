@@ -15,6 +15,7 @@ const pendaftaranRoutes = require("./pendaftaran.routes");
 const historyRoutes = require("./history.routes");
 const verifikatorRoutes = require("./verifikator.routes");
 const validatorRoutes = require("./validator.routes");
+const governmentRoutes = require("./government.routes");
 
 router.use("/auth", authRoutes);
 router.use("/users", userRoutes);
@@ -31,5 +32,6 @@ router.use("/pendaftaran", pendaftaranRoutes);
 router.use("/history", historyRoutes);
 router.use("/verifikator", verifikatorRoutes);
 router.use("/validator", validatorRoutes);
+router.use("/government-scholarships", governmentRoutes);
 
 module.exports = router;
