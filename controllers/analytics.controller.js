@@ -11,7 +11,7 @@ const { successResponse, errorResponse } = require("../utils/response");
 const { Op } = require("sequelize");
 
 const getUserFacultyFilter = (req) => {
-  const user = req.user; // Dari middleware auth
+  const user = req.user;
   const role = user?.role;
   const facultyId = user?.faculty_id;
 
@@ -43,14 +43,12 @@ const getSummary = async (req, res) => {
       is_active: true,
     };
 
-    // Filter berdasarkan fakultas jika PIMPINAN_FAKULTAS
     if (isFiltered) {
       mahasiswaFilter.faculty_id = facultyId;
     }
 
     const [totalPendaftar, totalBeasiswa, beasiswaMasihBuka, totalMahasiswa] =
       await Promise.all([
-        // Total Pendaftar dengan join ke user dan fakultas
         isFiltered
           ? Application.count({
               where: applicationFilter,
@@ -65,10 +63,8 @@ const getSummary = async (req, res) => {
             })
           : Application.count({ where: applicationFilter }),
 
-        // Total Beasiswa
         Scholarship.count({ where: scholarshipFilter }),
 
-        // Beasiswa Masih Buka
         Scholarship.count({
           where: {
             ...scholarshipFilter,
@@ -77,7 +73,6 @@ const getSummary = async (req, res) => {
           },
         }),
 
-        // Total Mahasiswa
         User.count({ where: mahasiswaFilter }),
       ]);
 
@@ -113,7 +108,6 @@ const getMonthlyTrend = async (req, res) => {
     let whereClause = "WHERE a.status != 'DRAFT' AND YEAR(a.createdAt) = :year";
     let replacements = { year };
 
-    // Jika PIMPINAN_FAKULTAS, tambahkan JOIN dan filter fakultas
     if (isFiltered) {
       query += `
         LEFT JOIN users u ON a.student_id = u.id
@@ -135,7 +129,6 @@ const getMonthlyTrend = async (req, res) => {
       type: sequelize.QueryTypes.SELECT,
     });
 
-    // Pastikan semua bulan ada
     const months = [
       "Jan",
       "Feb",
@@ -189,7 +182,6 @@ const getScholarshipPerformance = async (req, res) => {
     let whereClause = "WHERE s.year = :year AND s.is_active = true";
     let replacements = { year };
 
-    // Jika PIMPINAN_FAKULTAS, tambahkan JOIN dan filter fakultas
     if (isFiltered) {
       query += `
         LEFT JOIN users u ON a.student_id = u.id
@@ -299,34 +291,30 @@ const getSelectionSummary = async (req, res) => {
         ]
       : [];
 
-    const [
-      lolosSeleksiBerkas,
-      menungguVerifikasi,
-      menungguValidasi,
-      tidakLolosSeleksi,
-    ] = await Promise.all([
-      Application.count({
-        where: { ...baseWhere, status: "VALIDATED" },
-        include: includeUser,
-      }),
-      Application.count({
-        where: { ...baseWhere, status: "MENUNGGU_VERIFIKASI" },
-        include: includeUser,
-      }),
-      Application.count({
-        where: { ...baseWhere, status: "MENUNGGU_VALIDASI" },
-        include: includeUser,
-      }),
-      Application.count({
-        where: { ...baseWhere, status: "REJECTED" },
-        include: includeUser,
-      }),
-    ]);
+    const [divalidasi, menungguVerifikasi, terverifikasi, tidakLolosSeleksi] =
+      await Promise.all([
+        Application.count({
+          where: { ...baseWhere, status: "VALIDATED" },
+          include: includeUser,
+        }),
+        Application.count({
+          where: { ...baseWhere, status: "MENUNGGU_VERIFIKASI" },
+          include: includeUser,
+        }),
+        Application.count({
+          where: { ...baseWhere, status: "VERIFIED" },
+          include: includeUser,
+        }),
+        Application.count({
+          where: { ...baseWhere, status: "REJECTED" },
+          include: includeUser,
+        }),
+      ]);
 
     const summary = {
-      lolosSeleksiBerkas,
+      divalidasi,
       menungguVerifikasi,
-      menungguValidasi,
+      terverifikasi,
       tidakLolosSeleksi,
     };
 
@@ -341,7 +329,6 @@ const getSelectionSummary = async (req, res) => {
   }
 };
 
-// Update getFacultyDistribution
 const getFacultyDistribution = async (req, res) => {
   try {
     const { year = new Date().getFullYear() } = req.query;
@@ -389,7 +376,6 @@ const getFacultyDistribution = async (req, res) => {
   }
 };
 
-// Update getDepartmentDistribution
 const getDepartmentDistribution = async (req, res) => {
   try {
     const { year = new Date().getFullYear() } = req.query;
@@ -458,7 +444,6 @@ const getYearlyTrend = async (req, res) => {
 
         let includeOptions = [];
 
-        // Jika PIMPINAN_FAKULTAS, filter berdasarkan fakultas
         if (isFiltered) {
           includeOptions = [
             {
@@ -575,14 +560,14 @@ const getStatusSummary = async (req, res) => {
         ]
       : [];
 
-    const [menungguVerifikasi, menungguValidasi, disetujui, ditolak] =
+    const [menungguVerifikasi, terverifikasi, divalidasi, ditolak] =
       await Promise.all([
         Application.count({
           where: { ...baseWhere, status: "MENUNGGU_VERIFIKASI" },
           include: includeUser,
         }),
         Application.count({
-          where: { ...baseWhere, status: "MENUNGGU_VALIDASI" },
+          where: { ...baseWhere, status: "VERIFIED" },
           include: includeUser,
         }),
         Application.count({
@@ -602,13 +587,13 @@ const getStatusSummary = async (req, res) => {
         color: "#FF8C42",
       },
       {
-        label: "Menunggu Validasi",
-        value: menungguValidasi,
+        label: "Terverifikasi",
+        value: terverifikasi,
         color: "#FFD23F",
       },
       {
-        label: "Disetujui",
-        value: disetujui,
+        label: "Divalidasi",
+        value: divalidasi,
         color: "#06D6A0",
       },
       {
@@ -730,7 +715,6 @@ const getApplicationsList = async (req, res) => {
       role: "MAHASISWA",
     };
 
-    // Filter berdasarkan fakultas jika PIMPINAN_FAKULTAS
     if (isFiltered) {
       userWhereCondition.faculty_id = facultyId;
     }
