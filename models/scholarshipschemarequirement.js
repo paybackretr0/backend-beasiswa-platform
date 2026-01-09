@@ -1,25 +1,23 @@
 "use strict";
 const { Model } = require("sequelize");
-
 module.exports = (sequelize, DataTypes) => {
-  class ScholarshipRequirement extends Model {
+  class ScholarshipSchemaRequirement extends Model {
     static associate(models) {
-      // Relasi dengan Scholarship
-      ScholarshipRequirement.belongsTo(models.Scholarship, {
-        foreignKey: "scholarship_id",
-        as: "scholarship",
+      ScholarshipSchemaRequirement.belongsTo(models.ScholarshipSchema, {
+        foreignKey: "schema_id",
+        as: "schema",
       });
     }
   }
-
-  ScholarshipRequirement.init(
+  ScholarshipSchemaRequirement.init(
     {
       id: {
         type: DataTypes.UUID,
-        primaryKey: true,
         defaultValue: DataTypes.UUIDV4,
+        primaryKey: true,
+        allowNull: false,
       },
-      scholarship_id: {
+      schema_id: {
         type: DataTypes.UUID,
         allowNull: false,
       },
@@ -33,17 +31,16 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
       },
       requirement_file: {
-        type: DataTypes.STRING(191),
+        type: DataTypes.STRING(512),
         allowNull: true,
       },
     },
     {
       sequelize,
-      modelName: "ScholarshipRequirement",
-      tableName: "scholarship_requirements",
+      modelName: "ScholarshipSchemaRequirement",
+      tableName: "scholarship_schema_requirements",
       timestamps: true,
     }
   );
-
-  return ScholarshipRequirement;
+  return ScholarshipSchemaRequirement;
 };

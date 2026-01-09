@@ -3,12 +3,16 @@ const { Model } = require("sequelize");
 module.exports = (sequelize, DataTypes) => {
   class Scholarship extends Model {
     static associate(models) {
-      // Scholarship dibuat oleh User
-      Scholarship.belongsTo(models.User, { foreignKey: "created_by" });
-      Scholarship.hasMany(models.Application, { foreignKey: "scholarship_id" });
-      Scholarship.hasMany(models.FormField, { foreignKey: "scholarship_id" });
+      Scholarship.belongsTo(models.User, {
+        foreignKey: "created_by",
+        as: "creator",
+      });
 
-      // Relasi dengan tabel junction
+      Scholarship.hasMany(models.ScholarshipSchema, {
+        foreignKey: "scholarship_id",
+        as: "schemas",
+      });
+
       Scholarship.hasMany(models.ScholarshipFaculty, {
         foreignKey: "scholarship_id",
         as: "scholarshipFaculties",
@@ -21,24 +25,7 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "scholarship_id",
         as: "scholarshipStudyPrograms",
       });
-      Scholarship.hasMany(models.ScholarshipDocument, {
-        foreignKey: "scholarship_id",
-        as: "scholarshipDocuments",
-      });
-      Scholarship.hasMany(models.ScholarshipRequirement, {
-        foreignKey: "scholarship_id",
-        as: "requirements",
-      });
-      Scholarship.hasMany(models.ScholarshipBenefit, {
-        foreignKey: "scholarship_id",
-        as: "benefits",
-      });
-      Scholarship.hasMany(models.ScholarshipStage, {
-        foreignKey: "scholarship_id",
-        as: "stages",
-      });
 
-      // Many-to-many relations through junction tables
       Scholarship.belongsToMany(models.Faculty, {
         through: models.ScholarshipFaculty,
         foreignKey: "scholarship_id",
@@ -57,7 +44,24 @@ module.exports = (sequelize, DataTypes) => {
         through: models.ScholarshipStudyProgram,
         foreignKey: "scholarship_id",
         otherKey: "study_program_id",
-        as: "study_programs",
+        as: "studyPrograms",
+      });
+
+      Scholarship.hasMany(models.ScholarshipDocument, {
+        foreignKey: "scholarship_id",
+        as: "scholarshipDocuments",
+      });
+      Scholarship.hasMany(models.ScholarshipRequirement, {
+        foreignKey: "scholarship_id",
+        as: "requirements",
+      });
+      Scholarship.hasMany(models.ScholarshipBenefit, {
+        foreignKey: "scholarship_id",
+        as: "benefits",
+      });
+      Scholarship.hasMany(models.ScholarshipStage, {
+        foreignKey: "scholarship_id",
+        as: "stages",
       });
     }
   }
@@ -106,6 +110,11 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: false,
       },
+      verification_level: {
+        type: DataTypes.ENUM("FACULTY", "DITMAWA"),
+        allowNull: false,
+        defaultValue: "DITMAWA",
+      },
       contact_person_name: {
         type: DataTypes.STRING(191),
         allowNull: false,
@@ -151,7 +160,7 @@ module.exports = (sequelize, DataTypes) => {
       sequelize,
       modelName: "Scholarship",
       tableName: "scholarships",
-      timestamps: true, // createdAt & updatedAt otomatis
+      timestamps: true,
     }
   );
   return Scholarship;

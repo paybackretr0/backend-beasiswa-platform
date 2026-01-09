@@ -1,21 +1,20 @@
 "use strict";
 const { Model } = require("sequelize");
-
 module.exports = (sequelize, DataTypes) => {
-  class ScholarshipStage extends Model {
+  class ScholarshipSchemaStage extends Model {
     static associate(models) {
-      ScholarshipStage.belongsTo(models.Scholarship, {
-        foreignKey: "scholarship_id",
-        as: "scholarship",
+      ScholarshipSchemaStage.belongsTo(models.ScholarshipSchema, {
+        foreignKey: "schema_id",
+        as: "schema",
       });
-      ScholarshipStage.hasMany(models.ApplicationStageProgress, {
+
+      ScholarshipSchemaStage.hasMany(models.ApplicationStageProgress, {
         foreignKey: "stage_id",
-        as: "progress",
+        as: "stageProgress",
       });
     }
   }
-
-  ScholarshipStage.init(
+  ScholarshipSchemaStage.init(
     {
       id: {
         type: DataTypes.UUID,
@@ -23,7 +22,7 @@ module.exports = (sequelize, DataTypes) => {
         primaryKey: true,
         allowNull: false,
       },
-      scholarship_id: {
+      schema_id: {
         type: DataTypes.UUID,
         allowNull: false,
       },
@@ -38,11 +37,10 @@ module.exports = (sequelize, DataTypes) => {
     },
     {
       sequelize,
-      modelName: "ScholarshipStage",
-      tableName: "scholarship_stages",
+      modelName: "ScholarshipSchemaStage",
+      tableName: "scholarship_schema_stages",
       timestamps: true,
     }
   );
-
-  return ScholarshipStage;
+  return ScholarshipSchemaStage;
 };

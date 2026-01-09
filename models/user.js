@@ -80,7 +80,9 @@ module.exports = (sequelize, DataTypes) => {
       role: {
         type: DataTypes.ENUM(
           "MAHASISWA",
-          "VERIFIKATOR",
+          "VERIFIKATOR_FAKULTAS",
+          "VERIFIKATOR_DITMAWA",
+          "VALIDATOR_DITMAWA",
           "PIMPINAN_DITMAWA",
           "PIMPINAN_FAKULTAS",
           "SUPERADMIN"

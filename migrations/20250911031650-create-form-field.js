@@ -10,11 +10,11 @@ module.exports = {
         primaryKey: true,
         allowNull: false,
       },
-      scholarship_id: {
+      schema_id: {
         type: Sequelize.UUID,
         allowNull: false,
         references: {
-          model: "scholarships",
+          model: "scholarship_schemas",
           key: "id",
         },
         onUpdate: "CASCADE",
@@ -65,8 +65,8 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex("form_fields", ["scholarship_id"], {
-      name: "form_fields_idx_scholarship",
+    await queryInterface.addIndex("form_fields", ["schema_id"], {
+      name: "form_fields_idx_schema",
     });
   },
 

@@ -49,6 +49,11 @@ module.exports = {
         defaultValue: false,
         comment: "Apakah beasiswa eksternal (tidak dikelola UNAND)",
       },
+      verification_level: {
+        type: Sequelize.ENUM("FACULTY", "DITMAWA"),
+        allowNull: false,
+        defaultValue: "DITMAWA",
+      },
       contact_person_name: {
         type: Sequelize.STRING(191),
         allowNull: false,

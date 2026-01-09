@@ -3,9 +3,9 @@ const { Model } = require("sequelize");
 module.exports = (sequelize, DataTypes) => {
   class Application extends Model {
     static associate(models) {
-      Application.belongsTo(models.Scholarship, {
-        foreignKey: "scholarship_id",
-        as: "scholarship",
+      Application.belongsTo(models.ScholarshipSchema, {
+        foreignKey: "schema_id",
+        as: "schema",
       });
       Application.belongsTo(models.User, {
         foreignKey: "student_id",
@@ -29,11 +29,15 @@ module.exports = (sequelize, DataTypes) => {
       });
       Application.hasMany(models.FormAnswer, {
         foreignKey: "application_id",
-        as: "FormAnswers",
+        as: "formAnswers",
       });
       Application.hasMany(models.ApplicationStageProgress, {
         foreignKey: "application_id",
-        as: "stages_progress",
+        as: "stageProgress",
+      });
+      Application.hasMany(models.ApplicationComment, {
+        foreignKey: "application_id",
+        as: "comments",
       });
     }
   }
@@ -44,7 +48,7 @@ module.exports = (sequelize, DataTypes) => {
         primaryKey: true,
         defaultValue: DataTypes.UUIDV4,
       },
-      scholarship_id: {
+      schema_id: {
         type: DataTypes.UUID,
         allowNull: false,
       },
@@ -58,6 +62,7 @@ module.exports = (sequelize, DataTypes) => {
           "MENUNGGU_VERIFIKASI",
           "VERIFIED",
           "REJECTED",
+          "REVISION_NEEDED",
           "VALIDATED"
         ),
         allowNull: false,
@@ -94,6 +99,7 @@ module.exports = (sequelize, DataTypes) => {
       notes: {
         type: DataTypes.TEXT,
         allowNull: true,
+        comment: "Catatan internal (tidak ditampilkan ke mahasiswa)",
       },
     },
     {
@@ -103,19 +109,20 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
     }
   );
+
   Application.afterUpdate(async (application, options) => {
     if (application.changed("status") && application.status === "VALIDATED") {
-      const { ScholarshipStage, ApplicationStageProgress } =
+      const { ScholarshipSchemaStage, ApplicationStageProgress } =
         application.sequelize.models;
 
-      const scholarship = await application.getScholarship({
-        include: [{ model: ScholarshipStage, as: "stages" }],
+      const schema = await application.getSchema({
+        include: [{ model: ScholarshipSchemaStage, as: "stages" }],
       });
 
-      if (!scholarship || !scholarship.stages) return;
+      if (!schema || !schema.stages) return;
 
       await Promise.all(
-        scholarship.stages.map((stage) =>
+        schema.stages.map((stage) =>
           ApplicationStageProgress.create({
             application_id: application.id,
             stage_id: stage.id,

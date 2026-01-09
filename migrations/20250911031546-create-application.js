@@ -10,15 +10,16 @@ module.exports = {
         primaryKey: true,
         allowNull: false,
       },
-      scholarship_id: {
+      schema_id: {
         type: Sequelize.UUID,
         allowNull: false,
         references: {
-          model: "scholarships",
+          model: "scholarship_schemas",
           key: "id",
         },
         onUpdate: "CASCADE",
         onDelete: "CASCADE",
+        comment: "Skema beasiswa yang dipilih mahasiswa",
       },
       student_id: {
         type: Sequelize.UUID,
@@ -36,6 +37,7 @@ module.exports = {
           "MENUNGGU_VERIFIKASI",
           "VERIFIED",
           "REJECTED",
+          "REVISION_NEEDED",
           "VALIDATED"
         ),
         allowNull: false,
@@ -104,13 +106,21 @@ module.exports = {
     });
 
     await queryInterface.addConstraint("applications", {
-      fields: ["scholarship_id", "student_id"],
+      fields: ["schema_id", "student_id"],
       type: "unique",
-      name: "applications_index_6",
+      name: "applications_unique_schema_student",
+    });
+
+    await queryInterface.addIndex("applications", ["schema_id"], {
+      name: "applications_idx_schema",
+    });
+
+    await queryInterface.addIndex("applications", ["student_id"], {
+      name: "applications_idx_student",
     });
 
     await queryInterface.addIndex("applications", ["status"], {
-      name: "applications_index_7",
+      name: "applications_idx_status",
     });
   },
 

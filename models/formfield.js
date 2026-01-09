@@ -3,8 +3,14 @@ const { Model } = require("sequelize");
 module.exports = (sequelize, DataTypes) => {
   class FormField extends Model {
     static associate(models) {
-      FormField.belongsTo(models.Scholarship, { foreignKey: "scholarship_id" });
-      FormField.hasMany(models.FormAnswer, { foreignKey: "field_id" });
+      FormField.belongsTo(models.ScholarshipSchema, {
+        foreignKey: "schema_id",
+        as: "schema",
+      });
+      FormField.hasMany(models.FormAnswer, {
+        foreignKey: "field_id",
+        as: "answers",
+      });
     }
   }
   FormField.init(
@@ -14,7 +20,7 @@ module.exports = (sequelize, DataTypes) => {
         primaryKey: true,
         defaultValue: DataTypes.UUIDV4,
       },
-      scholarship_id: {
+      schema_id: {
         type: DataTypes.UUID,
         allowNull: false,
       },
