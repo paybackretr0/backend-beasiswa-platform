@@ -442,48 +442,58 @@ const getDepartmentDistribution = async (req, res) => {
 const getYearlyTrend = async (req, res) => {
   try {
     const { facultyId, isFiltered } = getUserFacultyFilter(req);
+    const startYear = 2024;
     const currentYear = new Date().getFullYear();
-    const years = Array.from({ length: 5 }, (_, i) => currentYear - 4 + i);
 
-    const yearlyData = await Promise.all(
-      years.map(async (year) => {
-        let whereCondition = {
-          status: { [Op.ne]: "DRAFT" },
-          createdAt: {
-            [Op.gte]: new Date(`${year}-01-01`),
-            [Op.lte]: new Date(`${year}-12-31`),
+    const where = {
+      status: { [Op.ne]: "DRAFT" },
+      createdAt: {
+        [Op.gte]: new Date(`${startYear}-01-01`),
+        [Op.lt]: new Date(`${currentYear + 1}-01-01`),
+      },
+    };
+
+    const include = isFiltered
+      ? [
+          {
+            model: User,
+            as: "student",
+            attributes: [],
+            include: [
+              {
+                model: Department,
+                as: "department",
+                where: { faculty_id: facultyId },
+                attributes: [],
+                required: true,
+              },
+            ],
+            required: true,
           },
+        ]
+      : [];
+
+    const results = await Application.findAll({
+      attributes: [
+        [sequelize.fn("YEAR", sequelize.col("Application.createdAt")), "year"],
+        [sequelize.fn("COUNT", sequelize.col("Application.id")), "count"],
+      ],
+      where,
+      include,
+      group: [sequelize.fn("YEAR", sequelize.col("Application.createdAt"))],
+      raw: true,
+    });
+
+    const yearlyData = Array.from(
+      { length: currentYear - startYear + 1 },
+      (_, i) => {
+        const year = startYear + i;
+        const found = results.find((r) => r.year === year);
+        return {
+          label: year.toString(),
+          value: found ? parseInt(found.count) : 0,
         };
-
-        let includeOptions = [];
-
-        if (isFiltered) {
-          includeOptions = [
-            {
-              model: User,
-              as: "student",
-              attributes: [],
-              include: [
-                {
-                  model: Department,
-                  as: "department",
-                  where: { faculty_id: facultyId },
-                  attributes: [],
-                  required: true,
-                },
-              ],
-              required: true,
-            },
-          ];
-        }
-
-        const count = await Application.count({
-          where: whereCondition,
-          include: includeOptions,
-        });
-
-        return { label: year.toString(), value: count };
-      })
+      }
     );
 
     return successResponse(
