@@ -687,6 +687,57 @@ const getOtherScholarships = async (req, res) => {
   }
 };
 
+const getActiveScholarshipsForInfo = async (req, res) => {
+  try {
+    const currentDate = new Date();
+
+    const scholarships = await Scholarship.findAll({
+      where: {
+        is_active: true,
+        end_date: {
+          [require("sequelize").Op.gte]: currentDate,
+        },
+      },
+      include: [
+        {
+          association: "requirements",
+          attributes: [
+            "requirement_type",
+            "requirement_text",
+            "requirement_file",
+          ],
+        },
+        {
+          association: "scholarshipDocuments",
+          attributes: ["document_name"],
+        },
+        {
+          association: "benefits",
+          attributes: ["benefit_text"],
+        },
+        {
+          association: "stages",
+          attributes: ["stage_name", "order_no"],
+          order: [["order_no", "ASC"]],
+        },
+      ],
+      order: [
+        ["end_date", "ASC"],
+        ["createdAt", "DESC"],
+      ],
+    });
+
+    successResponse(
+      res,
+      "Daftar beasiswa aktif berhasil didapatkan",
+      scholarships
+    );
+  } catch (error) {
+    console.error("Error fetching active scholarships for info:", error);
+    errorResponse(res, "Gagal mendapatkan daftar beasiswa aktif", error);
+  }
+};
+
 module.exports = {
   getAllScholarships,
   createScholarship,
@@ -695,4 +746,5 @@ module.exports = {
   deactivateScholarship,
   activateScholarship,
   getOtherScholarships,
+  getActiveScholarshipsForInfo,
 };

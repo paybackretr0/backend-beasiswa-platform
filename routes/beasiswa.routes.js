@@ -14,6 +14,7 @@ const {
   deactivateScholarship,
   activateScholarship,
   getOtherScholarships,
+  getActiveScholarshipsForInfo,
 } = require("../controllers/beasiswa.controller");
 const authorize = require("../middlewares/role.middleware");
 
@@ -26,6 +27,8 @@ const scholarshipUpload = createUploadMiddleware({
 router.get("/user", getAllScholarships);
 router.get("/user/:id", getBeasiswaById);
 router.get("/user/:id/others", getOtherScholarships);
+
+router.get("/info/active", getActiveScholarshipsForInfo);
 
 router.use(authenticate, verifiedUser, authorize("SUPERADMIN"));
 
