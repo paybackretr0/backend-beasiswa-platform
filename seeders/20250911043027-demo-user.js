@@ -113,7 +113,7 @@ module.exports = {
           role: "VERIFIKATOR_FAKULTAS",
           nim: null,
           department_id: null,
-          faculty_id: null,
+          faculty_id: "15151515-1515-1515-1515-151515151515",
           gender: "L",
           is_active: true,
           emailVerified: true,

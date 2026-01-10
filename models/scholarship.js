@@ -12,7 +12,6 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "scholarship_id",
         as: "schemas",
       });
-
       Scholarship.hasMany(models.ScholarshipFaculty, {
         foreignKey: "scholarship_id",
         as: "scholarshipFaculties",
@@ -24,6 +23,10 @@ module.exports = (sequelize, DataTypes) => {
       Scholarship.hasMany(models.ScholarshipStudyProgram, {
         foreignKey: "scholarship_id",
         as: "scholarshipStudyPrograms",
+      });
+      Scholarship.hasMany(models.ScholarshipBenefit, {
+        foreignKey: "scholarship_id",
+        as: "benefits",
       });
 
       Scholarship.belongsToMany(models.Faculty, {
@@ -45,23 +48,6 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "scholarship_id",
         otherKey: "study_program_id",
         as: "studyPrograms",
-      });
-
-      Scholarship.hasMany(models.ScholarshipDocument, {
-        foreignKey: "scholarship_id",
-        as: "scholarshipDocuments",
-      });
-      Scholarship.hasMany(models.ScholarshipRequirement, {
-        foreignKey: "scholarship_id",
-        as: "requirements",
-      });
-      Scholarship.hasMany(models.ScholarshipBenefit, {
-        foreignKey: "scholarship_id",
-        as: "benefits",
-      });
-      Scholarship.hasMany(models.ScholarshipStage, {
-        foreignKey: "scholarship_id",
-        as: "stages",
       });
     }
   }
