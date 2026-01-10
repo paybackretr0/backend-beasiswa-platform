@@ -1,12 +1,29 @@
-const { FormField, ActivityLog, Scholarship } = require("../models");
+const {
+  FormField,
+  ActivityLog,
+  Scholarship,
+  ScholarshipSchema,
+} = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 
 const checkScholarshipForm = async (req, res) => {
   try {
     const { scholarshipId } = req.params;
 
-    const formExists = await FormField.count({
+    const schemas = await ScholarshipSchema.findAll({
       where: { scholarship_id: scholarshipId },
+      attributes: ["id"],
+    });
+
+    if (schemas.length === 0) {
+      return successResponse(res, "Form status retrieved successfully", {
+        hasForm: false,
+      });
+    }
+
+    const schemaIds = schemas.map((s) => s.id);
+    const formExists = await FormField.count({
+      where: { schema_id: schemaIds },
     });
 
     const hasForm = formExists > 0;
@@ -23,16 +40,31 @@ const checkScholarshipForm = async (req, res) => {
 const createScholarshipForm = async (req, res) => {
   try {
     const { scholarshipId } = req.params;
-    const { fields } = req.body;
+    const { schemaId, fields } = req.body;
+
+    if (!schemaId) {
+      return errorResponse(res, "Schema ID tidak valid", 400);
+    }
 
     if (!fields || !Array.isArray(fields) || fields.length === 0) {
       return errorResponse(res, "Fields tidak valid", 400);
     }
 
-    await FormField.destroy({ where: { scholarship_id: scholarshipId } });
+    const schema = await ScholarshipSchema.findOne({
+      where: {
+        id: schemaId,
+        scholarship_id: scholarshipId,
+      },
+    });
+
+    if (!schema) {
+      return errorResponse(res, "Schema tidak ditemukan", 404);
+    }
+
+    await FormField.destroy({ where: { schema_id: schemaId } });
 
     const formFields = fields.map((field, index) => ({
-      scholarship_id: scholarshipId,
+      schema_id: schemaId,
       label: field.label,
       type: field.type,
       is_required: field.is_required,
@@ -49,8 +81,8 @@ const createScholarshipForm = async (req, res) => {
       user_id: req.user.id,
       action: "CREATE_FORM",
       entity_type: "Form_Field",
-      entity_id: scholarshipId,
-      description: `Form untuk beasiswa "${scholarship.name}" telah dibuat oleh ${userName}.`,
+      entity_id: schemaId,
+      description: `Form untuk beasiswa "${scholarship.name}" - Schema "${schema.name}" telah dibuat oleh ${userName}.`,
       ip_address: req.ip,
       user_agent: req.headers["user-agent"],
     });
@@ -66,23 +98,35 @@ const getScholarshipForm = async (req, res) => {
   try {
     const { scholarshipId } = req.params;
 
-    const formFields = await FormField.findAll({
+    const schemas = await ScholarshipSchema.findAll({
       where: { scholarship_id: scholarshipId },
-      order: [["order_no", "ASC"]],
-      attributes: [
-        "id",
-        "label",
-        "type",
-        "is_required",
-        "options_json",
-        "order_no",
+      include: [
+        {
+          model: FormField,
+          as: "formFields",
+          attributes: [
+            "id",
+            "label",
+            "type",
+            "is_required",
+            "options_json",
+            "order_no",
+          ],
+        },
       ],
+      order: [["createdAt", "ASC"]],
     });
+
+    const formsBySchema = schemas.map((schema) => ({
+      schemaId: schema.id,
+      schemaName: schema.name,
+      fields: schema.formFields.sort((a, b) => a.order_no - b.order_no),
+    }));
 
     return successResponse(
       res,
       "Form fields retrieved successfully",
-      formFields
+      formsBySchema
     );
   } catch (error) {
     console.error("Error fetching scholarship form:", error);
@@ -93,16 +137,31 @@ const getScholarshipForm = async (req, res) => {
 const updateScholarshipForm = async (req, res) => {
   try {
     const { scholarshipId } = req.params;
-    const { fields } = req.body;
+    const { schemaId, fields } = req.body;
+
+    if (!schemaId) {
+      return errorResponse(res, "Schema ID tidak valid", 400);
+    }
 
     if (!fields || !Array.isArray(fields) || fields.length === 0) {
       return errorResponse(res, "Fields tidak valid", 400);
     }
 
-    await FormField.destroy({ where: { scholarship_id: scholarshipId } });
+    const schema = await ScholarshipSchema.findOne({
+      where: {
+        id: schemaId,
+        scholarship_id: scholarshipId,
+      },
+    });
+
+    if (!schema) {
+      return errorResponse(res, "Schema tidak ditemukan", 404);
+    }
+
+    await FormField.destroy({ where: { schema_id: schemaId } });
 
     const formFields = fields.map((field, index) => ({
-      scholarship_id: scholarshipId,
+      schema_id: schemaId,
       label: field.label,
       type: field.type,
       is_required: field.is_required,
@@ -119,8 +178,8 @@ const updateScholarshipForm = async (req, res) => {
       user_id: req.user.id,
       action: "UPDATE_FORM",
       entity_type: "Form_Field",
-      entity_id: scholarshipId,
-      description: `Form untuk beasiswa "${scholarship.name}" telah diubah oleh ${userName}.`,
+      entity_id: schemaId,
+      description: `Form untuk beasiswa "${scholarship.name}" - Schema "${schema.name}" telah diubah oleh ${userName}.`,
       ip_address: req.ip,
       user_agent: req.headers["user-agent"],
     });
