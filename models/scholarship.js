@@ -119,7 +119,7 @@ module.exports = (sequelize, DataTypes) => {
       },
       semester_minimum: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
       },
       scholarship_value: {
         type: DataTypes.DECIMAL(15, 2),

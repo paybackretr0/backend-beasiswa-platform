@@ -72,7 +72,7 @@ module.exports = {
       },
       semester_minimum: {
         type: Sequelize.INTEGER,
-        allowNull: false,
+        allowNull: true,
       },
       scholarship_value: {
         type: Sequelize.DECIMAL(15, 2),
