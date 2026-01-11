@@ -22,7 +22,13 @@ router.get(
 router.use(
   authenticate,
   verifiedUser,
-  authorize(["SUPERADMIN", "PIMPINAN_DITMAWA", "VERIFIKATOR"])
+  authorize([
+    "SUPERADMIN",
+    "PIMPINAN_DITMAWA",
+    "VERIFIKATOR_FAKULTAS",
+    "VERIFIKATOR_DITMAWA",
+    "VALIDATOR_DITMAWA",
+  ])
 );
 router.get("/", getAllApplications);
 router.get("/summary", getApplicationsSummary);

@@ -2,6 +2,7 @@ const {
   Application,
   Scholarship,
   ScholarshipBenefit,
+  ScholarshipFaculty,
   ScholarshipSchema,
   ScholarshipSchemaRequirement,
   ScholarshipSchemaDocument,
@@ -17,26 +18,69 @@ const { Op } = require("sequelize");
 
 const getAllApplications = async (req, res) => {
   try {
+    const user = req.user;
+
+    let whereCondition = { status: { [Op.ne]: "DRAFT" } };
+    let scholarshipInclude = {
+      model: Scholarship,
+      as: "scholarship",
+      attributes: ["id", "name", "is_active", "verification_level"],
+      required: true,
+    };
+
+    if (user.role === "VERIFIKATOR_FAKULTAS") {
+      if (!user.faculty_id) {
+        return errorResponse(
+          res,
+          "User tidak memiliki fakultas terdaftar",
+          400
+        );
+      }
+
+      scholarshipInclude.where = { verification_level: "FACULTY" };
+      scholarshipInclude.include = [
+        {
+          model: ScholarshipFaculty,
+          as: "scholarshipFaculties",
+          where: { faculty_id: user.faculty_id },
+          attributes: [],
+          required: true,
+        },
+      ];
+    } else if (user.role === "VERIFIKATOR_DITMAWA") {
+      scholarshipInclude.where = { verification_level: "DITMAWA" };
+    }
+
+    let studentInclude = {
+      model: User,
+      as: "student",
+      attributes: ["id", "full_name", "email"],
+      required: true,
+    };
+
+    if (user.role === "VERIFIKATOR_FAKULTAS") {
+      studentInclude.include = [
+        {
+          model: Department,
+          as: "department",
+          attributes: ["id", "faculty_id"],
+          where: { faculty_id: user.faculty_id },
+          required: true,
+        },
+      ];
+    }
+
     const applications = await Application.findAll({
-      where: { status: { [Op.ne]: "DRAFT" } },
+      where: whereCondition,
       include: [
         {
           model: ScholarshipSchema,
           as: "schema",
           attributes: ["id", "name", "is_active"],
-          include: [
-            {
-              model: Scholarship,
-              as: "scholarship",
-              attributes: ["id", "name", "is_active"],
-            },
-          ],
+          required: true,
+          include: [scholarshipInclude],
         },
-        {
-          model: User,
-          as: "student",
-          attributes: ["id", "full_name", "email"],
-        },
+        studentInclude,
       ],
       order: [["submitted_at", "DESC"]],
     });
@@ -58,6 +102,7 @@ const getAllApplications = async (req, res) => {
       schema_id: app.schema_id,
       scholarship_id: app.schema?.scholarship_id,
       student_id: app.student_id,
+      verification_level: app.schema?.scholarship?.verification_level,
     }));
 
     return successResponse(
@@ -73,28 +118,116 @@ const getAllApplications = async (req, res) => {
 
 const getApplicationsSummary = async (req, res) => {
   try {
+    const user = req.user;
+
+    let includeOptions = [];
+
+    if (user.role === "VERIFIKATOR_FAKULTAS") {
+      if (!user.faculty_id) {
+        return errorResponse(
+          res,
+          "User tidak memiliki fakultas terdaftar",
+          400
+        );
+      }
+
+      includeOptions = [
+        {
+          model: ScholarshipSchema,
+          as: "schema",
+          attributes: [],
+          required: true,
+          include: [
+            {
+              model: Scholarship,
+              as: "scholarship",
+              attributes: [],
+              where: { verification_level: "FACULTY" },
+              required: true,
+              include: [
+                {
+                  model: ScholarshipFaculty,
+                  as: "scholarshipFaculties",
+                  where: { faculty_id: user.faculty_id },
+                  attributes: [],
+                  required: true,
+                },
+              ],
+            },
+          ],
+        },
+        {
+          model: User,
+          as: "student",
+          attributes: [],
+          required: true,
+          include: [
+            {
+              model: Department,
+              as: "department",
+              attributes: [],
+              where: { faculty_id: user.faculty_id },
+              required: true,
+            },
+          ],
+        },
+      ];
+    } else if (user.role === "VERIFIKATOR_DITMAWA") {
+      includeOptions = [
+        {
+          model: ScholarshipSchema,
+          as: "schema",
+          attributes: [],
+          required: true,
+          include: [
+            {
+              model: Scholarship,
+              as: "scholarship",
+              attributes: [],
+              where: { verification_level: "DITMAWA" },
+              required: true,
+            },
+          ],
+        },
+      ];
+    }
+
+    const baseWhere = { status: { [Op.ne]: "DRAFT" } };
+
     const totalApplications = await Application.count({
-      where: { status: { [Op.ne]: "DRAFT" } },
+      where: baseWhere,
+      include: includeOptions,
+      distinct: true,
     });
 
     const menungguVerifikasi = await Application.count({
-      where: { status: "MENUNGGU_VERIFIKASI" },
+      where: { ...baseWhere, status: "MENUNGGU_VERIFIKASI" },
+      include: includeOptions,
+      distinct: true,
     });
 
     const menungguValidasi = await Application.count({
-      where: { status: "VERIFIED" },
+      where: { ...baseWhere, status: "VERIFIED" },
+      include: includeOptions,
+      distinct: true,
     });
 
     const ditolak = await Application.count({
-      where: { status: "REJECTED" },
+      where: { ...baseWhere, status: "REJECTED" },
+      include: includeOptions,
+      distinct: true,
     });
 
     const revisi = await Application.count({
-      where: { status: "REVISION_NEEDED" },
+      where: { ...baseWhere, status: "REVISION_NEEDED" },
+      include: includeOptions,
+      distinct: true,
     });
 
     const lolosValidasi = await Application.count({
-      where: { status: "VALIDATED" },
+      where: { ...baseWhere, status: "VALIDATED" },
+      include: includeOptions,
+      distinct: true,
     });
 
     const summary = {
@@ -146,6 +279,7 @@ const getApplicationDetail = async (req, res) => {
                 "year",
                 "scholarship_value",
                 "duration_semesters",
+                "verification_level",
               ],
               include: [
                 {
@@ -292,6 +426,7 @@ const getApplicationDetail = async (req, res) => {
       validated_at: application.validated_at,
       rejected_at: application.rejected_at,
       form_data: formAnswers,
+      verification_level: application.schema?.scholarship?.verification_level,
 
       student: {
         id: application.student?.id,
