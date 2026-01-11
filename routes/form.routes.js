@@ -18,9 +18,9 @@ router.use(
   authorize(["SUPERADMIN", "VERIFIKATOR"])
 );
 
-router.get("/check/:scholarshipId", checkScholarshipForm);
-router.get("/:scholarshipId", getScholarshipForm);
-router.post("/:scholarshipId", createScholarshipForm);
-router.put("/:scholarshipId", updateScholarshipForm);
+router.get("/check/:schemaId", checkScholarshipForm);
+router.get("/:schemaId", getScholarshipForm);
+router.post("/:schemaId", createScholarshipForm);
+router.put("/:schemaId", updateScholarshipForm);
 
 module.exports = router;

@@ -931,6 +931,99 @@ const getActiveScholarshipsForInfo = async (req, res) => {
   }
 };
 
+const activateSchema = async (req, res) => {
+  try {
+    const { schemaId } = req.params;
+
+    const schema = await ScholarshipSchema.findByPk(schemaId, {
+      include: [
+        {
+          model: Scholarship,
+          as: "scholarship",
+          attributes: ["id", "name", "is_active"],
+        },
+      ],
+    });
+
+    if (!schema) {
+      return errorResponse(res, "Schema tidak ditemukan", 404);
+    }
+
+    if (!schema.scholarship.is_active) {
+      return errorResponse(
+        res,
+        "Tidak dapat mengaktifkan schema karena beasiswa induk tidak aktif",
+        400
+      );
+    }
+
+    if (schema.is_active) {
+      return errorResponse(res, "Schema sudah aktif", 400);
+    }
+
+    await schema.update({ is_active: true });
+
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "ACTIVATE_SCHEMA",
+      entity_type: "ScholarshipSchema",
+      entity_id: schema.id,
+      description: `Schema "${schema.name}" dari beasiswa "${schema.scholarship.name}" telah diaktifkan oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
+
+    successResponse(res, "Schema berhasil diaktifkan", schema);
+  } catch (error) {
+    console.error("Error activating schema:", error);
+    errorResponse(res, "Gagal mengaktifkan schema", 500);
+  }
+};
+
+const deactivateSchema = async (req, res) => {
+  try {
+    const { schemaId } = req.params;
+    console.log("Deactivating schema with ID:", schemaId);
+
+    const schema = await ScholarshipSchema.findByPk(schemaId, {
+      include: [
+        {
+          model: Scholarship,
+          as: "scholarship",
+          attributes: ["id", "name"],
+        },
+      ],
+    });
+
+    if (!schema) {
+      return errorResponse(res, "Schema tidak ditemukan", 404);
+    }
+
+    if (!schema.is_active) {
+      return errorResponse(res, "Schema sudah nonaktif", 400);
+    }
+
+    await schema.update({ is_active: false });
+
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "DEACTIVATE_SCHEMA",
+      entity_type: "ScholarshipSchema",
+      entity_id: schema.id,
+      description: `Schema "${schema.name}" dari beasiswa "${schema.scholarship.name}" telah dinonaktifkan oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
+
+    successResponse(res, "Schema berhasil dinonaktifkan", schema);
+  } catch (error) {
+    console.error("Error deactivating schema:", error);
+    errorResponse(res, "Gagal menonaktifkan schema", 500);
+  }
+};
+
 module.exports = {
   getAllScholarships,
   createScholarship,
@@ -940,4 +1033,6 @@ module.exports = {
   activateScholarship,
   getOtherScholarships,
   getActiveScholarshipsForInfo,
+  activateSchema,
+  deactivateSchema,
 };
