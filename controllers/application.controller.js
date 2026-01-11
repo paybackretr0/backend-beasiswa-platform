@@ -1,6 +1,7 @@
 const {
   Application,
   Scholarship,
+  ScholarshipBenefit,
   ScholarshipSchema,
   ScholarshipSchemaRequirement,
   ScholarshipSchemaDocument,
@@ -146,6 +147,13 @@ const getApplicationDetail = async (req, res) => {
                 "scholarship_value",
                 "duration_semesters",
               ],
+              include: [
+                {
+                  model: ScholarshipBenefit,
+                  as: "benefits",
+                  attributes: ["id", "benefit_text"],
+                },
+              ],
             },
             {
               model: ScholarshipSchemaRequirement,
@@ -268,6 +276,13 @@ const getApplicationDetail = async (req, res) => {
         ?.map((doc) => doc.document_name)
         .join(", ") || "Tidak ada dokumen khusus yang diperlukan";
 
+    const benefitsHtml =
+      application.schema?.scholarship?.benefits
+        ?.map(
+          (benefit, index) => `<p>${index + 1}. ${benefit.benefit_text}</p>`
+        )
+        .join("") || "<p>Tidak ada benefit yang tercantum</p>";
+
     const detailData = {
       id: application.id,
       status: application.status,
@@ -306,6 +321,7 @@ const getApplicationDetail = async (req, res) => {
         schema_name: application.schema?.name || "N/A",
         requirements: requirementsHtml,
         required_documents: requiredDocuments,
+        benefits: benefitsHtml,
       },
       documents: documentAnswers,
     };
