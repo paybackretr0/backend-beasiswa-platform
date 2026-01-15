@@ -11,14 +11,12 @@ const {
 const { successResponse, errorResponse } = require("../utils/response");
 const { Op } = require("sequelize");
 
-// ✅ FIX: Get scholarship form by schema
 const getScholarshipForm = async (req, res) => {
   try {
     const { scholarshipId } = req.params;
     const { schemaId } = req.query;
     const userId = req.user.id;
 
-    // Get scholarship with active schemas
     const scholarship = await Scholarship.findOne({
       where: { id: scholarshipId, is_active: true },
       attributes: [
@@ -77,7 +75,6 @@ const getScholarshipForm = async (req, res) => {
       );
     }
 
-    // ✅ Validate schema selection
     let selectedSchema;
     if (schemaId) {
       selectedSchema = scholarship.schemas.find((s) => s.id === schemaId);
@@ -92,7 +89,6 @@ const getScholarshipForm = async (req, res) => {
       selectedSchema = scholarship.schemas[0];
     }
 
-    // ✅ Check registration deadline
     if (scholarship.end_date) {
       const today = new Date();
       const endDate = new Date(scholarship.end_date);
@@ -105,11 +101,9 @@ const getScholarshipForm = async (req, res) => {
       }
     }
 
-    // ✅ FIX: Check for existing application - REMOVE scholarship_id
     const existingApplication = await Application.findOne({
       where: {
-        // ❌ REMOVED: scholarship_id: scholarshipId,
-        schema_id: selectedSchema.id, // ✅ Only use schema_id
+        schema_id: selectedSchema.id,
         student_id: userId,
       },
       include: [
@@ -127,7 +121,6 @@ const getScholarshipForm = async (req, res) => {
       ],
     });
 
-    // ✅ Get form fields for selected schema
     const formFields = await FormField.findAll({
       where: { schema_id: selectedSchema.id },
       order: [["order_no", "ASC"]],
@@ -149,7 +142,6 @@ const getScholarshipForm = async (req, res) => {
       );
     }
 
-    // ✅ Transform form fields
     const transformedFields = formFields.map((field) => ({
       id: field.id,
       label: field.label,
@@ -159,7 +151,6 @@ const getScholarshipForm = async (req, res) => {
       order_no: field.order_no,
     }));
 
-    // ✅ Get existing answers if any
     let existingAnswers = {};
     if (existingApplication && existingApplication.formAnswers) {
       existingApplication.formAnswers.forEach((answer) => {
@@ -171,7 +162,6 @@ const getScholarshipForm = async (req, res) => {
       });
     }
 
-    // ✅ Get user data for eligibility check
     const user = await User.findByPk(userId, {
       attributes: [
         "id",
@@ -221,7 +211,6 @@ const getScholarshipForm = async (req, res) => {
   }
 };
 
-// ✅ FIX: Submit application with schema
 const submitApplication = async (req, res) => {
   try {
     const { scholarshipId } = req.params;
@@ -232,7 +221,6 @@ const submitApplication = async (req, res) => {
     const parsedAnswers =
       typeof answers === "string" ? JSON.parse(answers) : answers;
 
-    // ✅ Validate schema
     if (!schemaId) {
       return errorResponse(res, "Skema beasiswa harus dipilih", 400);
     }
@@ -285,7 +273,6 @@ const submitApplication = async (req, res) => {
       }
     }
 
-    // ✅ Get form fields for this schema
     const formFields = await FormField.findAll({
       where: { schema_id: schemaId },
     });
@@ -298,7 +285,6 @@ const submitApplication = async (req, res) => {
       );
     }
 
-    // ✅ Validate required fields (only if not draft)
     if (!isDraft) {
       const requiredFields = formFields.filter((field) => field.is_required);
 
@@ -334,26 +320,21 @@ const submitApplication = async (req, res) => {
       }
     }
 
-    // ✅ FIX: Check for existing application - REMOVE scholarship_id
     let application = await Application.findOne({
       where: {
-        // ❌ REMOVED: scholarship_id: scholarshipId,
-        schema_id: schemaId, // ✅ Only use schema_id
+        schema_id: schemaId,
         student_id: userId,
       },
     });
 
     if (!application) {
-      // ✅ FIX: Create new application - REMOVE scholarship_id
       application = await Application.create({
-        // ❌ REMOVED: scholarship_id: scholarshipId,
-        schema_id: schemaId, // ✅ Only schema_id
+        schema_id: schemaId,
         student_id: userId,
         status: isDraft ? "DRAFT" : "MENUNGGU_VERIFIKASI",
         submitted_at: isDraft ? null : new Date(),
       });
     } else {
-      // ✅ Update existing application
       if (!isDraft && application.status === "DRAFT") {
         await application.update({
           status: "MENUNGGU_VERIFIKASI",
@@ -368,12 +349,10 @@ const submitApplication = async (req, res) => {
       }
     }
 
-    // ✅ Delete old answers
     await FormAnswer.destroy({
       where: { application_id: application.id },
     });
 
-    // ✅ Create new answers
     const answerPromises = formFields.map(async (field) => {
       const fieldAnswer = parsedAnswers[field.id];
 
@@ -421,7 +400,6 @@ const submitApplication = async (req, res) => {
 
     await Promise.all(answerPromises);
 
-    // ✅ Create/update application documents
     await ApplicationDocument.destroy({
       where: { application_id: application.id },
     });
@@ -458,7 +436,6 @@ const submitApplication = async (req, res) => {
 
     await Promise.all(documentPromises);
 
-    // ✅ Log activity
     const userName = req.user.full_name || "User";
     await ActivityLog.create({
       user_id: req.user.id,

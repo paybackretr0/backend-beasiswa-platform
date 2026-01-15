@@ -223,17 +223,25 @@ const getScholarshipPerformance = async (req, res) => {
         ${yearCondition}
     `;
 
-    let whereClause = `WHERE s.is_active = true ${scholarshipYearFilter}`;
+    if (isFiltered) {
+      query += `
+      LEFT JOIN users u ON a.student_id = u.id
+      `;
+    }
+
+    let whereClause = `
+      WHERE s.is_active = true ${scholarshipYearFilter}
+    `;
 
     if (isFiltered) {
-      query += `LEFT JOIN users u ON a.student_id = u.id`;
-      whereClause += " AND (a.id IS NULL OR u.faculty_id = :facultyId)";
+      whereClause += `
+        AND (a.id IS NULL OR u.faculty_id = :facultyId)
+      `;
       replacements.facultyId = facultyId;
     }
 
-    query +=
-      whereClause +
-      `
+    query += whereClause;
+    query += `
       GROUP BY s.id, s.name
       HAVING COUNT(a.id) > 0
       ORDER BY pendaftar DESC
