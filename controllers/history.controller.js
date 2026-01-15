@@ -1,4 +1,4 @@
-const { Application, Scholarship } = require("../models");
+const { Application, ScholarshipSchema, Scholarship } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 
 const getApplicationByUser = async (req, res) => {
@@ -9,25 +9,39 @@ const getApplicationByUser = async (req, res) => {
       where: { student_id: userId },
       include: [
         {
-          model: Scholarship,
-          as: "scholarship",
-          attributes: ["id", "name", "organizer", "is_active"],
+          model: ScholarshipSchema,
+          as: "schema",
+          attributes: ["id", "name", "scholarship_id"],
+          include: [
+            {
+              model: Scholarship,
+              as: "scholarship",
+              attributes: ["id", "name", "organizer", "is_active"],
+            },
+          ],
         },
       ],
-      order: [["submitted_at", "DESC"]],
+      order: [["createdAt", "DESC"]],
     });
 
     const transformedApplications = applications.map((app) => ({
       id: app.id,
-      beasiswa: app.scholarship?.name || "N/A",
-      penyelenggara: app.scholarship?.organizer || "N/A",
+      beasiswa: app.schema?.scholarship?.name || "N/A",
+      skema: app.schema?.name || "N/A",
+      penyelenggara: app.schema?.scholarship?.organizer || "N/A",
       tanggalDaftar: app.submitted_at
         ? new Date(app.submitted_at).toISOString().split("T")[0]
+        : app.createdAt
+        ? new Date(app.createdAt).toISOString().split("T")[0]
         : null,
       status: app.status,
       notes: app.notes,
       verified_at: app.verified_at,
-      scholarship_id: app.scholarship_id,
+      validated_at: app.validated_at,
+      rejected_at: app.rejected_at,
+      scholarship_id: app.schema?.scholarship_id,
+      schema_id: app.schema_id,
+      student_id: app.student_id,
     }));
 
     return successResponse(
