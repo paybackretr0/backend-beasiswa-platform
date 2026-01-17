@@ -23,6 +23,10 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "rejected_by",
         as: "rejector",
       });
+      Application.belongsTo(models.User, {
+        foreignKey: "revision_requested_by",
+        as: "revision_requester",
+      });
       Application.hasMany(models.ApplicationDocument, {
         foreignKey: "application_id",
         as: "documents",
@@ -96,10 +100,17 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.DATE,
         allowNull: true,
       },
+      revision_requested_by: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
+      revision_requested_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
       notes: {
         type: DataTypes.TEXT,
         allowNull: true,
-        comment: "Catatan internal (tidak ditampilkan ke mahasiswa)",
       },
     },
     {

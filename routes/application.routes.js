@@ -8,8 +8,11 @@ const {
   getAllApplications,
   getApplicationsSummary,
   getApplicationDetail,
+  getApplicationComments,
 } = require("../controllers/application.controller");
 const authorize = require("../middlewares/role.middleware");
+
+router.get("/:id/comments", authenticate, verifiedUser, getApplicationComments);
 
 router.get(
   "/user/:id",

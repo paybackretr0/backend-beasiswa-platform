@@ -1,5 +1,8 @@
 const {
   Application,
+  ApplicationComment,
+  ApplicationCommentTemplate,
+  ApplicationDocument,
   Scholarship,
   ScholarshipBenefit,
   ScholarshipFaculty,
@@ -365,6 +368,16 @@ const getApplicationDetail = async (req, res) => {
           as: "rejector",
           attributes: ["id", "full_name", "email", "role"],
         },
+        {
+          model: User,
+          as: "revision_requester",
+          attributes: ["id", "full_name", "email", "role"],
+        },
+        {
+          model: ApplicationDocument,
+          as: "documents",
+          attributes: ["id", "document_type", "file_path", "createdAt"],
+        },
       ],
     });
 
@@ -425,6 +438,7 @@ const getApplicationDetail = async (req, res) => {
       verified_at: application.verified_at,
       validated_at: application.validated_at,
       rejected_at: application.rejected_at,
+      revision_requested_at: application.revision_requested_at,
       form_data: formAnswers,
       verification_level: application.schema?.scholarship?.verification_level,
 
@@ -444,6 +458,7 @@ const getApplicationDetail = async (req, res) => {
       verificator: application.verificator,
       validator: application.validator,
       rejector: application.rejector,
+      revision_requester: application.revision_requester,
 
       scholarship: {
         id: application.schema?.scholarship?.id,
@@ -472,8 +487,60 @@ const getApplicationDetail = async (req, res) => {
   }
 };
 
+const getApplicationComments = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    const application = await Application.findByPk(id);
+
+    if (!application) {
+      return errorResponse(res, "Application not found", 404);
+    }
+
+    if (userRole === "MAHASISWA" && application.student_id !== userId) {
+      return errorResponse(
+        res,
+        "You don't have access to view these comments",
+        403
+      );
+    }
+
+    const comments = await ApplicationComment.findAll({
+      where: {
+        application_id: id,
+        is_visible_to_student: true,
+      },
+      include: [
+        {
+          model: User,
+          as: "commenter",
+          attributes: ["id", "full_name", "role"],
+        },
+        {
+          model: ApplicationCommentTemplate,
+          as: "template",
+          attributes: ["id", "template_name"],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+
+    return successResponse(
+      res,
+      "Application comments retrieved successfully",
+      comments
+    );
+  } catch (error) {
+    console.error("Error fetching application comments:", error);
+    return errorResponse(res, "Failed to fetch application comments", 500);
+  }
+};
+
 module.exports = {
   getAllApplications,
   getApplicationsSummary,
   getApplicationDetail,
+  getApplicationComments,
 };

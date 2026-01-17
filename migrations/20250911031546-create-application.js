@@ -89,6 +89,20 @@ module.exports = {
         type: Sequelize.DATE,
         allowNull: true,
       },
+      revision_requested_by: {
+        type: Sequelize.UUID,
+        allowNull: true,
+        references: {
+          model: "users",
+          key: "id",
+        },
+        onUpdate: "CASCADE",
+        onDelete: "SET NULL",
+      },
+      revision_requested_at: {
+        type: Sequelize.DATE,
+        allowNull: true,
+      },
       notes: {
         type: Sequelize.TEXT,
         allowNull: true,
