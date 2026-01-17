@@ -12,7 +12,7 @@ const { successResponse, errorResponse } = require("../utils/response");
 const verifyApplication = async (req, res) => {
   try {
     const { id } = req.params;
-    const { notes } = req.body; // ✅ ADD: Optional notes for verification
+    const { notes } = req.body;
     const verifikatorId = req.user.id;
     const verifikatorRole = req.user.role;
 
@@ -287,7 +287,6 @@ const requestRevision = async (req, res) => {
     const verifikatorId = req.user.id;
     const verifikatorRole = req.user.role;
 
-    // ✅ Validate: either notes or template_ids must be provided
     if (
       (!notes || notes.trim() === "") &&
       (!template_ids || template_ids.length === 0)
@@ -369,7 +368,6 @@ const requestRevision = async (req, res) => {
       }
     }
 
-    // ✅ Create comments from templates
     const createdComments = [];
     if (template_ids && template_ids.length > 0) {
       const templates = await ApplicationCommentTemplate.findAll({
@@ -392,7 +390,6 @@ const requestRevision = async (req, res) => {
       }
     }
 
-    // ✅ Create custom comment if notes provided
     if (notes && notes.trim() !== "") {
       const customComment = await ApplicationComment.create({
         application_id: application.id,
@@ -405,9 +402,11 @@ const requestRevision = async (req, res) => {
       createdComments.push(customComment);
     }
 
-    // ✅ Update application (NO notes field)
+    const currentStatus = application.status;
+
     await application.update({
       status: "REVISION_NEEDED",
+      status_before_revision: currentStatus,
       revision_requested_by: verifikatorId,
       revision_requested_at: new Date(),
     });

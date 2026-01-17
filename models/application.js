@@ -72,6 +72,11 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: "DRAFT",
       },
+      status_before_revision: {
+        type: DataTypes.ENUM("MENUNGGU_VERIFIKASI", "VERIFIED"),
+        allowNull: true,
+        comment: "Status sebelum diminta revisi",
+      },
       submitted_at: {
         type: DataTypes.DATE,
         allowNull: true,
@@ -106,10 +111,6 @@ module.exports = (sequelize, DataTypes) => {
       },
       revision_requested_at: {
         type: DataTypes.DATE,
-        allowNull: true,
-      },
-      notes: {
-        type: DataTypes.TEXT,
         allowNull: true,
       },
     },

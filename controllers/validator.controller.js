@@ -48,14 +48,12 @@ const validateApplication = async (req, res) => {
       );
     }
 
-    // ✅ Update application (NO notes)
     await application.update({
       status: "VALIDATED",
       validated_by: validatorId,
       validated_at: new Date(),
     });
 
-    // ✅ Create comment if notes provided
     if (notes && notes.trim() !== "") {
       await ApplicationComment.create({
         application_id: application.id,
@@ -138,7 +136,6 @@ const rejectApplication = async (req, res) => {
       );
     }
 
-    // ✅ Create comments from templates
     const createdComments = [];
     if (template_ids && template_ids.length > 0) {
       const templates = await ApplicationCommentTemplate.findAll({
@@ -161,7 +158,6 @@ const rejectApplication = async (req, res) => {
       }
     }
 
-    // ✅ Create custom comment if notes provided
     if (notes && notes.trim() !== "") {
       const customComment = await ApplicationComment.create({
         application_id: application.id,
@@ -174,7 +170,6 @@ const rejectApplication = async (req, res) => {
       createdComments.push(customComment);
     }
 
-    // ✅ Update application (NO notes)
     await application.update({
       status: "REJECTED",
       rejected_by: validatorId,
@@ -253,7 +248,6 @@ const requestRevision = async (req, res) => {
       );
     }
 
-    // ✅ Create comments from templates
     const createdComments = [];
     if (template_ids && template_ids.length > 0) {
       const templates = await ApplicationCommentTemplate.findAll({
@@ -276,7 +270,6 @@ const requestRevision = async (req, res) => {
       }
     }
 
-    // ✅ Create custom comment if notes provided
     if (notes && notes.trim() !== "") {
       const customComment = await ApplicationComment.create({
         application_id: application.id,
@@ -289,9 +282,11 @@ const requestRevision = async (req, res) => {
       createdComments.push(customComment);
     }
 
-    // ✅ Update application (NO notes)
+    const currentStatus = application.status;
+
     await application.update({
       status: "REVISION_NEEDED",
+      status_before_revision: currentStatus,
       revision_requested_by: validatorId,
       revision_requested_at: new Date(),
     });

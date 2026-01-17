@@ -43,6 +43,12 @@ module.exports = {
         allowNull: false,
         defaultValue: "DRAFT",
       },
+      status_before_revision: {
+        type: Sequelize.ENUM("MENUNGGU_VERIFIKASI", "VERIFIED"),
+        allowNull: true,
+        comment:
+          "Menyimpan status pendaftaran sebelum permintaan revisi diajukan",
+      },
       submitted_at: {
         type: Sequelize.DATE,
         allowNull: true,
@@ -101,10 +107,6 @@ module.exports = {
       },
       revision_requested_at: {
         type: Sequelize.DATE,
-        allowNull: true,
-      },
-      notes: {
-        type: Sequelize.TEXT,
         allowNull: true,
       },
       createdAt: {
