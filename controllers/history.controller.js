@@ -32,13 +32,15 @@ const getApplicationByUser = async (req, res) => {
       tanggalDaftar: app.submitted_at
         ? new Date(app.submitted_at).toISOString().split("T")[0]
         : app.createdAt
-        ? new Date(app.createdAt).toISOString().split("T")[0]
-        : null,
+          ? new Date(app.createdAt).toISOString().split("T")[0]
+          : null,
       status: app.status,
       notes: app.notes,
       verified_at: app.verified_at,
       validated_at: app.validated_at,
       rejected_at: app.rejected_at,
+      revision_requested_at: app.revision_requested_at,
+      revision_deadline: app.revision_deadline,
       scholarship_id: app.schema?.scholarship_id,
       schema_id: app.schema_id,
       student_id: app.student_id,
@@ -47,7 +49,7 @@ const getApplicationByUser = async (req, res) => {
     return successResponse(
       res,
       "User applications retrieved successfully",
-      transformedApplications
+      transformedApplications,
     );
   } catch (error) {
     console.error("Error fetching user applications:", error);

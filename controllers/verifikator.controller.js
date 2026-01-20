@@ -8,6 +8,7 @@ const {
   ApplicationCommentTemplate,
 } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
+const moment = require("moment-timezone");
 
 const verifyApplication = async (req, res) => {
   try {
@@ -45,7 +46,7 @@ const verifyApplication = async (req, res) => {
       return errorResponse(
         res,
         "Application cannot be verified. Current status is not MENUNGGU_VERIFIKASI",
-        400
+        400,
       );
     }
 
@@ -56,7 +57,7 @@ const verifyApplication = async (req, res) => {
       return errorResponse(
         res,
         "Verification level not found for this scholarship",
-        400
+        400,
       );
     }
 
@@ -65,7 +66,7 @@ const verifyApplication = async (req, res) => {
         return errorResponse(
           res,
           "Anda tidak memiliki akses untuk memverifikasi pendaftaran ini. Hanya Verifikator Fakultas yang dapat memverifikasi beasiswa level fakultas.",
-          403
+          403,
         );
       }
 
@@ -73,7 +74,7 @@ const verifyApplication = async (req, res) => {
         return errorResponse(
           res,
           "Anda hanya dapat memverifikasi pendaftaran dari fakultas Anda sendiri.",
-          403
+          403,
         );
       }
     } else if (verificationLevel === "DITMAWA") {
@@ -81,19 +82,17 @@ const verifyApplication = async (req, res) => {
         return errorResponse(
           res,
           "Anda tidak memiliki akses untuk memverifikasi pendaftaran ini. Hanya Verifikator Ditmawa yang dapat memverifikasi beasiswa level ditmawa.",
-          403
+          403,
         );
       }
     }
 
-    // ✅ Update application (remove notes field)
     await application.update({
       status: "VERIFIED",
       verified_by: verifikatorId,
       verified_at: new Date(),
     });
 
-    // ✅ ADD: Create comment if notes provided
     if (notes && notes.trim() !== "") {
       await ApplicationComment.create({
         application_id: application.id,
@@ -133,7 +132,6 @@ const rejectApplication = async (req, res) => {
     const verifikatorId = req.user.id;
     const verifikatorRole = req.user.role;
 
-    // ✅ Validate: either notes or template_ids must be provided
     if (
       (!notes || notes.trim() === "") &&
       (!template_ids || template_ids.length === 0)
@@ -141,7 +139,7 @@ const rejectApplication = async (req, res) => {
       return errorResponse(
         res,
         "Alasan penolakan atau template harus diisi",
-        400
+        400,
       );
     }
 
@@ -174,7 +172,7 @@ const rejectApplication = async (req, res) => {
       return errorResponse(
         res,
         "Application cannot be rejected. Current status is not MENUNGGU_VERIFIKASI",
-        400
+        400,
       );
     }
 
@@ -185,7 +183,7 @@ const rejectApplication = async (req, res) => {
       return errorResponse(
         res,
         "Verification level not found for this scholarship",
-        400
+        400,
       );
     }
 
@@ -194,7 +192,7 @@ const rejectApplication = async (req, res) => {
         return errorResponse(
           res,
           "Anda tidak memiliki akses untuk menolak pendaftaran ini. Hanya Verifikator Fakultas yang dapat menolak beasiswa level fakultas.",
-          403
+          403,
         );
       }
 
@@ -202,7 +200,7 @@ const rejectApplication = async (req, res) => {
         return errorResponse(
           res,
           "Anda hanya dapat menolak pendaftaran dari fakultas Anda sendiri.",
-          403
+          403,
         );
       }
     } else if (verificationLevel === "DITMAWA") {
@@ -210,12 +208,11 @@ const rejectApplication = async (req, res) => {
         return errorResponse(
           res,
           "Anda tidak memiliki akses untuk menolak pendaftaran ini. Hanya Verifikator Ditmawa yang dapat menolak beasiswa level ditmawa.",
-          403
+          403,
         );
       }
     }
 
-    // ✅ Create comments from templates
     const createdComments = [];
     if (template_ids && template_ids.length > 0) {
       const templates = await ApplicationCommentTemplate.findAll({
@@ -238,7 +235,6 @@ const rejectApplication = async (req, res) => {
       }
     }
 
-    // ✅ Create custom comment if notes provided
     if (notes && notes.trim() !== "") {
       const customComment = await ApplicationComment.create({
         application_id: application.id,
@@ -251,7 +247,6 @@ const rejectApplication = async (req, res) => {
       createdComments.push(customComment);
     }
 
-    // ✅ Update application (NO notes field)
     await application.update({
       status: "REJECTED",
       rejected_by: verifikatorId,
@@ -283,7 +278,7 @@ const rejectApplication = async (req, res) => {
 const requestRevision = async (req, res) => {
   try {
     const { id } = req.params;
-    const { notes, template_ids } = req.body;
+    const { notes, template_ids, revision_deadline } = req.body;
     const verifikatorId = req.user.id;
     const verifikatorRole = req.user.role;
 
@@ -294,8 +289,19 @@ const requestRevision = async (req, res) => {
       return errorResponse(
         res,
         "Catatan revisi atau template harus diisi",
-        400
+        400,
       );
+    }
+
+    if (!revision_deadline) {
+      return errorResponse(res, "Deadline revisi harus ditentukan", 400);
+    }
+
+    const deadlineWIB = moment.tz(revision_deadline, "Asia/Jakarta");
+    const nowWIB = moment.tz("Asia/Jakarta");
+
+    if (deadlineWIB.isSameOrBefore(nowWIB)) {
+      return errorResponse(res, "Deadline revisi harus di masa depan", 400);
     }
 
     const application = await Application.findByPk(id, {
@@ -327,7 +333,7 @@ const requestRevision = async (req, res) => {
       return errorResponse(
         res,
         "Application cannot be sent for revision. Current status is not MENUNGGU_VERIFIKASI",
-        400
+        400,
       );
     }
 
@@ -338,7 +344,7 @@ const requestRevision = async (req, res) => {
       return errorResponse(
         res,
         "Verification level not found for this scholarship",
-        400
+        400,
       );
     }
 
@@ -347,7 +353,7 @@ const requestRevision = async (req, res) => {
         return errorResponse(
           res,
           "Anda tidak memiliki akses untuk meminta revisi pendaftaran ini. Hanya Verifikator Fakultas yang dapat meminta revisi beasiswa level fakultas.",
-          403
+          403,
         );
       }
 
@@ -355,7 +361,7 @@ const requestRevision = async (req, res) => {
         return errorResponse(
           res,
           "Anda hanya dapat meminta revisi pendaftaran dari fakultas Anda sendiri.",
-          403
+          403,
         );
       }
     } else if (verificationLevel === "DITMAWA") {
@@ -363,7 +369,7 @@ const requestRevision = async (req, res) => {
         return errorResponse(
           res,
           "Anda tidak memiliki akses untuk meminta revisi pendaftaran ini.",
-          403
+          403,
         );
       }
     }
@@ -409,6 +415,7 @@ const requestRevision = async (req, res) => {
       status_before_revision: currentStatus,
       revision_requested_by: verifikatorId,
       revision_requested_at: new Date(),
+      revision_deadline: deadlineWIB.toDate(),
     });
 
     await ActivityLog.create({
@@ -416,7 +423,7 @@ const requestRevision = async (req, res) => {
       action: "REQUEST_REVISION",
       entity_type: "Application",
       entity_id: application.id,
-      description: `Meminta revisi pendaftaran ${application.student?.full_name} untuk beasiswa ${application.schema?.scholarship?.name} dengan ${createdComments.length} komentar`,
+      description: `Meminta revisi pendaftaran ${application.student?.full_name} untuk beasiswa ${application.schema?.scholarship?.name} dengan deadline ${deadlineWIB.format("DD MMMM YYYY, HH:mm")} WIB dan ${createdComments.length} komentar`,
       ip_address: req.ip,
       user_agent: req.get("User-Agent"),
     });
@@ -425,6 +432,7 @@ const requestRevision = async (req, res) => {
       id: application.id,
       status: "REVISION_NEEDED",
       revision_requested_at: application.revision_requested_at,
+      revision_deadline: deadlineWIB.format("DD MMMM YYYY, HH:mm [WIB]"),
       comments_count: createdComments.length,
     });
   } catch (error) {

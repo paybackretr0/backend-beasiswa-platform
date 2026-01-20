@@ -36,7 +36,7 @@ const getAllApplications = async (req, res) => {
         return errorResponse(
           res,
           "User tidak memiliki fakultas terdaftar",
-          400
+          400,
         );
       }
 
@@ -111,7 +111,7 @@ const getAllApplications = async (req, res) => {
     return successResponse(
       res,
       "Applications retrieved successfully",
-      transformedApplications
+      transformedApplications,
     );
   } catch (error) {
     console.error("Error fetching applications:", error);
@@ -130,7 +130,7 @@ const getApplicationsSummary = async (req, res) => {
         return errorResponse(
           res,
           "User tidak memiliki fakultas terdaftar",
-          400
+          400,
         );
       }
 
@@ -245,7 +245,7 @@ const getApplicationsSummary = async (req, res) => {
     return successResponse(
       res,
       "Applications summary retrieved successfully",
-      summary
+      summary,
     );
   } catch (error) {
     console.error("Error fetching applications summary:", error);
@@ -398,6 +398,7 @@ const getApplicationDetail = async (req, res) => {
             filePath: answer.file_path.replace(/\\/g, "/"),
             mimeType: answer.mime_type,
             uploadedAt: answer.uploaded_at || answer.createdAt,
+            field_id: answer.field_id,
           });
         } else if (answer.answer_text) {
           formAnswers[answer.FormField?.label || `Field ${answer.field_id}`] =
@@ -426,7 +427,7 @@ const getApplicationDetail = async (req, res) => {
     const benefitsHtml =
       application.schema?.scholarship?.benefits
         ?.map(
-          (benefit, index) => `<p>${index + 1}. ${benefit.benefit_text}</p>`
+          (benefit, index) => `<p>${index + 1}. ${benefit.benefit_text}</p>`,
         )
         .join("") || "<p>Tidak ada benefit yang tercantum</p>";
 
@@ -439,8 +440,12 @@ const getApplicationDetail = async (req, res) => {
       validated_at: application.validated_at,
       rejected_at: application.rejected_at,
       revision_requested_at: application.revision_requested_at,
+      revision_deadline: application.revision_deadline,
       form_data: formAnswers,
       verification_level: application.schema?.scholarship?.verification_level,
+
+      scholarship_id: application.schema?.scholarship?.id,
+      schema_id: application.schema_id,
 
       student: {
         id: application.student?.id,
@@ -473,13 +478,23 @@ const getApplicationDetail = async (req, res) => {
         required_documents: requiredDocuments,
         benefits: benefitsHtml,
       },
+
       documents: documentAnswers,
+
+      formAnswers:
+        application.formAnswers?.map((answer) => ({
+          field_id: answer.field_id,
+          answer_text: answer.answer_text,
+          file_path: answer.file_path,
+          mime_type: answer.mime_type,
+          uploaded_at: answer.uploaded_at,
+        })) || [],
     };
 
     return successResponse(
       res,
       "Application detail retrieved successfully",
-      detailData
+      detailData,
     );
   } catch (error) {
     console.error("Error fetching application detail:", error);
@@ -503,7 +518,7 @@ const getApplicationComments = async (req, res) => {
       return errorResponse(
         res,
         "You don't have access to view these comments",
-        403
+        403,
       );
     }
 
@@ -530,7 +545,7 @@ const getApplicationComments = async (req, res) => {
     return successResponse(
       res,
       "Application comments retrieved successfully",
-      comments
+      comments,
     );
   } catch (error) {
     console.error("Error fetching application comments:", error);

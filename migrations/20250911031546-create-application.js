@@ -38,7 +38,7 @@ module.exports = {
           "VERIFIED",
           "REJECTED",
           "REVISION_NEEDED",
-          "VALIDATED"
+          "VALIDATED",
         ),
         allowNull: false,
         defaultValue: "DRAFT",
@@ -106,6 +106,10 @@ module.exports = {
         onDelete: "SET NULL",
       },
       revision_requested_at: {
+        type: Sequelize.DATE,
+        allowNull: true,
+      },
+      revision_deadline: {
         type: Sequelize.DATE,
         allowNull: true,
       },

@@ -124,18 +124,18 @@ const getAllScholarships = async (req, res) => {
       min_gpa: scholarship.schemas?.reduce(
         (min, s) =>
           s.gpa_minimum && (!min || s.gpa_minimum < min) ? s.gpa_minimum : min,
-        null
+        null,
       ),
       min_semester: scholarship.schemas?.reduce(
         (min, s) =>
           s.semester_minimum && (!min || s.semester_minimum < min)
             ? s.semester_minimum
             : min,
-        null
+        null,
       ),
       total_quota: scholarship.schemas?.reduce(
         (sum, s) => sum + (s.quota || 0),
-        0
+        0,
       ),
 
       faculties:
@@ -152,7 +152,7 @@ const getAllScholarships = async (req, res) => {
     successResponse(
       res,
       "Daftar beasiswa aktif berhasil didapatkan",
-      transformedData
+      transformedData,
     );
   } catch (error) {
     console.error("Error fetching active scholarships for user:", error);
@@ -205,7 +205,7 @@ const createScholarship = async (req, res) => {
       return errorResponse(
         res,
         "Website URL wajib untuk beasiswa eksternal",
-        400
+        400,
       );
     }
 
@@ -248,7 +248,7 @@ const createScholarship = async (req, res) => {
         gpa_minimum: null,
         quota: null,
       },
-      { transaction }
+      { transaction },
     );
 
     if (benefits && benefits.length > 0) {
@@ -289,7 +289,7 @@ const createScholarship = async (req, res) => {
         return errorResponse(
           res,
           "Nama schema dan semester minimum wajib diisi",
-          400
+          400,
         );
       }
 
@@ -305,7 +305,7 @@ const createScholarship = async (req, res) => {
             : null,
           is_active: true,
         },
-        { transaction }
+        { transaction },
       );
 
       if (requirements && requirements.length > 0) {
@@ -587,7 +587,7 @@ const updateScholarship = async (req, res) => {
       return errorResponse(
         res,
         "Website URL wajib untuk beasiswa eksternal",
-        400
+        400,
       );
     }
 
@@ -629,7 +629,7 @@ const updateScholarship = async (req, res) => {
         gpa_minimum: null,
         quota: null,
       },
-      { transaction }
+      { transaction },
     );
 
     const parsedSchemas =
@@ -667,7 +667,7 @@ const updateScholarship = async (req, res) => {
         return errorResponse(
           res,
           "Nama schema dan semester minimum wajib diisi",
-          400
+          400,
         );
       }
 
@@ -685,7 +685,7 @@ const updateScholarship = async (req, res) => {
               semester_minimum: parseInt(semester_minimum),
               is_active: schemaIsActive !== undefined ? schemaIsActive : true,
             },
-            { transaction }
+            { transaction },
           );
           schemasToKeep.push(schemaId);
         }
@@ -700,7 +700,7 @@ const updateScholarship = async (req, res) => {
             semester_minimum: parseInt(semester_minimum),
             is_active: schemaIsActive !== undefined ? schemaIsActive : true,
           },
-          { transaction }
+          { transaction },
         );
         schemasToKeep.push(schema.id);
       }
@@ -783,7 +783,7 @@ const updateScholarship = async (req, res) => {
     }
 
     const schemasToDelete = existingSchemaIds.filter(
-      (id) => !schemasToKeep.includes(id)
+      (id) => !schemasToKeep.includes(id),
     );
     if (schemasToDelete.length > 0) {
       await ScholarshipSchemaRequirement.destroy({
@@ -857,7 +857,7 @@ const updateScholarship = async (req, res) => {
         (studyProgramId) => ({
           scholarship_id: id,
           study_program_id: studyProgramId,
-        })
+        }),
       );
       await ScholarshipStudyProgram.bulkCreate(studyProgramData, {
         transaction,
@@ -929,7 +929,7 @@ const deactivateScholarship = async (req, res) => {
 
     await ScholarshipSchema.update(
       { is_active: false },
-      { where: { scholarship_id: id } }
+      { where: { scholarship_id: id } },
     );
 
     const userName = req.user.full_name || "User";
@@ -963,7 +963,7 @@ const activateScholarship = async (req, res) => {
 
     await ScholarshipSchema.update(
       { is_active: true },
-      { where: { scholarship_id: id } }
+      { where: { scholarship_id: id } },
     );
 
     const userName = req.user.full_name || "User";
@@ -1010,7 +1010,7 @@ const getOtherScholarships = async (req, res) => {
     successResponse(
       res,
       "Beasiswa lainnya berhasil didapatkan",
-      otherScholarships
+      otherScholarships,
     );
   } catch (error) {
     console.error("Error fetching other scholarships:", error);
@@ -1079,7 +1079,6 @@ const getActiveScholarshipsForInfo = async (req, res) => {
       ],
     });
 
-    // ✅ Transform data to include schema information
     const transformedData = scholarships.map((scholarship) => ({
       id: scholarship.id,
       name: scholarship.name,
@@ -1098,7 +1097,6 @@ const getActiveScholarshipsForInfo = async (req, res) => {
       contact_person_email: scholarship.contact_person_email,
       contact_person_phone: scholarship.contact_person_phone,
 
-      // ✅ Schema information
       schemas:
         scholarship.schemas?.map((schema) => ({
           id: schema.id,
@@ -1112,25 +1110,24 @@ const getActiveScholarshipsForInfo = async (req, res) => {
           stages: schema.stages || [],
         })) || [],
 
-      // ✅ Aggregate data from all schemas
       total_schemas: scholarship.schemas?.length || 0,
       active_schemas:
         scholarship.schemas?.filter((s) => s.is_active).length || 0,
       total_quota: scholarship.schemas?.reduce(
         (sum, s) => sum + (s.quota || 0),
-        0
+        0,
       ),
       min_gpa: scholarship.schemas?.reduce(
         (min, s) =>
           s.gpa_minimum && (!min || s.gpa_minimum < min) ? s.gpa_minimum : min,
-        null
+        null,
       ),
       min_semester: scholarship.schemas?.reduce(
         (min, s) =>
           s.semester_minimum && (!min || s.semester_minimum < min)
             ? s.semester_minimum
             : min,
-        null
+        null,
       ),
 
       benefits:
@@ -1141,7 +1138,7 @@ const getActiveScholarshipsForInfo = async (req, res) => {
     successResponse(
       res,
       "Daftar beasiswa aktif berhasil didapatkan",
-      transformedData
+      transformedData,
     );
   } catch (error) {
     console.error("Error fetching active scholarships for info:", error);
@@ -1171,7 +1168,7 @@ const activateSchema = async (req, res) => {
       return errorResponse(
         res,
         "Tidak dapat mengaktifkan schema karena beasiswa induk tidak aktif",
-        400
+        400,
       );
     }
 

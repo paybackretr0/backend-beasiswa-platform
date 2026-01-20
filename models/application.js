@@ -67,7 +67,7 @@ module.exports = (sequelize, DataTypes) => {
           "VERIFIED",
           "REJECTED",
           "REVISION_NEEDED",
-          "VALIDATED"
+          "VALIDATED",
         ),
         allowNull: false,
         defaultValue: "DRAFT",
@@ -113,13 +113,17 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.DATE,
         allowNull: true,
       },
+      revision_deadline: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
     },
     {
       sequelize,
       modelName: "Application",
       tableName: "applications",
       timestamps: true,
-    }
+    },
   );
 
   Application.afterUpdate(async (application, options) => {
@@ -140,8 +144,8 @@ module.exports = (sequelize, DataTypes) => {
             stage_id: stage.id,
             status:
               stage.order_no === 1 ? "SEDANG_BERLANGSUNG" : "BELUM_DIMULAI",
-          })
-        )
+          }),
+        ),
       );
     }
   });

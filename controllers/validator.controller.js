@@ -8,6 +8,7 @@ const {
   ApplicationCommentTemplate,
 } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
+const moment = require("moment-timezone");
 
 const validateApplication = async (req, res) => {
   try {
@@ -44,7 +45,7 @@ const validateApplication = async (req, res) => {
       return errorResponse(
         res,
         "Application cannot be validated. Current status is not VERIFIED",
-        400
+        400,
       );
     }
 
@@ -99,7 +100,7 @@ const rejectApplication = async (req, res) => {
       return errorResponse(
         res,
         "Alasan penolakan atau template harus diisi",
-        400
+        400,
       );
     }
 
@@ -132,7 +133,7 @@ const rejectApplication = async (req, res) => {
       return errorResponse(
         res,
         "Application cannot be rejected. Current status is not VERIFIED",
-        400
+        400,
       );
     }
 
@@ -201,8 +202,10 @@ const rejectApplication = async (req, res) => {
 const requestRevision = async (req, res) => {
   try {
     const { id } = req.params;
-    const { notes, template_ids } = req.body;
+    const { notes, template_ids, revision_deadline } = req.body;
     const validatorId = req.user.id;
+
+    console.log("Received revision deadline:", revision_deadline);
 
     if (
       (!notes || notes.trim() === "") &&
@@ -211,8 +214,19 @@ const requestRevision = async (req, res) => {
       return errorResponse(
         res,
         "Catatan revisi atau template harus diisi",
-        400
+        400,
       );
+    }
+
+    if (!revision_deadline) {
+      return errorResponse(res, "Deadline revisi harus ditentukan", 400);
+    }
+
+    const deadlineWIB = moment.tz(revision_deadline, "Asia/Jakarta");
+    const nowWIB = moment.tz("Asia/Jakarta");
+
+    if (deadlineWIB.isSameOrBefore(nowWIB)) {
+      return errorResponse(res, "Deadline revisi harus di masa depan", 400);
     }
 
     const application = await Application.findByPk(id, {
@@ -244,7 +258,7 @@ const requestRevision = async (req, res) => {
       return errorResponse(
         res,
         "Application cannot be sent for revision. Current status is not VERIFIED",
-        400
+        400,
       );
     }
 
@@ -289,6 +303,7 @@ const requestRevision = async (req, res) => {
       status_before_revision: currentStatus,
       revision_requested_by: validatorId,
       revision_requested_at: new Date(),
+      revision_deadline: deadlineWIB.toDate(),
     });
 
     await ActivityLog.create({
@@ -296,7 +311,7 @@ const requestRevision = async (req, res) => {
       action: "REQUEST_REVISION",
       entity_type: "Application",
       entity_id: application.id,
-      description: `Meminta revisi pendaftaran ${application.student?.full_name} untuk beasiswa ${application.schema?.scholarship?.name} dengan ${createdComments.length} komentar`,
+      description: `Meminta revisi pendaftaran ${application.student?.full_name} untuk beasiswa ${application.schema?.scholarship?.name} dengan deadline ${deadlineWIB.format("DD MMMM YYYY, HH:mm")} WIB dan ${createdComments.length} komentar`,
       ip_address: req.ip,
       user_agent: req.get("User-Agent"),
     });
@@ -305,6 +320,7 @@ const requestRevision = async (req, res) => {
       id: application.id,
       status: "REVISION_NEEDED",
       revision_requested_at: application.revision_requested_at,
+      revision_deadline: deadlineWIB.format("DD MMMM YYYY, HH:mm [WIB]"),
       comments_count: createdComments.length,
     });
   } catch (error) {

@@ -19,7 +19,7 @@ router.get(
   authenticate,
   verifiedUser,
   authorize(["MAHASISWA"]),
-  getApplicationDetail
+  getApplicationDetail,
 );
 
 router.use(
@@ -31,7 +31,7 @@ router.use(
     "VERIFIKATOR_FAKULTAS",
     "VERIFIKATOR_DITMAWA",
     "VALIDATOR_DITMAWA",
-  ])
+  ]),
 );
 router.get("/", getAllApplications);
 router.get("/summary", getApplicationsSummary);
