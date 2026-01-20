@@ -113,6 +113,10 @@ module.exports = {
         type: Sequelize.DATE,
         allowNull: true,
       },
+      revision_submitted_at: {
+        type: Sequelize.DATE,
+        allowNull: true,
+      },
       createdAt: {
         type: Sequelize.DATE,
         allowNull: false,

@@ -680,7 +680,7 @@ const submitRevision = async (req, res) => {
         revision_requested_by: null,
         revision_requested_at: null,
         revision_deadline: null,
-        submitted_at: new Date(),
+        revision_submitted_at: new Date(),
       },
       { transaction },
     );
@@ -704,6 +704,7 @@ const submitRevision = async (req, res) => {
     return successResponse(res, "Revisi berhasil disubmit", {
       applicationId: application.id,
       newStatus: statusBeforeRevision,
+      revision_submitted_at: new Date(),
       scholarship_name: application.schema.scholarship.name,
       schema_name: application.schema.name,
     });

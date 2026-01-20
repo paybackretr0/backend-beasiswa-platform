@@ -441,6 +441,7 @@ const getApplicationDetail = async (req, res) => {
       rejected_at: application.rejected_at,
       revision_requested_at: application.revision_requested_at,
       revision_deadline: application.revision_deadline,
+      revision_submitted_at: application.revision_submitted_at,
       form_data: formAnswers,
       verification_level: application.schema?.scholarship?.verification_level,
 

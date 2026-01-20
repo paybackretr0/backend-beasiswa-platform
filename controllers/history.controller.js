@@ -41,6 +41,7 @@ const getApplicationByUser = async (req, res) => {
       rejected_at: app.rejected_at,
       revision_requested_at: app.revision_requested_at,
       revision_deadline: app.revision_deadline,
+      revision_submitted_at: app.revision_submitted_at,
       scholarship_id: app.schema?.scholarship_id,
       schema_id: app.schema_id,
       student_id: app.student_id,
