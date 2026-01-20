@@ -6,7 +6,7 @@ const {
 } = require("../middlewares/auth.middleware");
 const authorize = require("../middlewares/role.middleware");
 const {
-  addPimpinanVerifikator,
+  addUserDitmawa,
   addMahasiswa,
   addPimpinanFakultas,
   updateUser,
@@ -15,7 +15,10 @@ const {
   getPimpinanFakultas,
   getPimpinanDitmawa,
   getVerifikator,
+  getValidator,
   activateUser,
+  addVerifikator,
+  updateVerifikator,
 } = require("../controllers/user.controller");
 const { validateRegister } = require("../validators/auth.validator");
 
@@ -25,11 +28,14 @@ router.get("/mahasiswa", getMahasiswa);
 router.get("/pimpinan-fakultas", getPimpinanFakultas);
 router.get("/pimpinan-ditmawa", getPimpinanDitmawa);
 router.get("/verifikator", getVerifikator);
-router.post("/", validateRegister, addPimpinanVerifikator);
+router.get("/validator", getValidator);
+router.post("/", validateRegister, addUserDitmawa);
 router.post("/mahasiswa", validateRegister, addMahasiswa);
 router.post("/pimpinan-fakultas", validateRegister, addPimpinanFakultas);
+router.post("/verifikator", validateRegister, addVerifikator);
 
 router.put("/:id", updateUser);
+router.put("/verifikator/:id", updateVerifikator);
 router.delete("/:id", deactivateUser);
 router.patch("/activate/:id", activateUser);
 

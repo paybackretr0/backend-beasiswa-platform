@@ -1,5 +1,14 @@
-const { Application, User, ActivityLog } = require("../models");
+const {
+  Application,
+  User,
+  ActivityLog,
+  ScholarshipSchema,
+  Scholarship,
+  ApplicationComment,
+  ApplicationCommentTemplate,
+} = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
+const moment = require("moment-timezone");
 
 const validateApplication = async (req, res) => {
   try {
@@ -14,6 +23,17 @@ const validateApplication = async (req, res) => {
           as: "student",
           attributes: ["full_name", "email"],
         },
+        {
+          model: ScholarshipSchema,
+          as: "schema",
+          include: [
+            {
+              model: Scholarship,
+              as: "scholarship",
+              attributes: ["id", "name"],
+            },
+          ],
+        },
       ],
     });
 
@@ -25,7 +45,7 @@ const validateApplication = async (req, res) => {
       return errorResponse(
         res,
         "Application cannot be validated. Current status is not VERIFIED",
-        400
+        400,
       );
     }
 
@@ -35,12 +55,23 @@ const validateApplication = async (req, res) => {
       validated_at: new Date(),
     });
 
+    if (notes && notes.trim() !== "") {
+      await ApplicationComment.create({
+        application_id: application.id,
+        comment_text: notes,
+        comment_type: "VALIDATION",
+        template_id: null,
+        commented_by: validatorId,
+        is_visible_to_student: true,
+      });
+    }
+
     await ActivityLog.create({
       user_id: validatorId,
       action: "VALIDATE_APPLICATION",
       entity_type: "Application",
       entity_id: application.id,
-      description: `Memvalidasi pendaftaran ${application.student?.full_name}`,
+      description: `Memvalidasi pendaftaran ${application.student?.full_name} untuk beasiswa ${application.schema?.scholarship?.name}`,
       ip_address: req.ip,
       user_agent: req.get("User-Agent"),
     });
@@ -59,11 +90,18 @@ const validateApplication = async (req, res) => {
 const rejectApplication = async (req, res) => {
   try {
     const { id } = req.params;
-    const { notes } = req.body;
+    const { notes, template_ids } = req.body;
     const validatorId = req.user.id;
 
-    if (!notes || notes.trim() === "") {
-      return errorResponse(res, "Alasan penolakan harus diisi", 400);
+    if (
+      (!notes || notes.trim() === "") &&
+      (!template_ids || template_ids.length === 0)
+    ) {
+      return errorResponse(
+        res,
+        "Alasan penolakan atau template harus diisi",
+        400,
+      );
     }
 
     const application = await Application.findByPk(id, {
@@ -72,6 +110,17 @@ const rejectApplication = async (req, res) => {
           model: User,
           as: "student",
           attributes: ["full_name", "email"],
+        },
+        {
+          model: ScholarshipSchema,
+          as: "schema",
+          include: [
+            {
+              model: Scholarship,
+              as: "scholarship",
+              attributes: ["id", "name"],
+            },
+          ],
         },
       ],
     });
@@ -84,15 +133,48 @@ const rejectApplication = async (req, res) => {
       return errorResponse(
         res,
         "Application cannot be rejected. Current status is not VERIFIED",
-        400
+        400,
       );
+    }
+
+    const createdComments = [];
+    if (template_ids && template_ids.length > 0) {
+      const templates = await ApplicationCommentTemplate.findAll({
+        where: {
+          id: template_ids,
+          is_active: true,
+        },
+      });
+
+      for (const template of templates) {
+        const comment = await ApplicationComment.create({
+          application_id: application.id,
+          comment_text: template.comment_text,
+          comment_type: "REJECTION",
+          template_id: template.id,
+          commented_by: validatorId,
+          is_visible_to_student: true,
+        });
+        createdComments.push(comment);
+      }
+    }
+
+    if (notes && notes.trim() !== "") {
+      const customComment = await ApplicationComment.create({
+        application_id: application.id,
+        comment_text: notes,
+        comment_type: "REJECTION",
+        template_id: null,
+        commented_by: validatorId,
+        is_visible_to_student: true,
+      });
+      createdComments.push(customComment);
     }
 
     await application.update({
       status: "REJECTED",
       rejected_by: validatorId,
       rejected_at: new Date(),
-      notes: notes,
     });
 
     await ActivityLog.create({
@@ -100,7 +182,7 @@ const rejectApplication = async (req, res) => {
       action: "REJECT_APPLICATION",
       entity_type: "Application",
       entity_id: application.id,
-      description: `Menolak pendaftaran ${application.student?.full_name}: ${notes}`,
+      description: `Menolak pendaftaran ${application.student?.full_name} untuk beasiswa ${application.schema?.scholarship?.name} dengan ${createdComments.length} komentar`,
       ip_address: req.ip,
       user_agent: req.get("User-Agent"),
     });
@@ -109,7 +191,7 @@ const rejectApplication = async (req, res) => {
       id: application.id,
       status: "REJECTED",
       rejected_at: application.rejected_at,
-      notes: application.notes,
+      comments_count: createdComments.length,
     });
   } catch (error) {
     console.error("Error rejecting application:", error);
@@ -117,7 +199,138 @@ const rejectApplication = async (req, res) => {
   }
 };
 
+const requestRevision = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { notes, template_ids, revision_deadline } = req.body;
+    const validatorId = req.user.id;
+
+    console.log("Received revision deadline:", revision_deadline);
+
+    if (
+      (!notes || notes.trim() === "") &&
+      (!template_ids || template_ids.length === 0)
+    ) {
+      return errorResponse(
+        res,
+        "Catatan revisi atau template harus diisi",
+        400,
+      );
+    }
+
+    if (!revision_deadline) {
+      return errorResponse(res, "Deadline revisi harus ditentukan", 400);
+    }
+
+    const deadlineWIB = moment.tz(revision_deadline, "Asia/Jakarta");
+    const nowWIB = moment.tz("Asia/Jakarta");
+
+    if (deadlineWIB.isSameOrBefore(nowWIB)) {
+      return errorResponse(res, "Deadline revisi harus di masa depan", 400);
+    }
+
+    const application = await Application.findByPk(id, {
+      include: [
+        {
+          model: User,
+          as: "student",
+          attributes: ["full_name", "email"],
+        },
+        {
+          model: ScholarshipSchema,
+          as: "schema",
+          include: [
+            {
+              model: Scholarship,
+              as: "scholarship",
+              attributes: ["id", "name"],
+            },
+          ],
+        },
+      ],
+    });
+
+    if (!application) {
+      return errorResponse(res, "Application not found", 404);
+    }
+
+    if (application.status !== "VERIFIED") {
+      return errorResponse(
+        res,
+        "Application cannot be sent for revision. Current status is not VERIFIED",
+        400,
+      );
+    }
+
+    const createdComments = [];
+    if (template_ids && template_ids.length > 0) {
+      const templates = await ApplicationCommentTemplate.findAll({
+        where: {
+          id: template_ids,
+          is_active: true,
+        },
+      });
+
+      for (const template of templates) {
+        const comment = await ApplicationComment.create({
+          application_id: application.id,
+          comment_text: template.comment_text,
+          comment_type: "REVISION",
+          template_id: template.id,
+          commented_by: validatorId,
+          is_visible_to_student: true,
+        });
+        createdComments.push(comment);
+      }
+    }
+
+    if (notes && notes.trim() !== "") {
+      const customComment = await ApplicationComment.create({
+        application_id: application.id,
+        comment_text: notes,
+        comment_type: "REVISION",
+        template_id: null,
+        commented_by: validatorId,
+        is_visible_to_student: true,
+      });
+      createdComments.push(customComment);
+    }
+
+    const currentStatus = application.status;
+
+    await application.update({
+      status: "REVISION_NEEDED",
+      status_before_revision: currentStatus,
+      revision_requested_by: validatorId,
+      revision_requested_at: new Date(),
+      revision_deadline: deadlineWIB.toDate(),
+    });
+
+    await ActivityLog.create({
+      user_id: validatorId,
+      action: "REQUEST_REVISION",
+      entity_type: "Application",
+      entity_id: application.id,
+      description: `Meminta revisi pendaftaran ${application.student?.full_name} untuk beasiswa ${application.schema?.scholarship?.name} dengan deadline ${deadlineWIB.format("DD MMMM YYYY, HH:mm")} WIB dan ${createdComments.length} komentar`,
+      ip_address: req.ip,
+      user_agent: req.get("User-Agent"),
+    });
+
+    return successResponse(res, "Revision requested successfully", {
+      id: application.id,
+      status: "REVISION_NEEDED",
+      revision_requested_at: application.revision_requested_at,
+      revision_deadline: deadlineWIB.format("DD MMMM YYYY, HH:mm [WIB]"),
+      comments_count: createdComments.length,
+    });
+  } catch (error) {
+    console.error("Error requesting revision:", error);
+    return errorResponse(res, "Failed to request revision", 500);
+  }
+};
+
 module.exports = {
   validateApplication,
   rejectApplication,
+  requestRevision,
 };

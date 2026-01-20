@@ -15,6 +15,8 @@ const {
   activateScholarship,
   getOtherScholarships,
   getActiveScholarshipsForInfo,
+  activateSchema,
+  deactivateSchema,
 } = require("../controllers/beasiswa.controller");
 const authorize = require("../middlewares/role.middleware");
 
@@ -55,5 +57,7 @@ router.put(
 
 router.patch("/:id/deactivate", deactivateScholarship);
 router.patch("/:id/activate", activateScholarship);
+router.patch("/schema/:schemaId/deactivate", deactivateSchema);
+router.patch("/schema/:schemaId/activate", activateSchema);
 
 module.exports = router;

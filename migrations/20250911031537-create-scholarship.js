@@ -49,6 +49,11 @@ module.exports = {
         defaultValue: false,
         comment: "Apakah beasiswa eksternal (tidak dikelola UNAND)",
       },
+      verification_level: {
+        type: Sequelize.ENUM("FACULTY", "DITMAWA"),
+        allowNull: false,
+        defaultValue: "DITMAWA",
+      },
       contact_person_name: {
         type: Sequelize.STRING(191),
         allowNull: false,
@@ -67,7 +72,7 @@ module.exports = {
       },
       semester_minimum: {
         type: Sequelize.INTEGER,
-        allowNull: false,
+        allowNull: true,
       },
       scholarship_value: {
         type: Sequelize.DECIMAL(15, 2),

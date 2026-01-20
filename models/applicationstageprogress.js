@@ -8,7 +8,7 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "application_id",
         as: "application",
       });
-      ApplicationStageProgress.belongsTo(models.ScholarshipStage, {
+      ApplicationStageProgress.belongsTo(models.ScholarshipSchemaStage, {
         foreignKey: "stage_id",
         as: "stage",
       });
@@ -40,14 +40,24 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: "BELUM_DIMULAI",
         allowNull: false,
       },
-      started_at: DataTypes.DATE,
-      completed_at: DataTypes.DATE,
-      notes: DataTypes.TEXT,
+      started_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      completed_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      notes: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
     },
     {
       sequelize,
       modelName: "ApplicationStageProgress",
       tableName: "application_stage_progress",
+      timestamps: true,
     }
   );
 

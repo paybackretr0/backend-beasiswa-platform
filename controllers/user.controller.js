@@ -90,17 +90,26 @@ const getPimpinanDitmawa = async (req, res) => {
 const getVerifikator = async (req, res) => {
   try {
     const verifikator = await User.findAll({
-      where: { role: "VERIFIKATOR" },
+      where: { role: ["VERIFIKATOR_FAKULTAS", "VERIFIKATOR_DITMAWA"] },
       attributes: [
         "id",
         "email",
         "full_name",
         "phone_number",
         "role",
+        "faculty_id",
         "is_active",
         "last_login_at",
         "createdAt",
       ],
+      include: [
+        {
+          model: Faculty,
+          as: "faculty",
+          attributes: ["id", "name", "code"],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
     });
 
     return successResponse(
@@ -114,7 +123,30 @@ const getVerifikator = async (req, res) => {
   }
 };
 
-const addPimpinanVerifikator = async (req, res) => {
+const getValidator = async (req, res) => {
+  try {
+    const validator = await User.findAll({
+      where: { role: "VALIDATOR_DITMAWA" },
+      attributes: [
+        "id",
+        "email",
+        "full_name",
+        "phone_number",
+        "role",
+        "is_active",
+        "last_login_at",
+        "createdAt",
+      ],
+    });
+
+    return successResponse(res, "Daftar validator berhasil diambil", validator);
+  } catch (error) {
+    console.error("Error fetching validator:", error);
+    return errorResponse(res, "Gagal mengambil daftar validator");
+  }
+};
+
+const addUserDitmawa = async (req, res) => {
   const { email, password, full_name, role } = req.body;
 
   try {
@@ -147,6 +179,130 @@ const addPimpinanVerifikator = async (req, res) => {
   } catch (error) {
     console.error("Error adding user:", error);
     return errorResponse(res, "Gagal menambahkan user");
+  }
+};
+
+const addVerifikator = async (req, res) => {
+  const { email, password, full_name, role, faculty_id } = req.body;
+
+  try {
+    if (!["VERIFIKATOR_FAKULTAS", "VERIFIKATOR_DITMAWA"].includes(role)) {
+      return errorResponse(res, "Role tidak valid", 400);
+    }
+
+    const existingUser = await User.findOne({ where: { email } });
+    if (existingUser) {
+      return errorResponse(res, "Email sudah digunakan", 400);
+    }
+
+    if (role === "VERIFIKATOR_FAKULTAS") {
+      if (!faculty_id) {
+        return errorResponse(
+          res,
+          "Fakultas wajib dipilih untuk Verifikator Fakultas",
+          400
+        );
+      }
+
+      const faculty = await Faculty.findByPk(faculty_id);
+      if (!faculty) {
+        return errorResponse(res, "Fakultas tidak ditemukan", 404);
+      }
+    }
+
+    const hashedPassword = await hashPassword(password);
+
+    const newUser = await User.create({
+      email,
+      password: hashedPassword,
+      full_name,
+      role,
+      faculty_id: role === "VERIFIKATOR_FAKULTAS" ? faculty_id : null,
+      is_active: true,
+      emailVerified: true,
+    });
+
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "CREATE_VERIFIKATOR",
+      entity_type: "User",
+      entity_id: newUser.id,
+      description: `Verifikator "${newUser.full_name}" (${role}) telah dibuat oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
+
+    const verifikatorWithFaculty = await User.findByPk(newUser.id, {
+      include: [
+        {
+          model: Faculty,
+          as: "faculty",
+          attributes: ["id", "name", "code"],
+        },
+      ],
+    });
+
+    return successCreatedResponse(
+      res,
+      "Verifikator berhasil ditambahkan",
+      verifikatorWithFaculty
+    );
+  } catch (error) {
+    console.error("Error adding verifikator:", error);
+    return errorResponse(res, "Gagal menambahkan verifikator");
+  }
+};
+
+const updateVerifikator = async (req, res) => {
+  const { id } = req.params;
+  const { full_name, phone_number, faculty_id } = req.body;
+
+  try {
+    const user = await User.findByPk(id);
+    if (!user) {
+      return errorResponse(res, "User tidak ditemukan", 404);
+    }
+
+    if (user.role === "VERIFIKATOR_FAKULTAS" && faculty_id) {
+      const faculty = await Faculty.findByPk(faculty_id);
+      if (!faculty) {
+        return errorResponse(res, "Fakultas tidak ditemukan", 404);
+      }
+    }
+
+    await user.update({
+      full_name,
+      phone_number,
+      faculty_id:
+        user.role === "VERIFIKATOR_FAKULTAS" ? faculty_id : user.faculty_id,
+    });
+
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "UPDATE_VERIFIKATOR",
+      entity_type: "User",
+      entity_id: user.id,
+      description: `Verifikator "${user.full_name}" telah diperbarui oleh ${userName}.`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
+
+    const updatedUser = await User.findByPk(id, {
+      include: [
+        {
+          model: Faculty,
+          as: "faculty",
+          attributes: ["id", "name", "code"],
+        },
+      ],
+    });
+
+    return successResponse(res, "Verifikator berhasil diperbarui", updatedUser);
+  } catch (error) {
+    console.error("Error updating verifikator:", error);
+    return errorResponse(res, "Gagal memperbarui verifikator");
   }
 };
 
@@ -277,8 +433,7 @@ const addPimpinanFakultas = async (req, res) => {
 
 const updateUser = async (req, res) => {
   const { id } = req.params;
-  const { full_name, phone_number, email, faculty_id, department_id } =
-    req.body;
+  const { full_name, phone_number, faculty_id, department_id } = req.body;
 
   try {
     const user = await User.findByPk(id);
@@ -377,7 +532,7 @@ const activateUser = async (req, res) => {
 };
 
 module.exports = {
-  addPimpinanVerifikator,
+  addUserDitmawa,
   addMahasiswa,
   addPimpinanFakultas,
   updateUser,
@@ -386,5 +541,8 @@ module.exports = {
   getPimpinanFakultas,
   getPimpinanDitmawa,
   getVerifikator,
+  getValidator,
   activateUser,
+  addVerifikator,
+  updateVerifikator,
 };

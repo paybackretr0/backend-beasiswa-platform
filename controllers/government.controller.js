@@ -4,27 +4,34 @@ const { Op } = require("sequelize");
 
 const getGovernmentScholarshipSummary = async (req, res) => {
   try {
-    const { year = new Date().getFullYear() } = req.query;
+    const { year } = req.query;
+
+    let whereCondition = {};
+    if (year && year !== "all") {
+      whereCondition.acceptance_year = year;
+    }
 
     const [totalPenerima, totalNominal, totalUnik, totalProgram] =
       await Promise.all([
         GovernmentScholarship.count({
-          where: { acceptance_year: year },
+          where: whereCondition,
         }),
         GovernmentScholarship.sum("living_expenses", {
-          where: { acceptance_year: year },
+          where: whereCondition,
         }),
         sequelize.query(
-          `SELECT COUNT(DISTINCT nim) as count FROM government_scholarships WHERE acceptance_year = :year`,
+          year && year !== "all"
+            ? `SELECT COUNT(DISTINCT nim) as count FROM government_scholarships WHERE acceptance_year = :year`
+            : `SELECT COUNT(DISTINCT nim) as count FROM government_scholarships`,
           {
-            replacements: { year },
+            replacements: year && year !== "all" ? { year } : {},
             type: sequelize.QueryTypes.SELECT,
           }
         ),
         GovernmentScholarship.count({
           distinct: true,
           col: "scholarship_category",
-          where: { acceptance_year: year },
+          where: whereCondition,
         }),
       ]);
 
@@ -52,7 +59,15 @@ const getGovernmentScholarshipSummary = async (req, res) => {
 
 const getGovernmentScholarshipDistribution = async (req, res) => {
   try {
-    const { year = new Date().getFullYear() } = req.query;
+    const { year } = req.query;
+
+    let whereClause = "";
+    let replacements = {};
+
+    if (year && year !== "all") {
+      whereClause = "WHERE acceptance_year = :year";
+      replacements.year = year;
+    }
 
     const distribution = await sequelize.query(
       `
@@ -60,13 +75,13 @@ const getGovernmentScholarshipDistribution = async (req, res) => {
         study_program as label,
         COUNT(*) as value
       FROM government_scholarships
-      WHERE acceptance_year = :year
+      ${whereClause}
       GROUP BY study_program
       ORDER BY value DESC
       LIMIT 10
       `,
       {
-        replacements: { year },
+        replacements,
         type: sequelize.QueryTypes.SELECT,
       }
     );
@@ -88,7 +103,15 @@ const getGovernmentScholarshipDistribution = async (req, res) => {
 
 const getGovernmentScholarshipByCategory = async (req, res) => {
   try {
-    const { year = new Date().getFullYear() } = req.query;
+    const { year } = req.query;
+
+    let whereClause = "";
+    let replacements = {};
+
+    if (year && year !== "all") {
+      whereClause = "WHERE acceptance_year = :year";
+      replacements.year = year;
+    }
 
     const categories = await sequelize.query(
       `
@@ -97,12 +120,12 @@ const getGovernmentScholarshipByCategory = async (req, res) => {
         COUNT(*) as value,
         '#2D60FF' as color
       FROM government_scholarships
-      WHERE acceptance_year = :year
+      ${whereClause}
       GROUP BY scholarship_category
       ORDER BY value DESC
       `,
       {
-        replacements: { year },
+        replacements,
         type: sequelize.QueryTypes.SELECT,
       }
     );

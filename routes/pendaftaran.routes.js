@@ -9,6 +9,7 @@ const { applicationUpload } = require("../middlewares/upload.middleware");
 const {
   getScholarshipForm,
   submitApplication,
+  submitRevision,
 } = require("../controllers/pendaftaran.controller");
 
 router.use(authenticate, verifiedUser);
@@ -16,14 +17,21 @@ router.use(authenticate, verifiedUser);
 router.get(
   "/scholarship/:scholarshipId/form",
   authorize(["MAHASISWA"]),
-  getScholarshipForm
+  getScholarshipForm,
 );
 
 router.post(
   "/scholarship/:scholarshipId/submit",
   authorize(["MAHASISWA"]),
   applicationUpload.any(),
-  submitApplication
+  submitApplication,
+);
+
+router.put(
+  "/application/:applicationId/revision",
+  authorize(["MAHASISWA"]),
+  applicationUpload.any(),
+  submitRevision,
 );
 
 module.exports = router;

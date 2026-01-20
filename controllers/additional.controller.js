@@ -1,4 +1,9 @@
-const { ActivityLog, User, BackupHistory } = require("../models");
+const {
+  ActivityLog,
+  User,
+  BackupHistory,
+  ApplicationCommentTemplate,
+} = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 const { sequelize } = require("../models");
 const { Op } = require("sequelize");
@@ -375,10 +380,288 @@ const createActivityLog = async (
   }
 };
 
+const getAllCommentTemplates = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, search, type, status } = req.query;
+    const offset = (page - 1) * limit;
+
+    const whereConditions = {};
+
+    if (search) {
+      whereConditions[Op.or] = [
+        { template_name: { [Op.like]: `%${search}%` } },
+        { comment_text: { [Op.like]: `%${search}%` } },
+      ];
+    }
+
+    if (type && type !== "Semua") {
+      whereConditions.template_type = type;
+    }
+
+    if (status !== undefined && status !== "Semua") {
+      whereConditions.is_active = status === "Aktif";
+    }
+
+    const { count, rows: templates } =
+      await ApplicationCommentTemplate.findAndCountAll({
+        where: whereConditions,
+        include: [
+          {
+            model: User,
+            as: "creator",
+            attributes: ["id", "full_name", "email"],
+          },
+        ],
+        order: [["createdAt", "DESC"]],
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+      });
+
+    return successResponse(res, "Template berhasil diambil", {
+      templates,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(count / limit),
+        totalRecords: count,
+        limit: parseInt(limit),
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching comment templates:", error);
+    return errorResponse(res, "Gagal mengambil template komentar", 500);
+  }
+};
+
+const getCommentTemplateById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const template = await ApplicationCommentTemplate.findByPk(id, {
+      include: [
+        {
+          model: User,
+          as: "creator",
+          attributes: ["id", "full_name", "email"],
+        },
+      ],
+    });
+
+    if (!template) {
+      return errorResponse(res, "Template tidak ditemukan", 404);
+    }
+
+    return successResponse(res, "Template berhasil diambil", template);
+  } catch (error) {
+    console.error("Error fetching comment template:", error);
+    return errorResponse(res, "Gagal mengambil template komentar", 500);
+  }
+};
+
+const createCommentTemplate = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { template_name, comment_text, template_type, is_active } = req.body;
+
+    if (!template_name || !comment_text || !template_type) {
+      return errorResponse(res, "Semua field wajib diisi", 400);
+    }
+
+    if (!["REJECTION", "REVISION", "GENERAL"].includes(template_type)) {
+      return errorResponse(res, "Tipe template tidak valid", 400);
+    }
+
+    const existingTemplate = await ApplicationCommentTemplate.findOne({
+      where: { template_name },
+    });
+
+    if (existingTemplate) {
+      return errorResponse(res, "Nama template sudah digunakan", 400);
+    }
+
+    const newTemplate = await ApplicationCommentTemplate.create({
+      template_name,
+      comment_text,
+      template_type,
+      is_active: is_active !== undefined ? is_active : true,
+      created_by: userId,
+    });
+
+    await createActivityLog(
+      userId,
+      "Create Comment Template",
+      "ApplicationCommentTemplate",
+      newTemplate.id,
+      `Created template: ${template_name}`,
+      req.ip,
+      req.headers["user-agent"]
+    );
+
+    return successResponse(res, "Template berhasil dibuat", newTemplate, 201);
+  } catch (error) {
+    console.error("Error creating comment template:", error);
+    return errorResponse(res, "Gagal membuat template komentar", 500);
+  }
+};
+
+const updateCommentTemplate = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+    const { template_name, comment_text, template_type, is_active } = req.body;
+
+    const template = await ApplicationCommentTemplate.findByPk(id);
+
+    if (!template) {
+      return errorResponse(res, "Template tidak ditemukan", 404);
+    }
+
+    if (
+      template_type &&
+      !["REJECTION", "REVISION", "GENERAL"].includes(template_type)
+    ) {
+      return errorResponse(res, "Tipe template tidak valid", 400);
+    }
+
+    if (template_name && template_name !== template.template_name) {
+      const existingTemplate = await ApplicationCommentTemplate.findOne({
+        where: {
+          template_name,
+          id: { [Op.ne]: id },
+        },
+      });
+
+      if (existingTemplate) {
+        return errorResponse(res, "Nama template sudah digunakan", 400);
+      }
+    }
+
+    await template.update({
+      template_name: template_name || template.template_name,
+      comment_text: comment_text || template.comment_text,
+      template_type: template_type || template.template_type,
+      is_active: is_active !== undefined ? is_active : template.is_active,
+    });
+
+    await createActivityLog(
+      userId,
+      "Update Comment Template",
+      "ApplicationCommentTemplate",
+      template.id,
+      `Updated template: ${template.template_name}`,
+      req.ip,
+      req.headers["user-agent"]
+    );
+
+    return successResponse(res, "Template berhasil diperbarui", template);
+  } catch (error) {
+    console.error("Error updating comment template:", error);
+    return errorResponse(res, "Gagal memperbarui template komentar", 500);
+  }
+};
+
+const activateCommentTemplate = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+
+    const template = await ApplicationCommentTemplate.findByPk(id);
+
+    if (!template) {
+      return errorResponse(res, "Template tidak ditemukan", 404);
+    }
+
+    if (template.is_active) {
+      return errorResponse(res, "Template sudah dalam status aktif", 400);
+    }
+
+    await template.update({ is_active: true });
+
+    await createActivityLog(
+      userId,
+      "Activate Comment Template",
+      "ApplicationCommentTemplate",
+      template.id,
+      `Activated template: ${template.template_name}`,
+      req.ip,
+      req.headers["user-agent"]
+    );
+
+    return successResponse(res, "Template berhasil diaktifkan", template);
+  } catch (error) {
+    console.error("Error activating comment template:", error);
+    return errorResponse(res, "Gagal mengaktifkan template komentar", 500);
+  }
+};
+
+const deactivateCommentTemplate = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { id } = req.params;
+
+    const template = await ApplicationCommentTemplate.findByPk(id);
+
+    if (!template) {
+      return errorResponse(res, "Template tidak ditemukan", 404);
+    }
+
+    if (!template.is_active) {
+      return errorResponse(res, "Template sudah dalam status nonaktif", 400);
+    }
+
+    await template.update({ is_active: false });
+
+    await createActivityLog(
+      userId,
+      "Deactivate Comment Template",
+      "ApplicationCommentTemplate",
+      template.id,
+      `Deactivated template: ${template.template_name}`,
+      req.ip,
+      req.headers["user-agent"]
+    );
+
+    return successResponse(res, "Template berhasil dinonaktifkan", template);
+  } catch (error) {
+    console.error("Error deactivating comment template:", error);
+    return errorResponse(res, "Gagal menonaktifkan template komentar", 500);
+  }
+};
+
+const getActiveTemplatesByType = async (req, res) => {
+  try {
+    const { type } = req.params;
+
+    if (!["REJECTION", "REVISION", "GENERAL"].includes(type)) {
+      return errorResponse(res, "Tipe template tidak valid", 400);
+    }
+
+    const templates = await ApplicationCommentTemplate.findAll({
+      where: {
+        template_type: type,
+        is_active: true,
+      },
+      attributes: ["id", "template_name", "comment_text"],
+      order: [["template_name", "ASC"]],
+    });
+
+    return successResponse(res, "Template berhasil diambil", templates);
+  } catch (error) {
+    console.error("Error fetching active templates:", error);
+    return errorResponse(res, "Gagal mengambil template aktif", 500);
+  }
+};
+
 module.exports = {
   getAllBackups,
   createBackup,
   getAllActivityLogs,
   exportActivityLogsToExcel,
   createActivityLog,
+  getAllCommentTemplates,
+  getCommentTemplateById,
+  createCommentTemplate,
+  updateCommentTemplate,
+  activateCommentTemplate,
+  deactivateCommentTemplate,
+  getActiveTemplatesByType,
 };

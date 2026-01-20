@@ -1,34 +1,89 @@
 const {
   Application,
+  ApplicationComment,
+  ApplicationCommentTemplate,
+  ApplicationDocument,
   Scholarship,
+  ScholarshipBenefit,
+  ScholarshipFaculty,
+  ScholarshipSchema,
+  ScholarshipSchemaRequirement,
+  ScholarshipSchemaDocument,
+  ScholarshipSchemaStage,
   User,
   Department,
   Faculty,
   FormAnswer,
   FormField,
-  ScholarshipRequirement,
-  ScholarshipBenefit,
-  ScholarshipDocument,
-  ApplicationDocument,
 } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 const { Op } = require("sequelize");
 
 const getAllApplications = async (req, res) => {
   try {
+    const user = req.user;
+
+    let whereCondition = { status: { [Op.ne]: "DRAFT" } };
+    let scholarshipInclude = {
+      model: Scholarship,
+      as: "scholarship",
+      attributes: ["id", "name", "is_active", "verification_level"],
+      required: true,
+    };
+
+    if (user.role === "VERIFIKATOR_FAKULTAS") {
+      if (!user.faculty_id) {
+        return errorResponse(
+          res,
+          "User tidak memiliki fakultas terdaftar",
+          400,
+        );
+      }
+
+      scholarshipInclude.where = { verification_level: "FACULTY" };
+      scholarshipInclude.include = [
+        {
+          model: ScholarshipFaculty,
+          as: "scholarshipFaculties",
+          where: { faculty_id: user.faculty_id },
+          attributes: [],
+          required: true,
+        },
+      ];
+    } else if (user.role === "VERIFIKATOR_DITMAWA") {
+      scholarshipInclude.where = { verification_level: "DITMAWA" };
+    }
+
+    let studentInclude = {
+      model: User,
+      as: "student",
+      attributes: ["id", "full_name", "email"],
+      required: true,
+    };
+
+    if (user.role === "VERIFIKATOR_FAKULTAS") {
+      studentInclude.include = [
+        {
+          model: Department,
+          as: "department",
+          attributes: ["id", "faculty_id"],
+          where: { faculty_id: user.faculty_id },
+          required: true,
+        },
+      ];
+    }
+
     const applications = await Application.findAll({
-      where: { status: { [Op.ne]: "DRAFT" } },
+      where: whereCondition,
       include: [
         {
-          model: Scholarship,
-          as: "scholarship",
+          model: ScholarshipSchema,
+          as: "schema",
           attributes: ["id", "name", "is_active"],
+          required: true,
+          include: [scholarshipInclude],
         },
-        {
-          model: User,
-          as: "student",
-          attributes: ["id", "full_name", "email"],
-        },
+        studentInclude,
       ],
       order: [["submitted_at", "DESC"]],
     });
@@ -37,21 +92,26 @@ const getAllApplications = async (req, res) => {
       id: app.id,
       nama: app.student?.full_name || "N/A",
       email: app.student?.email || "N/A",
-      beasiswa: app.scholarship?.name || "N/A",
+      beasiswa: app.schema?.scholarship?.name || "N/A",
+      skema: app.schema?.name || "N/A",
       tanggalDaftar: app.submitted_at
         ? new Date(app.submitted_at).toISOString().split("T")[0]
         : null,
       status: app.status,
       notes: app.notes,
       verified_at: app.verified_at,
-      scholarship_id: app.scholarship_id,
+      validated_at: app.validated_at,
+      rejected_at: app.rejected_at,
+      schema_id: app.schema_id,
+      scholarship_id: app.schema?.scholarship_id,
       student_id: app.student_id,
+      verification_level: app.schema?.scholarship?.verification_level,
     }));
 
     return successResponse(
       res,
       "Applications retrieved successfully",
-      transformedApplications
+      transformedApplications,
     );
   } catch (error) {
     console.error("Error fetching applications:", error);
@@ -61,38 +121,131 @@ const getAllApplications = async (req, res) => {
 
 const getApplicationsSummary = async (req, res) => {
   try {
+    const user = req.user;
+
+    let includeOptions = [];
+
+    if (user.role === "VERIFIKATOR_FAKULTAS") {
+      if (!user.faculty_id) {
+        return errorResponse(
+          res,
+          "User tidak memiliki fakultas terdaftar",
+          400,
+        );
+      }
+
+      includeOptions = [
+        {
+          model: ScholarshipSchema,
+          as: "schema",
+          attributes: [],
+          required: true,
+          include: [
+            {
+              model: Scholarship,
+              as: "scholarship",
+              attributes: [],
+              where: { verification_level: "FACULTY" },
+              required: true,
+              include: [
+                {
+                  model: ScholarshipFaculty,
+                  as: "scholarshipFaculties",
+                  where: { faculty_id: user.faculty_id },
+                  attributes: [],
+                  required: true,
+                },
+              ],
+            },
+          ],
+        },
+        {
+          model: User,
+          as: "student",
+          attributes: [],
+          required: true,
+          include: [
+            {
+              model: Department,
+              as: "department",
+              attributes: [],
+              where: { faculty_id: user.faculty_id },
+              required: true,
+            },
+          ],
+        },
+      ];
+    } else if (user.role === "VERIFIKATOR_DITMAWA") {
+      includeOptions = [
+        {
+          model: ScholarshipSchema,
+          as: "schema",
+          attributes: [],
+          required: true,
+          include: [
+            {
+              model: Scholarship,
+              as: "scholarship",
+              attributes: [],
+              where: { verification_level: "DITMAWA" },
+              required: true,
+            },
+          ],
+        },
+      ];
+    }
+
+    const baseWhere = { status: { [Op.ne]: "DRAFT" } };
+
     const totalApplications = await Application.count({
-      where: { status: { [Op.ne]: "DRAFT" } },
+      where: baseWhere,
+      include: includeOptions,
+      distinct: true,
     });
 
     const menungguVerifikasi = await Application.count({
-      where: { status: "MENUNGGU_VERIFIKASI" },
+      where: { ...baseWhere, status: "MENUNGGU_VERIFIKASI" },
+      include: includeOptions,
+      distinct: true,
     });
 
     const menungguValidasi = await Application.count({
-      where: { status: "VERIFIED" },
+      where: { ...baseWhere, status: "VERIFIED" },
+      include: includeOptions,
+      distinct: true,
     });
 
-    const dikembalikan = await Application.count({
-      where: { status: "REJECTED" },
+    const ditolak = await Application.count({
+      where: { ...baseWhere, status: "REJECTED" },
+      include: includeOptions,
+      distinct: true,
     });
 
-    const disetujui = await Application.count({
-      where: { status: "VALIDATED" },
+    const revisi = await Application.count({
+      where: { ...baseWhere, status: "REVISION_NEEDED" },
+      include: includeOptions,
+      distinct: true,
+    });
+
+    const lolosValidasi = await Application.count({
+      where: { ...baseWhere, status: "VALIDATED" },
+      include: includeOptions,
+      distinct: true,
     });
 
     const summary = {
       total: totalApplications,
       menunggu_verifikasi: menungguVerifikasi,
       menunggu_validasi: menungguValidasi,
-      dikembalikan: dikembalikan,
-      disetujui: disetujui,
+      ditolak: ditolak,
+      revisi: revisi,
+      lolos_validasi: lolosValidasi,
     };
 
     return successResponse(
       res,
       "Applications summary retrieved successfully",
-      summary
+      summary,
     );
   } catch (error) {
     console.error("Error fetching applications summary:", error);
@@ -107,24 +260,40 @@ const getApplicationDetail = async (req, res) => {
     const application = await Application.findByPk(id, {
       include: [
         {
-          model: Scholarship,
-          as: "scholarship",
+          model: ScholarshipSchema,
+          as: "schema",
           attributes: [
             "id",
             "name",
             "description",
-            "organizer",
-            "year",
             "quota",
-            "start_date",
-            "end_date",
-            "scholarship_value",
-            "duration_semesters",
-            "website_url",
+            "gpa_minimum",
+            "semester_minimum",
           ],
           include: [
             {
-              model: ScholarshipRequirement,
+              model: Scholarship,
+              as: "scholarship",
+              attributes: [
+                "id",
+                "name",
+                "description",
+                "organizer",
+                "year",
+                "scholarship_value",
+                "duration_semesters",
+                "verification_level",
+              ],
+              include: [
+                {
+                  model: ScholarshipBenefit,
+                  as: "benefits",
+                  attributes: ["id", "benefit_text"],
+                },
+              ],
+            },
+            {
+              model: ScholarshipSchemaRequirement,
               as: "requirements",
               attributes: [
                 "id",
@@ -134,14 +303,14 @@ const getApplicationDetail = async (req, res) => {
               ],
             },
             {
-              model: ScholarshipBenefit,
-              as: "benefits",
-              attributes: ["id", "benefit_text"],
+              model: ScholarshipSchemaDocument,
+              as: "documents",
+              attributes: ["id", "document_name"],
             },
             {
-              model: ScholarshipDocument,
-              as: "scholarshipDocuments",
-              attributes: ["id", "document_name"],
+              model: ScholarshipSchemaStage,
+              as: "stages",
+              attributes: ["id", "stage_name", "order_no"],
             },
           ],
         },
@@ -175,7 +344,7 @@ const getApplicationDetail = async (req, res) => {
         },
         {
           model: FormAnswer,
-          as: "FormAnswers",
+          as: "formAnswers",
           include: [
             {
               model: FormField,
@@ -199,6 +368,16 @@ const getApplicationDetail = async (req, res) => {
           as: "rejector",
           attributes: ["id", "full_name", "email", "role"],
         },
+        {
+          model: User,
+          as: "revision_requester",
+          attributes: ["id", "full_name", "email", "role"],
+        },
+        {
+          model: ApplicationDocument,
+          as: "documents",
+          attributes: ["id", "document_type", "file_path", "createdAt"],
+        },
       ],
     });
 
@@ -209,8 +388,8 @@ const getApplicationDetail = async (req, res) => {
     const formAnswers = {};
     const documentAnswers = [];
 
-    if (application.FormAnswers) {
-      application.FormAnswers.forEach((answer) => {
+    if (application.formAnswers) {
+      application.formAnswers.forEach((answer) => {
         if (answer.FormField?.type === "FILE" && answer.file_path) {
           documentAnswers.push({
             id: answer.id,
@@ -219,6 +398,7 @@ const getApplicationDetail = async (req, res) => {
             filePath: answer.file_path.replace(/\\/g, "/"),
             mimeType: answer.mime_type,
             uploadedAt: answer.uploaded_at || answer.createdAt,
+            field_id: answer.field_id,
           });
         } else if (answer.answer_text) {
           formAnswers[answer.FormField?.label || `Field ${answer.field_id}`] =
@@ -228,7 +408,7 @@ const getApplicationDetail = async (req, res) => {
     }
 
     const requirementsHtml =
-      application.scholarship?.requirements
+      application.schema?.requirements
         ?.map((req) => {
           if (req.requirement_type === "TEXT") {
             return `<p>${req.requirement_text}</p>`;
@@ -239,15 +419,17 @@ const getApplicationDetail = async (req, res) => {
         })
         .join("") || "<p>Tidak ada persyaratan khusus</p>";
 
-    const benefitsHtml =
-      application.scholarship?.benefits
-        ?.map((benefit) => `<p>• ${benefit.benefit_text}</p>`)
-        .join("") || "<p>Informasi manfaat belum tersedia</p>";
-
     const requiredDocuments =
-      application.scholarship?.scholarshipDocuments
+      application.schema?.documents
         ?.map((doc) => doc.document_name)
         .join(", ") || "Tidak ada dokumen khusus yang diperlukan";
+
+    const benefitsHtml =
+      application.schema?.scholarship?.benefits
+        ?.map(
+          (benefit, index) => `<p>${index + 1}. ${benefit.benefit_text}</p>`,
+        )
+        .join("") || "<p>Tidak ada benefit yang tercantum</p>";
 
     const detailData = {
       id: application.id,
@@ -257,7 +439,13 @@ const getApplicationDetail = async (req, res) => {
       verified_at: application.verified_at,
       validated_at: application.validated_at,
       rejected_at: application.rejected_at,
+      revision_requested_at: application.revision_requested_at,
+      revision_deadline: application.revision_deadline,
       form_data: formAnswers,
+      verification_level: application.schema?.scholarship?.verification_level,
+
+      scholarship_id: application.schema?.scholarship?.id,
+      schema_id: application.schema_id,
 
       student: {
         id: application.student?.id,
@@ -275,30 +463,38 @@ const getApplicationDetail = async (req, res) => {
       verificator: application.verificator,
       validator: application.validator,
       rejector: application.rejector,
+      revision_requester: application.revision_requester,
 
       scholarship: {
-        id: application.scholarship?.id,
-        name: application.scholarship?.name || "N/A",
-        description: application.scholarship?.description || "N/A",
-        organizer: application.scholarship?.organizer || "N/A",
-        year: application.scholarship?.year,
-        quota: application.scholarship?.quota,
-        start_date: application.scholarship?.start_date,
-        end_date: application.scholarship?.end_date,
-        scholarship_value: application.scholarship?.scholarship_value,
-        duration_semesters: application.scholarship?.duration_semesters,
-        website_url: application.scholarship?.website_url,
+        id: application.schema?.scholarship?.id,
+        name: application.schema?.scholarship?.name || "N/A",
+        description: application.schema?.scholarship?.description || "N/A",
+        organizer: application.schema?.scholarship?.organizer || "N/A",
+        year: application.schema?.scholarship?.year,
+        scholarship_value: application.schema?.scholarship?.scholarship_value,
+        duration_semesters: application.schema?.scholarship?.duration_semesters,
+        schema_name: application.schema?.name || "N/A",
         requirements: requirementsHtml,
-        benefits: benefitsHtml,
         required_documents: requiredDocuments,
+        benefits: benefitsHtml,
       },
+
       documents: documentAnswers,
+
+      formAnswers:
+        application.formAnswers?.map((answer) => ({
+          field_id: answer.field_id,
+          answer_text: answer.answer_text,
+          file_path: answer.file_path,
+          mime_type: answer.mime_type,
+          uploaded_at: answer.uploaded_at,
+        })) || [],
     };
 
     return successResponse(
       res,
       "Application detail retrieved successfully",
-      detailData
+      detailData,
     );
   } catch (error) {
     console.error("Error fetching application detail:", error);
@@ -306,8 +502,60 @@ const getApplicationDetail = async (req, res) => {
   }
 };
 
+const getApplicationComments = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    const application = await Application.findByPk(id);
+
+    if (!application) {
+      return errorResponse(res, "Application not found", 404);
+    }
+
+    if (userRole === "MAHASISWA" && application.student_id !== userId) {
+      return errorResponse(
+        res,
+        "You don't have access to view these comments",
+        403,
+      );
+    }
+
+    const comments = await ApplicationComment.findAll({
+      where: {
+        application_id: id,
+        is_visible_to_student: true,
+      },
+      include: [
+        {
+          model: User,
+          as: "commenter",
+          attributes: ["id", "full_name", "role"],
+        },
+        {
+          model: ApplicationCommentTemplate,
+          as: "template",
+          attributes: ["id", "template_name"],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+
+    return successResponse(
+      res,
+      "Application comments retrieved successfully",
+      comments,
+    );
+  } catch (error) {
+    console.error("Error fetching application comments:", error);
+    return errorResponse(res, "Failed to fetch application comments", 500);
+  }
+};
+
 module.exports = {
   getAllApplications,
   getApplicationsSummary,
   getApplicationDetail,
+  getApplicationComments,
 };

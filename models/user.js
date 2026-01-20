@@ -37,6 +37,10 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "rejected_by",
         as: "rejector",
       });
+      User.hasMany(models.Application, {
+        foreignKey: "revision_requested_by",
+        as: "revision_requester",
+      });
       User.hasMany(models.ApplicationDocument, {
         foreignKey: "checked_by",
         as: "checker",
@@ -80,7 +84,9 @@ module.exports = (sequelize, DataTypes) => {
       role: {
         type: DataTypes.ENUM(
           "MAHASISWA",
-          "VERIFIKATOR",
+          "VERIFIKATOR_FAKULTAS",
+          "VERIFIKATOR_DITMAWA",
+          "VALIDATOR_DITMAWA",
           "PIMPINAN_DITMAWA",
           "PIMPINAN_FAKULTAS",
           "SUPERADMIN"

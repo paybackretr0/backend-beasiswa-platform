@@ -8,21 +8,30 @@ const {
   getAllApplications,
   getApplicationsSummary,
   getApplicationDetail,
+  getApplicationComments,
 } = require("../controllers/application.controller");
 const authorize = require("../middlewares/role.middleware");
+
+router.get("/:id/comments", authenticate, verifiedUser, getApplicationComments);
 
 router.get(
   "/user/:id",
   authenticate,
   verifiedUser,
   authorize(["MAHASISWA"]),
-  getApplicationDetail
+  getApplicationDetail,
 );
 
 router.use(
   authenticate,
   verifiedUser,
-  authorize(["SUPERADMIN", "PIMPINAN_DITMAWA", "VERIFIKATOR"])
+  authorize([
+    "SUPERADMIN",
+    "PIMPINAN_DITMAWA",
+    "VERIFIKATOR_FAKULTAS",
+    "VERIFIKATOR_DITMAWA",
+    "VALIDATOR_DITMAWA",
+  ]),
 );
 router.get("/", getAllApplications);
 router.get("/summary", getApplicationsSummary);

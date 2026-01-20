@@ -220,7 +220,27 @@ const login = async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    const user = await User.findOne({ where: { email } });
+    const user = await User.findOne({
+      where: { email },
+      include: [
+        {
+          model: Faculty,
+          as: "faculty",
+          attributes: ["id", "code", "name"],
+        },
+        {
+          model: Department,
+          as: "department",
+          attributes: ["id", "code", "name"],
+        },
+        {
+          model: StudyProgram,
+          as: "study_program",
+          attributes: ["id", "code", "degree"],
+        },
+      ],
+    });
+
     if (!user) {
       return errorResponse(res, "Invalid email or password", 401);
     }
@@ -258,9 +278,40 @@ const login = async (req, res) => {
         full_name: user.full_name,
         email: user.email,
         role: user.role,
+        nim: user.nim,
+        phone_number: user.phone_number,
+        gender: user.gender,
+        birth_date: user.birth_date,
+        birth_place: user.birth_place,
+        emailVerified: user.emailVerified,
+        faculty_id: user.faculty_id,
+        faculty: user.faculty
+          ? {
+              id: user.faculty.id,
+              code: user.faculty.code,
+              name: user.faculty.name,
+            }
+          : null,
+        department_id: user.department_id,
+        department: user.department
+          ? {
+              id: user.department.id,
+              code: user.department.code,
+              name: user.department.name,
+            }
+          : null,
+        study_program_id: user.study_program_id,
+        study_program: user.study_program
+          ? {
+              id: user.study_program.id,
+              code: user.study_program.code,
+              degree: user.study_program.degree,
+            }
+          : null,
       },
     });
   } catch (error) {
+    console.error("Login error:", error);
     return errorResponse(res, "Internal server error", 500, error.message);
   }
 };

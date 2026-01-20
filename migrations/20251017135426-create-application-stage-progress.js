@@ -24,7 +24,7 @@ module.exports = {
         type: Sequelize.UUID,
         allowNull: false,
         references: {
-          model: "scholarship_stages",
+          model: "scholarship_schema_stages",
           key: "id",
         },
         onUpdate: "CASCADE",
@@ -68,6 +68,18 @@ module.exports = {
       fields: ["application_id", "stage_id"],
       type: "unique",
       name: "application_stage_unique",
+    });
+
+    await queryInterface.addIndex(
+      "application_stage_progress",
+      ["application_id"],
+      {
+        name: "application_stage_progress_idx_application",
+      }
+    );
+
+    await queryInterface.addIndex("application_stage_progress", ["stage_id"], {
+      name: "application_stage_progress_idx_stage",
     });
   },
 
