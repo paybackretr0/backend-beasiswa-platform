@@ -13,12 +13,13 @@ module.exports = {
       nim: {
         type: Sequelize.STRING(50),
         allowNull: false,
+        comment: "Kunci utama untuk tembak ke API DTI",
       },
       student_name: {
         type: Sequelize.STRING(191),
         allowNull: false,
       },
-      semester: {
+      student_batch: {
         type: Sequelize.INTEGER,
         allowNull: true,
       },
@@ -26,41 +27,46 @@ module.exports = {
         type: Sequelize.STRING(191),
         allowNull: true,
       },
-      assistance_scheme: {
-        type: Sequelize.STRING(191),
+      semester: {
+        type: Sequelize.INTEGER,
         allowNull: true,
       },
-      living_expenses: {
-        type: Sequelize.DECIMAL(15, 2),
-        allowNull: true,
-      },
-      tuition_fee: {
-        type: Sequelize.DECIMAL(15, 2),
-        allowNull: true,
-      },
-      scholarship_category: {
-        type: Sequelize.STRING(191),
-        allowNull: true,
-        comment: "e.g., KIP Kuliah",
-      },
-      acceptance_year: {
+      fiscal_year: {
         type: Sequelize.INTEGER,
         allowNull: false,
       },
-      acceptance_period: {
+      period: {
         type: Sequelize.STRING(50),
+        allowNull: true,
+      },
+      ipk: {
+        type: Sequelize.FLOAT,
+        allowNull: true,
+        defaultValue: 0.0,
+        comment: "Nilai IPK hasil tarikan dari API",
+      },
+      academic_status: {
+        type: Sequelize.ENUM("NORMAL", "WARNING", "REVOKED"),
+        allowNull: true,
+        defaultValue: "NORMAL",
+        comment: "Otomatis berubah jadi WARNING jika IPK < 2.75",
+      },
+      last_synced_at: {
+        type: Sequelize.DATE,
+        allowNull: true,
+        comment: "Waktu terakhir sukses sync dengan API DTI",
+      },
+      assistance_scheme: {
+        type: Sequelize.STRING(191),
         allowNull: true,
       },
       imported_by: {
         type: Sequelize.UUID,
         allowNull: true,
-        comment: "ID Superadmin yang mengimpor data",
         references: {
           model: "users",
           key: "id",
         },
-        onUpdate: "CASCADE",
-        onDelete: "SET NULL",
       },
       imported_at: {
         type: Sequelize.DATE,
@@ -69,21 +75,14 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex("government_scholarships", ["nim"], {
-      name: "government_scholarships_idx_nim",
-    });
-    await queryInterface.addIndex(
-      "government_scholarships",
-      ["acceptance_year"],
-      {
-        name: "government_scholarships_idx_year",
-      }
-    );
-    await queryInterface.addIndex(
-      "government_scholarships",
-      ["scholarship_category"],
-      { name: "government_scholarships_idx_category" }
-    );
+    await queryInterface.addIndex("government_scholarships", ["nim"]);
+    await queryInterface.addIndex("government_scholarships", [
+      "academic_status",
+    ]);
+    await queryInterface.addIndex("government_scholarships", [
+      "fiscal_year",
+      "period",
+    ]);
   },
 
   async down(queryInterface, Sequelize) {
