@@ -2,6 +2,7 @@ const {
   Application,
   User,
   Scholarship,
+  ScholarshipSchema,
   Faculty,
   Department,
   StudyProgram,
@@ -26,6 +27,7 @@ const getStatusLabel = (status) => {
     VERIFIED: "Terverifikasi - Menunggu Validasi",
     REJECTED: "Ditolak",
     VALIDATED: "Disetujui",
+    REVISION_NEEDED: "Perlu Revisi",
   };
   return statusMap[status] || status;
 };
@@ -84,6 +86,7 @@ const getSelectionSummaryData = async (year) => {
     menungguVerifikasi,
     terverifikasi,
     tidakLolosSeleksi,
+    perluRevisi,
   ] = await Promise.all([
     Application.count({
       where: {
@@ -121,6 +124,15 @@ const getSelectionSummaryData = async (year) => {
         },
       },
     }),
+    Application.count({
+      where: {
+        status: "REVISION_NEEDED",
+        createdAt: {
+          [Op.gte]: new Date(`${year}-01-01`),
+          [Op.lte]: new Date(`${year}-12-31`),
+        },
+      },
+    }),
   ]);
 
   return {
@@ -128,6 +140,7 @@ const getSelectionSummaryData = async (year) => {
     menungguVerifikasi,
     terverifikasi,
     tidakLolosSeleksi,
+    perluRevisi,
   };
 };
 
@@ -179,6 +192,7 @@ const getApplicationsListData = async (filters) => {
     ];
   }
 
+  // ✅ FIX: Include melalui ScholarshipSchema
   const applications = await Application.findAll({
     where: whereCondition,
     include: [
@@ -191,6 +205,10 @@ const getApplicationsListData = async (filters) => {
           {
             model: StudyProgram,
             as: "study_program",
+            where: Object.keys(studyProgramWhereCondition).length
+              ? studyProgramWhereCondition
+              : undefined,
+            required: false,
             attributes: ["id", "degree"],
             include: [
               {
@@ -218,9 +236,16 @@ const getApplicationsListData = async (filters) => {
         ],
       },
       {
-        model: Scholarship,
-        as: "scholarship",
+        model: ScholarshipSchema,
+        as: "schema",
         attributes: ["id", "name"],
+        include: [
+          {
+            model: Scholarship,
+            as: "scholarship",
+            attributes: ["id", "name"],
+          },
+        ],
       },
     ],
     order: [["createdAt", "DESC"]],
@@ -235,7 +260,7 @@ const getApplicationsListData = async (filters) => {
     prodi: app.student?.study_program?.degree || "N/A",
     gender: app.student?.gender === "L" ? "Laki-laki" : "Perempuan",
     status: getStatusLabel(app.status),
-    beasiswa: app.scholarship?.name || "N/A",
+    beasiswa: app.schema?.scholarship?.name || "N/A",
     tanggalDaftar: app.createdAt,
   }));
 };
@@ -255,7 +280,7 @@ const getMonthlyTrendData = async (year) => {
     {
       replacements: { year },
       type: sequelize.QueryTypes.SELECT,
-    }
+    },
   );
 
   const months = [
@@ -303,7 +328,7 @@ const getFacultyDistributionData = async (year) => {
     {
       replacements: { year },
       type: sequelize.QueryTypes.SELECT,
-    }
+    },
   );
 };
 
@@ -327,7 +352,7 @@ const getDepartmentDistributionData = async (year) => {
     {
       replacements: { year },
       type: sequelize.QueryTypes.SELECT,
-    }
+    },
   );
 };
 
@@ -351,7 +376,7 @@ const getStudyProgramDistributionData = async (year) => {
     {
       replacements: { year },
       type: sequelize.QueryTypes.SELECT,
-    }
+    },
   );
 };
 
@@ -377,7 +402,7 @@ const getGenderDistributionData = async (year) => {
     {
       replacements: { year },
       type: sequelize.QueryTypes.SELECT,
-    }
+    },
   );
 
   return genderData.map((item) => ({
@@ -395,7 +420,8 @@ const getOverallRecapitulation = async (year) => {
       COUNT(DISTINCT a.id) as jumlah_pendaftar,
       COUNT(DISTINCT CASE WHEN a.status = 'VALIDATED' THEN a.id END) as jumlah_penerima
     FROM scholarships s
-    LEFT JOIN applications a ON s.id = a.scholarship_id 
+    LEFT JOIN scholarship_schemas ss ON s.id = ss.scholarship_id
+    LEFT JOIN applications a ON ss.id = a.schema_id 
       AND a.status != 'DRAFT'
       AND YEAR(a.createdAt) = :year
     WHERE s.year = :year AND s.is_active = true
@@ -406,17 +432,17 @@ const getOverallRecapitulation = async (year) => {
     {
       replacements: { year },
       type: sequelize.QueryTypes.SELECT,
-    }
+    },
   );
 
   const total = {
     jumlah_pendaftar: result.reduce(
       (sum, item) => sum + parseInt(item.jumlah_pendaftar || 0),
-      0
+      0,
     ),
     jumlah_penerima: result.reduce(
       (sum, item) => sum + parseInt(item.jumlah_penerima || 0),
-      0
+      0,
     ),
   };
 
@@ -444,7 +470,8 @@ const getOngoingRecipients = async (year) => {
       s.scholarship_value as nilai_beasiswa
     FROM applications a
     INNER JOIN users u ON a.student_id = u.id
-    INNER JOIN scholarships s ON a.scholarship_id = s.id
+    INNER JOIN scholarship_schemas ss ON a.schema_id = ss.id
+    INNER JOIN scholarships s ON ss.scholarship_id = s.id
     LEFT JOIN study_programs sp ON u.study_program_id = sp.id
     LEFT JOIN departments d ON sp.department_id = d.id
     LEFT JOIN faculties f ON d.faculty_id = f.id
@@ -456,7 +483,7 @@ const getOngoingRecipients = async (year) => {
     {
       replacements: { year },
       type: sequelize.QueryTypes.SELECT,
-    }
+    },
   );
 };
 
@@ -480,19 +507,27 @@ const getRecipientsByScholarshipDetail = async (year, scholarshipId) => {
       DATE_ADD(a.createdAt, INTERVAL (s.duration_semesters * 6) MONTH) as estimasi_selesai
     FROM applications a
     INNER JOIN users u ON a.student_id = u.id
-    INNER JOIN scholarships s ON a.scholarship_id = s.id
+    INNER JOIN scholarship_schemas ss ON a.schema_id = ss.id
+    INNER JOIN scholarships s ON ss.scholarship_id = s.id
     LEFT JOIN study_programs sp ON u.study_program_id = sp.id
     LEFT JOIN departments d ON sp.department_id = d.id
     LEFT JOIN faculties f ON d.faculty_id = f.id
     WHERE a.status = 'VALIDATED'
-      AND a.scholarship_id = :scholarshipId
+      AND s.id = :scholarshipId
       AND YEAR(a.createdAt) = :year
-    ORDER BY a.createdAt DESC
+    ORDER BY 
+      CASE 
+        WHEN a.status = 'VALIDATED' THEN 1
+        WHEN a.status = 'VERIFIED' THEN 2
+        WHEN a.status = 'MENUNGGU_VERIFIKASI' THEN 3
+        WHEN a.status = 'REJECTED' THEN 4
+      END,
+      a.createdAt DESC
     `,
     {
       replacements: { year, scholarshipId },
       type: sequelize.QueryTypes.SELECT,
-    }
+    },
   );
 };
 
@@ -513,33 +548,44 @@ const getApplicantsByScholarshipDetail = async (year, scholarshipId) => {
       CASE 
         WHEN a.status = 'MENUNGGU_VERIFIKASI' THEN 'Menunggu Verifikasi'
         WHEN a.status = 'VERIFIED' THEN 'Terverifikasi - Menunggu Validasi'
-        WHEN a.status = 'REJECTED' THEN 'Ditolak'
         WHEN a.status = 'VALIDATED' THEN 'Disetujui'
+        WHEN a.status = 'REJECTED' THEN 'Ditolak'
+        WHEN a.status = 'REVISION_NEEDED' THEN 'Perlu Revisi'
         ELSE a.status
       END as status_label,
-      a.notes as alasan_ditolak
+      COALESCE(
+        (SELECT comment_text 
+         FROM application_comments 
+         WHERE application_id = a.id 
+           AND comment_type = 'REJECTION'
+         ORDER BY createdAt DESC 
+         LIMIT 1), 
+        '-'
+      ) as alasan_ditolak
     FROM applications a
     INNER JOIN users u ON a.student_id = u.id
-    INNER JOIN scholarships s ON a.scholarship_id = s.id
+    INNER JOIN scholarship_schemas ss ON a.schema_id = ss.id
+    INNER JOIN scholarships s ON ss.scholarship_id = s.id
     LEFT JOIN study_programs sp ON u.study_program_id = sp.id
     LEFT JOIN departments d ON sp.department_id = d.id
     LEFT JOIN faculties f ON d.faculty_id = f.id
-    WHERE a.scholarship_id = :scholarshipId
-      AND a.status != 'DRAFT'
+    WHERE a.status != 'DRAFT'
+      AND s.id = :scholarshipId
       AND YEAR(a.createdAt) = :year
     ORDER BY 
-      CASE a.status
-        WHEN 'VALIDATED' THEN 1
-        WHEN 'VERIFIED' THEN 2
-        WHEN 'MENUNGGU_VERIFIKASI' THEN 3
-        WHEN 'REJECTED' THEN 4
+      CASE 
+        WHEN a.status = 'VALIDATED' THEN 1
+        WHEN a.status = 'VERIFIED' THEN 2
+        WHEN a.status = 'MENUNGGU_VERIFIKASI' THEN 3
+        WHEN a.status = 'REVISION_NEEDED' THEN 4
+        WHEN a.status = 'REJECTED' THEN 5
       END,
       a.createdAt DESC
     `,
     {
       replacements: { year, scholarshipId },
       type: sequelize.QueryTypes.SELECT,
-    }
+    },
   );
 };
 
@@ -552,7 +598,8 @@ const getAllScholarshipsWithData = async (year) => {
       COUNT(CASE WHEN a.status = 'VALIDATED' THEN 1 END) as jumlah_penerima,
       COUNT(CASE WHEN a.status != 'DRAFT' THEN 1 END) as jumlah_pendaftar
     FROM scholarships s
-    LEFT JOIN applications a ON s.id = a.scholarship_id 
+    LEFT JOIN scholarship_schemas ss ON s.id = ss.scholarship_id
+    LEFT JOIN applications a ON ss.id = a.schema_id 
       AND YEAR(a.createdAt) = :year
     WHERE s.year = :year AND s.is_active = true
     GROUP BY s.id, s.name
@@ -562,7 +609,7 @@ const getAllScholarshipsWithData = async (year) => {
     {
       replacements: { year },
       type: sequelize.QueryTypes.SELECT,
-    }
+    },
   );
 };
 
@@ -585,7 +632,7 @@ const exportLaporanBeasiswa = async (req, res) => {
     ] = await Promise.all([
       getSummaryData(year),
       getSelectionSummaryData(year),
-      getApplicationsListData({ year }),
+      getApplicationsListData({ year }), // ✅ Fixed
       getMonthlyTrendData(year),
       getFacultyDistributionData(year),
       getDepartmentDistributionData(year),
@@ -598,6 +645,7 @@ const exportLaporanBeasiswa = async (req, res) => {
 
     const workbook = new ExcelJS.Workbook();
 
+    // Summary Sheet
     const summarySheet = workbook.addWorksheet("Ringkasan");
     summarySheet.columns = [
       { header: "Keterangan", key: "keterangan", width: 40 },
@@ -619,7 +667,7 @@ const exportLaporanBeasiswa = async (req, res) => {
         nilai: mainSummary.beasiswaSudahTutup,
       },
       { keterangan: "Total Mahasiswa", nilai: mainSummary.totalMahasiswa },
-      { keterangan: "", nilai: "" }, // Empty row
+      { keterangan: "", nilai: "" },
       { keterangan: "RINGKASAN SELEKSI", nilai: "" },
       {
         keterangan: "Jumlah Mahasiswa Diterima",
@@ -652,29 +700,19 @@ const exportLaporanBeasiswa = async (req, res) => {
           pattern: "solid",
           fgColor: { argb: "FF4472C4" },
         };
-        row.alignment = { vertical: "middle", horizontal: "left" };
         row.height = 25;
-        row.eachCell((cell) => {
-          cell.border = {
-            top: { style: "thin" },
-            left: { style: "thin" },
-            bottom: { style: "thin" },
-            right: { style: "thin" },
-          };
-        });
-      } else if (item.keterangan === "") {
-        row.height = 5;
-      } else {
+      } else if (item.keterangan !== "") {
         applyDataRowStyle(row, index);
       }
     });
 
     applyCenterAlignment(summarySheet, ["nilai"]);
 
-    const recapSheet = workbook.addWorksheet("Rekapitulasi Gabungan");
+    // Rekapitulasi Keseluruhan
+    const recapSheet = workbook.addWorksheet("Rekapitulasi Keseluruhan");
     recapSheet.columns = [
       { header: "No", key: "no", width: 8 },
-      { header: "Beasiswa", key: "beasiswa", width: 45 },
+      { header: "Nama Beasiswa", key: "beasiswa", width: 40 },
       { header: "Jumlah Pendaftar", key: "jumlah_pendaftar", width: 20 },
       { header: "Jumlah Penerima", key: "jumlah_penerima", width: 20 },
     ];
@@ -683,12 +721,7 @@ const exportLaporanBeasiswa = async (req, res) => {
 
     if (overallRecap.data && overallRecap.data.length > 0) {
       overallRecap.data.forEach((item, index) => {
-        const row = recapSheet.addRow({
-          no: index + 1,
-          beasiswa: item.beasiswa,
-          jumlah_pendaftar: parseInt(item.jumlah_pendaftar || 0),
-          jumlah_penerima: parseInt(item.jumlah_penerima || 0),
-        });
+        const row = recapSheet.addRow(item);
         applyDataRowStyle(row, index);
       });
 
@@ -707,9 +740,9 @@ const exportLaporanBeasiswa = async (req, res) => {
       "jumlah_pendaftar",
       "jumlah_penerima",
     ]);
-    recapSheet.getColumn("beasiswa").alignment = { vertical: "middle" };
 
-    const ongoingSheet = workbook.addWorksheet("Data Penerima");
+    // Penerima Beasiswa yang Sedang Berjalan
+    const ongoingSheet = workbook.addWorksheet("Penerima Sedang Berjalan");
     ongoingSheet.columns = [
       { header: "Nama", key: "nama", width: 25 },
       { header: "NIM", key: "nim", width: 18 },
@@ -717,11 +750,11 @@ const exportLaporanBeasiswa = async (req, res) => {
       { header: "Departemen", key: "departemen", width: 30 },
       { header: "Program Studi", key: "prodi", width: 20 },
       { header: "Beasiswa", key: "beasiswa", width: 35 },
+      { header: "Durasi (Semester)", key: "durasi_semester", width: 18 },
       { header: "Tanggal Diterima", key: "tanggal_diterima", width: 20 },
-      { header: "Durasi (Semester)", key: "durasi_semester", width: 20 },
       { header: "Estimasi Selesai", key: "estimasi_selesai", width: 20 },
       { header: "Status", key: "status_penerima", width: 20 },
-      { header: "Nilai Beasiswa (Rp)", key: "nilai_beasiswa", width: 20 },
+      { header: "Nilai Beasiswa (Rp)", key: "nilai_beasiswa", width: 22 },
     ];
 
     applyHeaderStyle(ongoingSheet.getRow(1));
@@ -735,15 +768,17 @@ const exportLaporanBeasiswa = async (req, res) => {
           departemen: item.departemen || "N/A",
           prodi: item.prodi || "N/A",
           beasiswa: item.beasiswa,
+          durasi_semester: item.durasi_semester || "-",
           tanggal_diterima: item.tanggal_diterima
             ? new Date(item.tanggal_diterima).toLocaleDateString("id-ID")
             : "-",
-          durasi_semester: item.durasi_semester,
           estimasi_selesai: item.estimasi_selesai
             ? new Date(item.estimasi_selesai).toLocaleDateString("id-ID")
             : "-",
           status_penerima: item.status_penerima,
-          nilai_beasiswa: item.nilai_beasiswa,
+          nilai_beasiswa: item.nilai_beasiswa
+            ? `Rp ${parseInt(item.nilai_beasiswa).toLocaleString("id-ID")}`
+            : "-",
         });
         applyDataRowStyle(row, index);
       });
@@ -758,6 +793,7 @@ const exportLaporanBeasiswa = async (req, res) => {
       "nilai_beasiswa",
     ]);
 
+    // Data Pendaftar Sheet
     const pendaftarSheet = workbook.addWorksheet("Data Pendaftar");
     pendaftarSheet.columns = [
       { header: "Nama", key: "nama", width: 25 },
@@ -785,6 +821,7 @@ const exportLaporanBeasiswa = async (req, res) => {
 
     applyCenterAlignment(pendaftarSheet, ["nim", "gender", "tanggalDaftar"]);
 
+    // Monthly Trend Sheet
     const monthlySheet = workbook.addWorksheet("Tren Bulanan");
     monthlySheet.columns = [
       { header: "Bulan", key: "bulan", width: 15 },
@@ -803,6 +840,7 @@ const exportLaporanBeasiswa = async (req, res) => {
 
     applyCenterAlignment(monthlySheet, ["bulan", "jumlah"]);
 
+    // Fakultas Distribution
     const fakultasSheet = workbook.addWorksheet("Distribusi Fakultas");
     fakultasSheet.columns = [
       { header: "Fakultas", key: "fakultas", width: 40 },
@@ -823,6 +861,7 @@ const exportLaporanBeasiswa = async (req, res) => {
 
     applyCenterAlignment(fakultasSheet, ["jumlah"]);
 
+    // Departemen Distribution
     const departemenSheet = workbook.addWorksheet("Distribusi Departemen");
     departemenSheet.columns = [
       { header: "Departemen", key: "departemen", width: 40 },
@@ -843,6 +882,7 @@ const exportLaporanBeasiswa = async (req, res) => {
 
     applyCenterAlignment(departemenSheet, ["jumlah"]);
 
+    // Program Studi Distribution
     const prodiSheet = workbook.addWorksheet("Distribusi Prodi");
     prodiSheet.columns = [
       { header: "Program Studi", key: "prodi", width: 40 },
@@ -863,6 +903,7 @@ const exportLaporanBeasiswa = async (req, res) => {
 
     applyCenterAlignment(prodiSheet, ["jumlah"]);
 
+    // Gender Distribution
     const genderSheet = workbook.addWorksheet("Distribusi Gender");
     genderSheet.columns = [
       { header: "Gender", key: "gender", width: 20 },
@@ -883,14 +924,16 @@ const exportLaporanBeasiswa = async (req, res) => {
 
     applyCenterAlignment(genderSheet, ["gender", "jumlah"]);
 
+    // Detail per Beasiswa
     for (const scholarship of scholarshipsWithData) {
       let baseSheetName = scholarship.name.substring(0, 25);
       baseSheetName = baseSheetName.replace(/[\[\]\*\?\/\\:]/g, "");
 
+      // Sheet Penerima
       if (scholarship.jumlah_penerima > 0) {
         const recipientsDetail = await getRecipientsByScholarshipDetail(
           year,
-          scholarship.id
+          scholarship.id,
         );
 
         const recipientSheetName = `Penerima - ${baseSheetName}`;
@@ -953,6 +996,7 @@ const exportLaporanBeasiswa = async (req, res) => {
           });
 
           recipientSheet.addRow({});
+
           const summaryRow = recipientSheet.addRow({
             no: "",
             nama: "TOTAL PENERIMA",
@@ -987,9 +1031,10 @@ const exportLaporanBeasiswa = async (req, res) => {
         ]);
       }
 
+      // Sheet Pendaftar per Beasiswa
       const applicantsDetail = await getApplicantsByScholarshipDetail(
         year,
-        scholarship.id
+        scholarship.id,
       );
 
       const applicantSheetName = `Pendaftar - ${baseSheetName}`;
@@ -1032,6 +1077,7 @@ const exportLaporanBeasiswa = async (req, res) => {
           });
           applyDataRowStyle(row, index);
 
+          // Color coding for status
           if (item.status === "VALIDATED") {
             row.getCell("status_label").fill = {
               type: "pattern",
@@ -1060,18 +1106,29 @@ const exportLaporanBeasiswa = async (req, res) => {
               fgColor: { argb: "FFFFF3CD" },
             };
             row.getCell("status_label").font = { color: { argb: "FF856404" } };
+          } else if (item.status === "REVISION_NEEDED") {
+            row.getCell("status_label").fill = {
+              type: "pattern",
+              pattern: "solid",
+              fgColor: { argb: "FFFFEAA7" },
+            };
+            row.getCell("status_label").font = { color: { argb: "FF856404" } };
           }
         });
 
         applicantSheet.addRow({});
 
+        // Status summary
         const statusCounts = {
           validated: applicantsDetail.filter((a) => a.status === "VALIDATED")
             .length,
           verified: applicantsDetail.filter((a) => a.status === "VERIFIED")
             .length,
           pending: applicantsDetail.filter(
-            (a) => a.status === "MENUNGGU_VERIFIKASI"
+            (a) => a.status === "MENUNGGU_VERIFIKASI",
+          ).length,
+          revision: applicantsDetail.filter(
+            (a) => a.status === "REVISION_NEEDED",
           ).length,
           rejected: applicantsDetail.filter((a) => a.status === "REJECTED")
             .length,
@@ -1109,6 +1166,11 @@ const exportLaporanBeasiswa = async (req, res) => {
         });
         applicantSheet.addRow({
           no: "",
+          nama: "- Perlu Revisi",
+          nim: statusCounts.revision,
+        });
+        applicantSheet.addRow({
+          no: "",
           nama: "- Ditolak",
           nim: statusCounts.rejected,
         });
@@ -1131,6 +1193,7 @@ const exportLaporanBeasiswa = async (req, res) => {
       ]);
     }
 
+    // Generate file
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const fileName = `laporan_beasiswa_${year}_${timestamp}.xlsx`;
     const tempDir = path.join(__dirname, "../uploads/exports");
@@ -1141,7 +1204,7 @@ const exportLaporanBeasiswa = async (req, res) => {
 
     res.setHeader(
       "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     );
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
 
@@ -1156,23 +1219,24 @@ const exportLaporanBeasiswa = async (req, res) => {
         fs.unlink(filePath, () => {});
       }, 10000);
     });
+
+    // Log activity
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "EXPORT_REPORT",
+      entity_type: "Application",
+      entity_id: req.user.id,
+      description: `${userName} mengekspor laporan beasiswa tahun ${year}`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
   } catch (error) {
     console.error("Error exporting laporan beasiswa:", error);
     if (!res.headersSent) {
       return errorResponse(res, "Gagal mengunduh laporan", 500);
     }
   }
-
-  const userName = req.user.full_name || "User";
-  await ActivityLog.create({
-    user_id: req.user.id,
-    action: "EXPORT_REPORT",
-    entity_type: "Application",
-    entity_id: req.user.id,
-    description: `${userName} mengekspor laporan beasiswa`,
-    ip_address: req.ip,
-    user_agent: req.headers["user-agent"],
-  });
 };
 
 module.exports = {
