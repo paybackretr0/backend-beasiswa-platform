@@ -12,6 +12,7 @@ const {
   getGovernmentScholarshipYearlyTrend,
   getGovernmentScholarshipList,
   exportGovernmentScholarships,
+  validateGovernmentScholarshipFile,
   importGovernmentScholarships,
 } = require("../controllers/government.controller");
 const { excelUpload } = require("../middlewares/upload.middleware");
@@ -38,6 +39,18 @@ router.get(
     "VERIFIKATOR_DITMAWA",
   ]),
   exportGovernmentScholarships,
+);
+
+router.post(
+  "/validate",
+  authorize([
+    "SUPERADMIN",
+    "PIMPINAN_DITMAWA",
+    "VALIDATOR_DITMAWA",
+    "VERIFIKATOR_DITMAWA",
+  ]),
+  excelUpload.single("file"),
+  validateGovernmentScholarshipFile,
 );
 
 router.post(

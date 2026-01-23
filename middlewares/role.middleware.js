@@ -1,3 +1,4 @@
+const { errorResponse } = require("../utils/response");
 /**
  * Middleware untuk otorisasi berdasarkan role
  * @param {Array|String} allowedRoles - Role yang diizinkan untuk mengakses route
@@ -8,25 +9,22 @@ const authorize = (allowedRoles) => {
 
   return (req, res, next) => {
     if (!req.user) {
-      return res.status(401).json({ message: "User tidak terautentikasi" });
+      return errorResponse(res, "User tidak terautentikasi", 401);
     }
 
     if (!req.user.role) {
-      return res
-        .status(403)
-        .json({ message: "Akses ditolak: User tidak memiliki role" });
+      return errorResponse(res, "Akses ditolak: User tidak memiliki role", 403);
     }
 
     if (roles.includes(req.user.role)) {
       return next();
     }
 
-    return res
-      .status(403)
-      .json({
-        message:
-          "Akses ditolak: Anda tidak memiliki izin untuk mengakses resource ini",
-      });
+    return errorResponse(
+      res,
+      "Akses ditolak: Anda tidak memiliki izin untuk mengakses resource ini",
+      403,
+    );
   };
 };
 
