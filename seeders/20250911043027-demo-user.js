@@ -130,6 +130,7 @@ module.exports = {
           birth_place: "Padang",
           role: "MAHASISWA",
           nim: "2211523030",
+          study_program_id: "22222222-2222-2222-2222-222222222222",
           department_id: "22222222-2222-2222-2222-222222222222",
           faculty_id: "15151515-1515-1515-1515-151515151515",
           gender: "L",
@@ -140,7 +141,7 @@ module.exports = {
           updatedAt: new Date(),
         },
       ],
-      {}
+      {},
     );
   },
 

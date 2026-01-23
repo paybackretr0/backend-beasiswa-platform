@@ -525,6 +525,125 @@ const exportGovernmentScholarships = async (req, res) => {
   }
 };
 
+const validateGovernmentScholarshipFile = async (req, res) => {
+  const filePath = req.file?.path ?? null;
+
+  try {
+    if (!req.file) {
+      return errorResponse(res, "File Excel wajib diupload", 400);
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(filePath);
+
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) {
+      throw new Error("Worksheet tidak ditemukan");
+    }
+
+    let fiscalYear = new Date().getFullYear();
+    let period = "Ganjil";
+
+    const headerText = worksheet.getCell("A1").value?.toString().toUpperCase();
+
+    if (headerText && headerText.includes("PERIODE:")) {
+      const [, periodPart] = headerText.split("PERIODE:");
+      if (periodPart) {
+        const [p, y] = periodPart.split("/");
+        if (p && y && !isNaN(y.trim())) {
+          period = p.trim();
+          fiscalYear = parseInt(y.trim());
+        }
+      }
+    }
+
+    let headerRowNumber = null;
+
+    worksheet.eachRow((row, rowNumber) => {
+      const value = row.getCell(3).value;
+      if (typeof value === "string" && value.trim().toUpperCase() === "NIM") {
+        headerRowNumber = rowNumber;
+      }
+    });
+
+    if (!headerRowNumber) {
+      throw new Error("Header kolom NIM tidak ditemukan");
+    }
+
+    const rawData = [];
+
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber <= headerRowNumber) return;
+      if (row.actualCellCount === 0) return;
+
+      rawData.push({
+        NIM: row.getCell(3).value,
+        nama: row.getCell(4).value,
+        semester: row.getCell(8).value,
+        angkatan: row.getCell(9).value,
+        prodi: row.getCell(11).value,
+        skema: row.getCell(17).value,
+        excelRow: rowNumber,
+      });
+    });
+
+    if (rawData.length === 0) {
+      throw new Error("File Excel kosong atau tidak berisi data");
+    }
+
+    const validData = [];
+    const errors = [];
+
+    rawData.forEach((row) => {
+      const nimValue = typeof row.NIM === "object" ? row.NIM?.text : row.NIM;
+
+      if (!nimValue) {
+        errors.push({
+          row: row.excelRow,
+          field: "NIM",
+          message: "NIM wajib diisi",
+        });
+        return;
+      }
+
+      if (!row.nama) {
+        errors.push({
+          row: row.excelRow,
+          field: "Nama",
+          message: "Nama Mahasiswa wajib diisi",
+        });
+        return;
+      }
+
+      validData.push({
+        nim: String(nimValue).trim(),
+        student_name: row.nama.toString().trim(),
+        student_batch: row.angkatan ? parseInt(row.angkatan) : null,
+        study_program: row.prodi ? row.prodi.toString().trim() : null,
+        semester: row.semester ? parseInt(row.semester) : null,
+        assistance_scheme: row.skema ? row.skema.toString().trim() : null,
+      });
+    });
+
+    return successResponse(res, "Validasi berhasil", {
+      fiscal_year: fiscalYear,
+      period,
+      valid_count: validData.length,
+      error_count: errors.length,
+      errors: errors.slice(0, 10),
+      preview: validData.slice(0, 10),
+      total_rows: rawData.length,
+    });
+  } catch (error) {
+    console.error("Validation Error:", error);
+    return errorResponse(res, error.message || "Gagal memvalidasi file", 500);
+  } finally {
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  }
+};
+
 const importGovernmentScholarships = async (req, res) => {
   const transaction = await sequelize.transaction();
   const filePath = req.file?.path ?? null;
@@ -533,6 +652,8 @@ const importGovernmentScholarships = async (req, res) => {
     if (!req.file) {
       return errorResponse(res, "File Excel wajib diupload", 400);
     }
+
+    const importMode = req.body.mode || "replace";
 
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(filePath);
@@ -645,24 +766,61 @@ const importGovernmentScholarships = async (req, res) => {
       );
     }
 
-    const deletedCount = await GovernmentScholarship.destroy({
-      where: { fiscal_year: fiscalYear, period },
-      transaction,
-    });
+    let deletedCount = 0;
+    let updatedCount = 0;
+    let newCount = 0;
 
-    await GovernmentScholarship.bulkCreate(importData, {
-      transaction,
-      validate: true,
-    });
+    if (importMode === "replace") {
+      deletedCount = await GovernmentScholarship.destroy({
+        where: { fiscal_year: fiscalYear, period },
+        transaction,
+      });
+
+      await GovernmentScholarship.bulkCreate(importData, {
+        transaction,
+        validate: true,
+      });
+
+      newCount = importData.length;
+    } else {
+      for (const data of importData) {
+        const existing = await GovernmentScholarship.findOne({
+          where: {
+            nim: data.nim,
+            fiscal_year: fiscalYear,
+            period,
+          },
+          transaction,
+        });
+
+        if (existing) {
+          await existing.update(data, { transaction });
+          updatedCount++;
+        } else {
+          await GovernmentScholarship.create(data, { transaction });
+          newCount++;
+        }
+      }
+    }
 
     await transaction.commit();
 
-    return successResponse(res, "Data berhasil diimport", {
-      imported: importData.length,
-      deleted: deletedCount,
+    const responseData = {
+      mode: importMode,
       fiscal_year: fiscalYear,
       period,
-    });
+      total_processed: importData.length,
+    };
+
+    if (importMode === "replace") {
+      responseData.deleted = deletedCount;
+      responseData.imported = newCount;
+    } else {
+      responseData.updated = updatedCount;
+      responseData.new = newCount;
+    }
+
+    return successResponse(res, "Data berhasil diimport", responseData);
   } catch (error) {
     if (!transaction.finished) {
       await transaction.rollback();
@@ -683,6 +841,7 @@ module.exports = {
   getGovernmentScholarshipByCategory,
   getGovernmentScholarshipYearlyTrend,
   getGovernmentScholarshipList,
+  validateGovernmentScholarshipFile,
   exportGovernmentScholarships,
   importGovernmentScholarships,
 };

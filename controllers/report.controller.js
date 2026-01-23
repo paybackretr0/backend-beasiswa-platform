@@ -632,7 +632,7 @@ const exportLaporanBeasiswa = async (req, res) => {
     ] = await Promise.all([
       getSummaryData(year),
       getSelectionSummaryData(year),
-      getApplicationsListData({ year }), // ✅ Fixed
+      getApplicationsListData({ year }),
       getMonthlyTrendData(year),
       getFacultyDistributionData(year),
       getDepartmentDistributionData(year),
@@ -645,7 +645,6 @@ const exportLaporanBeasiswa = async (req, res) => {
 
     const workbook = new ExcelJS.Workbook();
 
-    // Summary Sheet
     const summarySheet = workbook.addWorksheet("Ringkasan");
     summarySheet.columns = [
       { header: "Keterangan", key: "keterangan", width: 40 },
@@ -708,7 +707,6 @@ const exportLaporanBeasiswa = async (req, res) => {
 
     applyCenterAlignment(summarySheet, ["nilai"]);
 
-    // Rekapitulasi Keseluruhan
     const recapSheet = workbook.addWorksheet("Rekapitulasi Keseluruhan");
     recapSheet.columns = [
       { header: "No", key: "no", width: 8 },
@@ -741,7 +739,6 @@ const exportLaporanBeasiswa = async (req, res) => {
       "jumlah_penerima",
     ]);
 
-    // Penerima Beasiswa yang Sedang Berjalan
     const ongoingSheet = workbook.addWorksheet("Penerima Sedang Berjalan");
     ongoingSheet.columns = [
       { header: "Nama", key: "nama", width: 25 },
@@ -793,7 +790,6 @@ const exportLaporanBeasiswa = async (req, res) => {
       "nilai_beasiswa",
     ]);
 
-    // Data Pendaftar Sheet
     const pendaftarSheet = workbook.addWorksheet("Data Pendaftar");
     pendaftarSheet.columns = [
       { header: "Nama", key: "nama", width: 25 },
@@ -821,7 +817,6 @@ const exportLaporanBeasiswa = async (req, res) => {
 
     applyCenterAlignment(pendaftarSheet, ["nim", "gender", "tanggalDaftar"]);
 
-    // Monthly Trend Sheet
     const monthlySheet = workbook.addWorksheet("Tren Bulanan");
     monthlySheet.columns = [
       { header: "Bulan", key: "bulan", width: 15 },
@@ -840,7 +835,6 @@ const exportLaporanBeasiswa = async (req, res) => {
 
     applyCenterAlignment(monthlySheet, ["bulan", "jumlah"]);
 
-    // Fakultas Distribution
     const fakultasSheet = workbook.addWorksheet("Distribusi Fakultas");
     fakultasSheet.columns = [
       { header: "Fakultas", key: "fakultas", width: 40 },
@@ -861,7 +855,6 @@ const exportLaporanBeasiswa = async (req, res) => {
 
     applyCenterAlignment(fakultasSheet, ["jumlah"]);
 
-    // Departemen Distribution
     const departemenSheet = workbook.addWorksheet("Distribusi Departemen");
     departemenSheet.columns = [
       { header: "Departemen", key: "departemen", width: 40 },
@@ -882,7 +875,6 @@ const exportLaporanBeasiswa = async (req, res) => {
 
     applyCenterAlignment(departemenSheet, ["jumlah"]);
 
-    // Program Studi Distribution
     const prodiSheet = workbook.addWorksheet("Distribusi Prodi");
     prodiSheet.columns = [
       { header: "Program Studi", key: "prodi", width: 40 },
@@ -903,7 +895,6 @@ const exportLaporanBeasiswa = async (req, res) => {
 
     applyCenterAlignment(prodiSheet, ["jumlah"]);
 
-    // Gender Distribution
     const genderSheet = workbook.addWorksheet("Distribusi Gender");
     genderSheet.columns = [
       { header: "Gender", key: "gender", width: 20 },
@@ -924,12 +915,10 @@ const exportLaporanBeasiswa = async (req, res) => {
 
     applyCenterAlignment(genderSheet, ["gender", "jumlah"]);
 
-    // Detail per Beasiswa
     for (const scholarship of scholarshipsWithData) {
       let baseSheetName = scholarship.name.substring(0, 25);
       baseSheetName = baseSheetName.replace(/[\[\]\*\?\/\\:]/g, "");
 
-      // Sheet Penerima
       if (scholarship.jumlah_penerima > 0) {
         const recipientsDetail = await getRecipientsByScholarshipDetail(
           year,
@@ -1031,7 +1020,6 @@ const exportLaporanBeasiswa = async (req, res) => {
         ]);
       }
 
-      // Sheet Pendaftar per Beasiswa
       const applicantsDetail = await getApplicantsByScholarshipDetail(
         year,
         scholarship.id,
@@ -1077,7 +1065,6 @@ const exportLaporanBeasiswa = async (req, res) => {
           });
           applyDataRowStyle(row, index);
 
-          // Color coding for status
           if (item.status === "VALIDATED") {
             row.getCell("status_label").fill = {
               type: "pattern",
@@ -1118,7 +1105,6 @@ const exportLaporanBeasiswa = async (req, res) => {
 
         applicantSheet.addRow({});
 
-        // Status summary
         const statusCounts = {
           validated: applicantsDetail.filter((a) => a.status === "VALIDATED")
             .length,
@@ -1193,7 +1179,6 @@ const exportLaporanBeasiswa = async (req, res) => {
       ]);
     }
 
-    // Generate file
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const fileName = `laporan_beasiswa_${year}_${timestamp}.xlsx`;
     const tempDir = path.join(__dirname, "../uploads/exports");
@@ -1220,7 +1205,6 @@ const exportLaporanBeasiswa = async (req, res) => {
       }, 10000);
     });
 
-    // Log activity
     const userName = req.user.full_name || "User";
     await ActivityLog.create({
       user_id: req.user.id,
