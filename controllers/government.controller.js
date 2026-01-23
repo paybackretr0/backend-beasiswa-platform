@@ -2,6 +2,7 @@ const { GovernmentScholarship, sequelize } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 const ExcelJS = require("exceljs");
 const fs = require("fs");
+const path = require("path");
 
 const getGovernmentScholarshipSummary = async (req, res) => {
   try {
@@ -225,13 +226,302 @@ const exportGovernmentScholarships = async (req, res) => {
   try {
     const { year } = req.query;
 
-    // Implementation for Excel export
-    // You can use libraries like exceljs or xlsx
+    let whereCondition = {};
+    if (year && year !== "all") {
+      whereCondition.fiscal_year = year;
+    }
 
-    return successResponse(res, "Export successful");
+    const scholarships = await GovernmentScholarship.findAll({
+      where: whereCondition,
+      order: [
+        ["fiscal_year", "DESC"],
+        ["ipk", "DESC"],
+        ["student_name", "ASC"],
+      ],
+      raw: true,
+    });
+
+    if (scholarships.length === 0) {
+      return errorResponse(res, "Tidak ada data untuk diexport", 404);
+    }
+
+    const normalStudents = scholarships.filter(
+      (s) => s.ipk !== null && s.ipk >= 2.75,
+    );
+    const warningStudents = scholarships.filter(
+      (s) => s.ipk === null || s.ipk < 2.75,
+    );
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Beasiswa APBN");
+
+    worksheet.columns = [
+      { width: 5 },
+      { width: 15 },
+      { width: 30 },
+      { width: 12 },
+      { width: 35 },
+      { width: 10 },
+      { width: 10 },
+      { width: 15 },
+      { width: 30 },
+      { width: 12 },
+      { width: 12 },
+    ];
+
+    worksheet.mergeCells("A1:K1");
+    const titleCell = worksheet.getCell("A1");
+    titleCell.value = `DATA PENERIMA BEASISWA PEMERINTAH (APBN) ${year && year !== "all" ? `TAHUN ${year}` : ""}`;
+    titleCell.font = { bold: true, size: 14 };
+    titleCell.alignment = { horizontal: "center", vertical: "middle" };
+    titleCell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF2D60FF" },
+    };
+    titleCell.font = { ...titleCell.font, color: { argb: "FFFFFFFF" } };
+    worksheet.getRow(1).height = 25;
+
+    worksheet.mergeCells("A2:K2");
+    const infoCell = worksheet.getCell("A2");
+    infoCell.value = `Total Penerima: ${scholarships.length} | Normal (IPK ≥ 2.75): ${normalStudents.length} | Warning (IPK < 2.75): ${warningStudents.length}`;
+    infoCell.font = { italic: true, size: 10 };
+    infoCell.alignment = { horizontal: "center" };
+    worksheet.getRow(2).height = 20;
+
+    worksheet.addRow([]);
+
+    worksheet.mergeCells("A4:K4");
+    const normalHeaderCell = worksheet.getCell("A4");
+    normalHeaderCell.value = `MAHASISWA DENGAN IPK ≥ 2.75 (NORMAL) - ${normalStudents.length} Mahasiswa`;
+    normalHeaderCell.font = {
+      bold: true,
+      size: 11,
+      color: { argb: "FFFFFFFF" },
+    };
+    normalHeaderCell.alignment = { horizontal: "center", vertical: "middle" };
+    normalHeaderCell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF22C55E" },
+    };
+    worksheet.getRow(4).height = 20;
+
+    const headerRow = worksheet.addRow([
+      "No",
+      "NIM",
+      "Nama Mahasiswa",
+      "Angkatan",
+      "Program Studi",
+      "Semester",
+      "IPK",
+      "Status Akademik",
+      "Skema Bantuan",
+      "Tahun Fiskal",
+      "Periode",
+    ]);
+
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF4B5563" },
+      };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
+    });
+    headerRow.height = 20;
+
+    normalStudents.forEach((student, index) => {
+      const row = worksheet.addRow([
+        index + 1,
+        student.nim,
+        student.student_name,
+        student.student_batch || "-",
+        student.study_program || "-",
+        student.semester || "-",
+        student.ipk ? student.ipk.toFixed(2) : "0.00",
+        student.academic_status || "NORMAL",
+        student.assistance_scheme || "-",
+        student.fiscal_year,
+        student.period || "-",
+      ]);
+
+      row.eachCell((cell, colNumber) => {
+        cell.border = {
+          top: { style: "thin", color: { argb: "FFE5E7EB" } },
+          left: { style: "thin", color: { argb: "FFE5E7EB" } },
+          bottom: { style: "thin", color: { argb: "FFE5E7EB" } },
+          right: { style: "thin", color: { argb: "FFE5E7EB" } },
+        };
+
+        if ([1, 4, 6, 7, 10, 11].includes(colNumber)) {
+          cell.alignment = { horizontal: "center", vertical: "middle" };
+        } else {
+          cell.alignment = { vertical: "middle" };
+        }
+
+        if (colNumber === 7) {
+          cell.font = { bold: true, color: { argb: "FF22C55E" } };
+        }
+      });
+
+      if (index % 2 === 0) {
+        row.eachCell((cell) => {
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFF9FAFB" },
+          };
+        });
+      }
+    });
+
+    const separatorRow = worksheet.addRow([]);
+    separatorRow.height = 8;
+    worksheet.mergeCells(`A${separatorRow.number}:K${separatorRow.number}`);
+    const separatorCell = worksheet.getCell(`A${separatorRow.number}`);
+    separatorCell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFEF4444" },
+    };
+    separatorCell.border = {
+      top: { style: "thick", color: { argb: "FFEF4444" } },
+      bottom: { style: "thick", color: { argb: "FFEF4444" } },
+    };
+
+    worksheet.addRow([]);
+
+    const warningHeaderRow = worksheet.addRow([]);
+    worksheet.mergeCells(
+      `A${warningHeaderRow.number}:K${warningHeaderRow.number}`,
+    );
+    const warningHeaderCell = worksheet.getCell(`A${warningHeaderRow.number}`);
+    warningHeaderCell.value = `⚠️ MAHASISWA DENGAN IPK < 2.75 (WARNING) - ${warningStudents.length} Mahasiswa`;
+    warningHeaderCell.font = {
+      bold: true,
+      size: 11,
+      color: { argb: "FFFFFFFF" },
+    };
+    warningHeaderCell.alignment = {
+      horizontal: "center",
+      vertical: "middle",
+    };
+    warningHeaderCell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFF59E0B" },
+    };
+    worksheet.getRow(warningHeaderRow.number).height = 20;
+
+    const warningTableHeader = worksheet.addRow([
+      "No",
+      "NIM",
+      "Nama Mahasiswa",
+      "Angkatan",
+      "Program Studi",
+      "Semester",
+      "IPK",
+      "Status Akademik",
+      "Skema Bantuan",
+      "Tahun Fiskal",
+      "Periode",
+    ]);
+
+    warningTableHeader.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF4B5563" },
+      };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
+    });
+    warningTableHeader.height = 20;
+
+    warningStudents.forEach((student, index) => {
+      const row = worksheet.addRow([
+        index + 1,
+        student.nim,
+        student.student_name,
+        student.student_batch || "-",
+        student.study_program || "-",
+        student.semester || "-",
+        student.ipk ? student.ipk.toFixed(2) : "0.00",
+        student.academic_status || "WARNING",
+        student.assistance_scheme || "-",
+        student.fiscal_year,
+        student.period || "-",
+      ]);
+
+      row.eachCell((cell, colNumber) => {
+        cell.border = {
+          top: { style: "thin", color: { argb: "FFE5E7EB" } },
+          left: { style: "thin", color: { argb: "FFE5E7EB" } },
+          bottom: { style: "thin", color: { argb: "FFE5E7EB" } },
+          right: { style: "thin", color: { argb: "FFE5E7EB" } },
+        };
+
+        if ([1, 4, 6, 7, 10, 11].includes(colNumber)) {
+          cell.alignment = { horizontal: "center", vertical: "middle" };
+        } else {
+          cell.alignment = { vertical: "middle" };
+        }
+
+        if (colNumber === 7) {
+          cell.font = { bold: true, color: { argb: "FFEF4444" } };
+        }
+      });
+
+      row.eachCell((cell) => {
+        if (!cell.fill || !cell.fill.fgColor) {
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFFEF3C7" },
+          };
+        }
+      });
+    });
+
+    const footerRow = worksheet.addRow([]);
+    worksheet.mergeCells(`A${footerRow.number}:K${footerRow.number}`);
+    const footerCell = worksheet.getCell(`A${footerRow.number}`);
+    footerCell.value = `Diekspor pada: ${new Date().toLocaleString("id-ID")} | Total: ${scholarships.length} data`;
+    footerCell.font = { italic: true, size: 9, color: { argb: "FF6B7280" } };
+    footerCell.alignment = { horizontal: "center" };
+
+    const fileName = `Beasiswa_APBN_${year && year !== "all" ? year : "All"}_${Date.now()}.xlsx`;
+    const filePath = path.join(__dirname, "../uploads", fileName);
+
+    await workbook.xlsx.writeFile(filePath);
+
+    res.download(filePath, fileName, (err) => {
+      if (err) {
+        console.error("Error downloading file:", err);
+        return errorResponse(res, "Gagal mendownload file", 500);
+      }
+
+      fs.unlink(filePath, (unlinkErr) => {
+        if (unlinkErr) console.error("Error deleting file:", unlinkErr);
+      });
+    });
   } catch (error) {
     console.error("Error exporting:", error);
-    return errorResponse(res, "Failed to export data", 500);
+    return errorResponse(res, error.message || "Gagal mengexport data", 500);
   }
 };
 
