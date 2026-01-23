@@ -19,7 +19,7 @@ const createStorage = (category = "general") => {
       const uploadDir = getUploadDirectory(
         validCategory,
         file.mimetype,
-        userId
+        userId,
       );
       cb(null, uploadDir);
     },
@@ -38,7 +38,7 @@ const createStorage = (category = "general") => {
 const imageFilter = (req, file, cb) => {
   const allowedTypes = /jpeg|jpg|png|gif|webp/;
   const extname = allowedTypes.test(
-    path.extname(file.originalname).toLowerCase()
+    path.extname(file.originalname).toLowerCase(),
   );
   const mimetype = allowedTypes.test(file.mimetype);
 
@@ -46,8 +46,29 @@ const imageFilter = (req, file, cb) => {
     return cb(null, true);
   } else {
     cb(
-      new Error("Hanya file gambar (JPG, PNG, GIF, WEBP) yang diperbolehkan.")
+      new Error("Hanya file gambar (JPG, PNG, GIF, WEBP) yang diperbolehkan."),
     );
+  }
+};
+
+/**
+ * File filter khusus untuk Excel (TAMBAHAN)
+ */
+const excelFilter = (req, file, cb) => {
+  const allowedTypes = /xlsx|xls|csv/;
+  const extname = allowedTypes.test(
+    path.extname(file.originalname).toLowerCase(),
+  );
+  const mimetype =
+    file.mimetype === "application/vnd.ms-excel" ||
+    file.mimetype ===
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+    file.mimetype === "text/csv";
+
+  if (extname && mimetype) {
+    return cb(null, true);
+  } else {
+    cb(new Error("Hanya file Excel (XLSX, XLS, CSV) yang diperbolehkan."));
   }
 };
 
@@ -57,11 +78,11 @@ const imageFilter = (req, file, cb) => {
 const documentFilter = (req, file, cb) => {
   const allowedTypes = /pdf|doc|docx/;
   const extname = allowedTypes.test(
-    path.extname(file.originalname).toLowerCase()
+    path.extname(file.originalname).toLowerCase(),
   );
   const mimetype =
     /application\/(pdf|msword|vnd\.openxmlformats-officedocument\.wordprocessingml\.document)/.test(
-      file.mimetype
+      file.mimetype,
     );
 
   if (extname && mimetype) {
@@ -85,7 +106,7 @@ const mixedFilter = (req, file, cb) => {
   const mimetype =
     file.mimetype.startsWith("image/") ||
     /application\/(pdf|msword|vnd\.openxmlformats-officedocument\.wordprocessingml\.document)/.test(
-      file.mimetype
+      file.mimetype,
     );
 
   if (extname && mimetype) {
@@ -127,10 +148,9 @@ const createUploadMiddleware = (options = {}) => {
   const {
     category = "general",
     fileType = "mixed",
-    maxSize = 10 * 1024 * 1024, // 10MB default
+    maxSize = 10 * 1024 * 1024,
   } = options;
 
-  // Pilih file filter berdasarkan tipe
   let fileFilter;
   switch (fileType) {
     case "image":
@@ -138,6 +158,9 @@ const createUploadMiddleware = (options = {}) => {
       break;
     case "document":
       fileFilter = documentFilter;
+      break;
+    case "excel":
+      fileFilter = excelFilter;
       break;
     default:
       fileFilter = mixedFilter;
@@ -160,39 +183,38 @@ const createUploadMiddleware = (options = {}) => {
   };
 };
 
-// Export middleware untuk berbagai kegunaan
 module.exports = {
-  // Untuk upload berita/artikel (gambar saja)
   newsUpload: createUploadMiddleware({
     category: "news",
     fileType: "image",
-    maxSize: 5 * 1024 * 1024, // 5MB
+    maxSize: 5 * 1024 * 1024,
   }),
 
-  // Untuk upload artikel
   articleUpload: createUploadMiddleware({
     category: "articles",
     fileType: "image",
-    maxSize: 5 * 1024 * 1024, // 5MB
+    maxSize: 5 * 1024 * 1024,
   }),
 
-  // Untuk upload application (dokumen + gambar)
   applicationUpload: createUploadMiddleware({
     category: "applications",
     fileType: "mixed",
-    maxSize: 10 * 1024 * 1024, // 10MB
+    maxSize: 10 * 1024 * 1024,
   }),
 
-  // Untuk upload umum
+  excelUpload: createUploadMiddleware({
+    category: "scholarships",
+    fileType: "excel",
+    maxSize: 10 * 1024 * 1024,
+  }),
+
   generalUpload: createUploadMiddleware({
     category: "general",
     fileType: "mixed",
-    maxSize: 10 * 1024 * 1024, // 10MB
+    maxSize: 10 * 1024 * 1024,
   }),
 
-  // Function untuk membuat upload middleware custom
   createUploadMiddleware,
 
-  // Legacy support
   upload: createUploadMiddleware(),
 };

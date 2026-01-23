@@ -23,7 +23,11 @@ const isDocument = (mimeType) => {
     mimeType === "application/pdf" ||
     mimeType === "application/msword" ||
     mimeType ===
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    mimeType === "application/vnd.ms-excel" ||
+    mimeType ===
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+    mimeType === "text/csv"
   );
 };
 
@@ -34,28 +38,23 @@ const isDocument = (mimeType) => {
  * @returns {string} - Path direktori penyimpanan
  */
 const getUploadDirectory = (category = "general", mimeType, userId = null) => {
-  // Bersihkan nama kategori
   const cleanCategory = category
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
 
-  // Tentukan subfolder berdasarkan jenis file
   const subDir = isImage(mimeType) ? "images" : "documents";
 
-  // Gabungkan path: uploads/applications/<IDUSERPENDAFTAR>/images atau documents
   const baseFolder =
     cleanCategory === "scholarships"
       ? cleanCategory
       : userId
-      ? `applications/${userId}`
-      : cleanCategory;
+        ? `applications/${userId}`
+        : cleanCategory;
 
-  // Gabungkan path: uploads/scholarships/documents atau uploads/applications/<IDUSERPENDAFTAR>/documents
   const uploadDir = path.join("uploads", baseFolder, subDir);
 
-  // Pastikan direktori ada
   ensureDirectoryExists(uploadDir);
 
   return uploadDir;
@@ -79,10 +78,8 @@ const ensureDirectoryExists = (directory) => {
 const getFileUrl = (filePath) => {
   if (!filePath) return null;
 
-  // Ubah backslash ke forward slash untuk URL
   const normalizedPath = filePath.replace(/\\/g, "/");
 
-  // Return path lengkap untuk URL
   return normalizedPath;
 };
 
@@ -126,13 +123,11 @@ const UPLOAD_CATEGORIES = {
 const getValidCategory = (category) => {
   if (!category) return UPLOAD_CATEGORIES.GENERAL;
 
-  // Cek apakah kategori ada di daftar yang sudah ditentukan
   const upperCategory = category.toUpperCase();
   if (UPLOAD_CATEGORIES[upperCategory]) {
     return UPLOAD_CATEGORIES[upperCategory];
   }
 
-  // Jika tidak ada, bersihkan dan gunakan sebagai kategori custom
   return category
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "-")

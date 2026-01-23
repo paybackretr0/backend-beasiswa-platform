@@ -1,15 +1,16 @@
 "use strict";
 const { Model } = require("sequelize");
+
 module.exports = (sequelize, DataTypes) => {
   class GovernmentScholarship extends Model {
     static associate(models) {
-      // GovernmentScholarship diimport oleh User (Superadmin)
       GovernmentScholarship.belongsTo(models.User, {
         foreignKey: "imported_by",
         as: "importer",
       });
     }
   }
+
   GovernmentScholarship.init(
     {
       id: {
@@ -20,42 +21,57 @@ module.exports = (sequelize, DataTypes) => {
       nim: {
         type: DataTypes.STRING(50),
         allowNull: false,
+        validate: {
+          notEmpty: true,
+        },
       },
       student_name: {
         type: DataTypes.STRING(191),
         allowNull: false,
       },
-      semester: {
+      student_batch: {
         type: DataTypes.INTEGER,
         allowNull: true,
+        comment:
+          "Angkatan (misal: 2023), diisi manual atau auto-parse dari NIM",
       },
       study_program: {
         type: DataTypes.STRING(191),
         allowNull: true,
       },
-      assistance_scheme: {
-        type: DataTypes.STRING(191),
+      semester: {
+        type: DataTypes.INTEGER,
         allowNull: true,
+        comment: "Semester mahasiswa saat ini (misal: 4)",
       },
-      living_expenses: {
-        type: DataTypes.DECIMAL(15, 2),
-        allowNull: true,
-      },
-      tuition_fee: {
-        type: DataTypes.DECIMAL(15, 2),
-        allowNull: true,
-      },
-      scholarship_category: {
-        type: DataTypes.STRING(191),
-        allowNull: true,
-        comment: "e.g., KIP Kuliah",
-      },
-      acceptance_year: {
+      fiscal_year: {
         type: DataTypes.INTEGER,
         allowNull: false,
+        comment: "Tahun periode laporan (misal: 2025)",
       },
-      acceptance_period: {
+      period: {
         type: DataTypes.STRING(50),
+        allowNull: true,
+        comment: "Periode semester (misal: 'Genap' atau 'Ganjil')",
+      },
+      ipk: {
+        type: DataTypes.FLOAT,
+        allowNull: true,
+        defaultValue: 0.0,
+      },
+      academic_status: {
+        type: DataTypes.ENUM("NORMAL", "WARNING", "REVOKED"),
+        allowNull: true,
+        defaultValue: "NORMAL",
+        comment: "Status hasil evaluasi IPK (WARNING jika < 2.75)",
+      },
+      last_synced_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        comment: "Waktu terakhir data disinkronkan dengan API DTI",
+      },
+      assistance_scheme: {
+        type: DataTypes.STRING(191),
         allowNull: true,
       },
       imported_by: {
@@ -73,7 +89,22 @@ module.exports = (sequelize, DataTypes) => {
       modelName: "GovernmentScholarship",
       tableName: "government_scholarships",
       timestamps: false,
-    }
+      indexes: [
+        {
+          unique: false,
+          fields: ["nim"],
+        },
+        {
+          unique: false,
+          fields: ["academic_status"],
+        },
+        {
+          unique: false,
+          fields: ["fiscal_year", "period"],
+        },
+      ],
+    },
   );
+
   return GovernmentScholarship;
 };

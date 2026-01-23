@@ -10,7 +10,47 @@ const {
   getGovernmentScholarshipDistribution,
   getGovernmentScholarshipByCategory,
   getGovernmentScholarshipYearlyTrend,
+  getGovernmentScholarshipList,
+  exportGovernmentScholarships,
+  importGovernmentScholarships,
 } = require("../controllers/government.controller");
+const { excelUpload } = require("../middlewares/upload.middleware");
+
+router.use(authenticate, verifiedUser);
+
+router.get(
+  "/list",
+  authorize([
+    "SUPERADMIN",
+    "PIMPINAN_DITMAWA",
+    "VALIDATOR_DITMAWA",
+    "VERIFIKATOR_DITMAWA",
+  ]),
+  getGovernmentScholarshipList,
+);
+
+router.get(
+  "/export",
+  authorize([
+    "SUPERADMIN",
+    "PIMPINAN_DITMAWA",
+    "VALIDATOR_DITMAWA",
+    "VERIFIKATOR_DITMAWA",
+  ]),
+  exportGovernmentScholarships,
+);
+
+router.post(
+  "/import",
+  authorize([
+    "SUPERADMIN",
+    "PIMPINAN_DITMAWA",
+    "VALIDATOR_DITMAWA",
+    "VERIFIKATOR_DITMAWA",
+  ]),
+  excelUpload.single("file"),
+  importGovernmentScholarships,
+);
 
 router.use(
   authenticate,
@@ -19,10 +59,9 @@ router.use(
     "SUPERADMIN",
     "PIMPINAN_DITMAWA",
     "PIMPINAN_FAKULTAS",
-    "VERIFIKATOR_FAKULTAS",
     "VERIFIKATOR_DITMAWA",
     "VALIDATOR_DITMAWA",
-  ])
+  ]),
 );
 
 router.get("/summary", getGovernmentScholarshipSummary);
