@@ -43,16 +43,25 @@ const getPimpinanFakultas = async (req, res) => {
         "full_name",
         "phone_number",
         "role",
+        "faculty_id",
         "is_active",
         "last_login_at",
         "createdAt",
       ],
+      include: [
+        {
+          model: Faculty,
+          as: "faculty",
+          attributes: ["id", "name", "code"],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
     });
 
     return successResponse(
       res,
       "Daftar pimpinan fakultas berhasil diambil",
-      pimpinanFakultas
+      pimpinanFakultas,
     );
   } catch (error) {
     console.error("Error fetching pimpinan fakultas:", error);
@@ -79,7 +88,7 @@ const getPimpinanDitmawa = async (req, res) => {
     return successResponse(
       res,
       "Daftar pimpinan ditmawa berhasil diambil",
-      pimpinanDitmawa
+      pimpinanDitmawa,
     );
   } catch (error) {
     console.error("Error fetching pimpinan ditmawa:", error);
@@ -115,7 +124,7 @@ const getVerifikator = async (req, res) => {
     return successResponse(
       res,
       "Daftar verifikator berhasil diambil",
-      verifikator
+      verifikator,
     );
   } catch (error) {
     console.error("Error fetching verifikator:", error);
@@ -200,7 +209,7 @@ const addVerifikator = async (req, res) => {
         return errorResponse(
           res,
           "Fakultas wajib dipilih untuk Verifikator Fakultas",
-          400
+          400,
         );
       }
 
@@ -246,7 +255,7 @@ const addVerifikator = async (req, res) => {
     return successCreatedResponse(
       res,
       "Verifikator berhasil ditambahkan",
-      verifikatorWithFaculty
+      verifikatorWithFaculty,
     );
   } catch (error) {
     console.error("Error adding verifikator:", error);
@@ -321,7 +330,7 @@ const addMahasiswa = async (req, res) => {
       return errorResponse(
         res,
         "Format email tidak valid untuk mahasiswa",
-        400
+        400,
       );
     }
 
@@ -373,7 +382,7 @@ const addMahasiswa = async (req, res) => {
     return successCreatedResponse(
       res,
       "Mahasiswa berhasil ditambahkan",
-      newUser
+      newUser,
     );
   } catch (error) {
     console.error("Error adding mahasiswa:", error);
@@ -423,7 +432,7 @@ const addPimpinanFakultas = async (req, res) => {
     return successCreatedResponse(
       res,
       "Pimpinan Fakultas berhasil ditambahkan",
-      newUser
+      newUser,
     );
   } catch (error) {
     console.error("Error adding pimpinan fakultas:", error);

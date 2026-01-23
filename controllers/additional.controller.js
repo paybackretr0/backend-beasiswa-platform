@@ -4,6 +4,11 @@ const {
   BackupHistory,
   ApplicationCommentTemplate,
 } = require("../models");
+const {
+  applyHeaderStyle,
+  applyDataRowStyle,
+  applyCenterAlignment,
+} = require("../utils/style");
 const { successResponse, errorResponse } = require("../utils/response");
 const { sequelize } = require("../models");
 const { Op } = require("sequelize");
@@ -809,47 +814,224 @@ const exportActivityLogsToExcel = async (req, res) => {
         },
       ],
       order: [["createdAt", "DESC"]],
+      limit: 10000,
     });
+
+    if (activityLogs.length === 0) {
+      return errorResponse(res, "Tidak ada data untuk diexport", 404);
+    }
 
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet("Activity Logs");
 
-    worksheet.columns = [
-      { header: "Timestamp", key: "timestamp", width: 20 },
-      { header: "User Email", key: "userEmail", width: 25 },
-      { header: "User Name", key: "userName", width: 25 },
-      { header: "Role", key: "role", width: 20 },
-      { header: "Action", key: "action", width: 20 },
-      { header: "Entity Type", key: "entityType", width: 15 },
-      { header: "Entity ID", key: "entityId", width: 30 },
-      { header: "Description", key: "description", width: 50 },
-      { header: "IP Address", key: "ipAddress", width: 15 },
-      { header: "User Agent", key: "userAgent", width: 40 },
+    workbook.creator = "Sistem Beasiswa";
+    workbook.created = new Date();
+    workbook.modified = new Date();
+
+    const worksheet = workbook.addWorksheet("Activity Logs", {
+      properties: { tabColor: { argb: "FF7030A0" } },
+      views: [{ state: "frozen", xSplit: 0, ySplit: 4 }],
+    });
+
+    worksheet.mergeCells("A1:J1");
+    const titleCell = worksheet.getCell("A1");
+    titleCell.value = "LAPORAN LOG AKTIVITAS SISTEM";
+    titleCell.font = {
+      bold: true,
+      size: 16,
+      color: { argb: "FFFFFFFF" },
+    };
+    titleCell.alignment = {
+      horizontal: "center",
+      vertical: "middle",
+    };
+    titleCell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF7030A0" },
+    };
+    worksheet.getRow(1).height = 35;
+
+    worksheet.mergeCells("A2:J2");
+    const infoCell = worksheet.getCell("A2");
+    const filterInfo = [];
+    if (startDate && endDate) {
+      filterInfo.push(
+        `Periode: ${new Date(startDate).toLocaleDateString("id-ID")} - ${new Date(endDate).toLocaleDateString("id-ID")}`,
+      );
+    }
+    if (userId) {
+      filterInfo.push(`User ID: ${userId}`);
+    }
+    if (action) {
+      filterInfo.push(`Action: ${action}`);
+    }
+
+    infoCell.value =
+      filterInfo.length > 0
+        ? `Filter: ${filterInfo.join(" | ")}`
+        : "Semua Data";
+    infoCell.font = { italic: true, size: 10 };
+    infoCell.alignment = { horizontal: "center" };
+    infoCell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFF3F4F6" },
+    };
+    worksheet.getRow(2).height = 20;
+
+    worksheet.mergeCells("A3:J3");
+    const summaryCell = worksheet.getCell("A3");
+    summaryCell.value = `Total Records: ${activityLogs.length} | Generated: ${new Date().toLocaleString("id-ID")}`;
+    summaryCell.font = { bold: true, size: 11 };
+    summaryCell.alignment = { horizontal: "center" };
+    summaryCell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFE5E7EB" },
+    };
+    worksheet.getRow(3).height = 22;
+
+    worksheet.getColumn(1).width = 6;
+    worksheet.getColumn(2).width = 20;
+    worksheet.getColumn(3).width = 25;
+    worksheet.getColumn(4).width = 28;
+    worksheet.getColumn(5).width = 22;
+    worksheet.getColumn(6).width = 25;
+    worksheet.getColumn(7).width = 18;
+    worksheet.getColumn(8).width = 30;
+    worksheet.getColumn(9).width = 50;
+    worksheet.getColumn(10).width = 16;
+
+    const headerRow = worksheet.getRow(4);
+    headerRow.values = [
+      "No",
+      "Waktu",
+      "Nama Pengguna",
+      "Email",
+      "Role",
+      "Aksi",
+      "Tipe Entitas",
+      "ID Entitas",
+      "Deskripsi",
+      "Alamat IP",
     ];
 
-    activityLogs.forEach((log) => {
-      worksheet.addRow({
-        timestamp: log.createdAt.toISOString(),
-        userEmail: log.User?.email || "System",
-        userName: log.User?.full_name || "System",
-        role: log.User?.role || "SYSTEM",
-        action: log.action,
-        entityType: log.entity_type,
-        entityId: log.entity_id,
-        description: log.description,
-        ipAddress: log.ip_address,
-        userAgent: log.user_agent,
-      });
+    applyHeaderStyle(headerRow);
+    headerRow.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF7030A0" },
+    };
+
+    activityLogs.forEach((log, index) => {
+      const rowData = [
+        index + 1,
+        new Date(log.createdAt).toLocaleString("id-ID", {
+          year: "numeric",
+          month: "short",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        }),
+        log.User?.full_name || "System",
+        log.User?.email || "system@auto",
+        log.User?.role || "SYSTEM",
+        log.action,
+        log.entity_type || "-",
+        log.entity_id || "-",
+        log.description || "-",
+        log.ip_address || "-",
+      ];
+
+      const row = worksheet.addRow(rowData);
+
+      applyDataRowStyle(row, index);
+
+      row.getCell(9).alignment = {
+        vertical: "middle",
+        wrapText: true,
+      };
+
+      const roleCell = row.getCell(5);
+      switch (log.User?.role) {
+        case "SUPERADMIN":
+          roleCell.font = { bold: true, color: { argb: "FFDC2626" } };
+          break;
+        case "PIMPINAN_DITMAWA":
+          roleCell.font = { bold: true, color: { argb: "FFB45309" } };
+          break;
+        case "PIMPINAN_FAKULTAS":
+          roleCell.font = { bold: true, color: { argb: "FF7C3AED" } };
+          break;
+        case "VALIDATOR_DITMAWA":
+          roleCell.font = { color: { argb: "FF2563EB" } };
+          break;
+        case "VERIFIKATOR_DITMAWA":
+          roleCell.font = { color: { argb: "FFDB2777" } };
+          break;
+        case "VERIFIKATOR_FAKULTAS":
+          roleCell.font = { color: { argb: "FF059669" } };
+          break;
+        case "MAHASISWA":
+          roleCell.font = { color: { argb: "FF6B7280" } };
+          break;
+        default:
+          roleCell.font = { color: { argb: "FF374151" }, italic: true };
+      }
+
+      const actionCell = row.getCell(6);
+      const actionText = log.action.toLowerCase();
+
+      if (actionText.includes("delete") || actionText.includes("reject")) {
+        actionCell.font = { bold: true, color: { argb: "FFEF4444" } };
+      } else if (actionText.includes("create") || actionText.includes("add")) {
+        actionCell.font = { bold: true, color: { argb: "FF10B981" } };
+      } else if (actionText.includes("update") || actionText.includes("edit")) {
+        actionCell.font = { color: { argb: "FF3B82F6" } };
+      } else if (
+        actionText.includes("approve") ||
+        actionText.includes("validate")
+      ) {
+        actionCell.font = { bold: true, color: { argb: "FF8B5CF6" } };
+      } else if (
+        actionText.includes("export") ||
+        actionText.includes("backup")
+      ) {
+        actionCell.font = { color: { argb: "FFF59E0B" } };
+      } else if (
+        actionText.includes("login") ||
+        actionText.includes("logout")
+      ) {
+        actionCell.font = { color: { argb: "FF6366F1" } };
+      }
+
+      row.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
+      row.getCell(7).alignment = { horizontal: "center", vertical: "middle" };
+      row.getCell(10).alignment = { horizontal: "center", vertical: "middle" };
     });
 
-    worksheet.getRow(1).eachCell((cell) => {
-      cell.font = { bold: true };
-      cell.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FFE0E0E0" },
-      };
-    });
+    const footerRowIndex = worksheet.rowCount + 1;
+    worksheet.mergeCells(`A${footerRowIndex}:J${footerRowIndex}`);
+    const footerCell = worksheet.getCell(`A${footerRowIndex}`);
+    footerCell.value = `© ${new Date().getFullYear()} Sistem Beasiswa | Dicetak oleh: ${req.user?.full_name || "Administrator"}`;
+    footerCell.font = {
+      italic: true,
+      size: 9,
+      color: { argb: "FF6B7280" },
+    };
+    footerCell.alignment = { horizontal: "center", vertical: "middle" };
+    footerCell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FFF3F4F6" },
+    };
+    worksheet.getRow(footerRowIndex).height = 22;
+
+    worksheet.autoFilter = {
+      from: { row: 4, column: 1 },
+      to: { row: 4, column: 10 },
+    };
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const fileName = `activity_logs_${timestamp}.xlsx`;
@@ -862,12 +1044,15 @@ const exportActivityLogsToExcel = async (req, res) => {
 
     await workbook.xlsx.writeFile(filePath);
 
+    const fileSize = fs.statSync(filePath).size;
+    const fileSizeMB = (fileSize / 1024 / 1024).toFixed(2);
+
     await createActivityLog(
       req.user.id,
       "Export Activity Logs",
       "ActivityLog",
       null,
-      `Exported ${activityLogs.length} activity logs to Excel`,
+      `Exported ${activityLogs.length} activity logs to Excel (${fileSizeMB} MB)`,
       req.ip,
       req.headers["user-agent"],
     );
@@ -876,6 +1061,7 @@ const exportActivityLogsToExcel = async (req, res) => {
       fileName,
       filePath: `uploads/exports/${fileName}`,
       totalRecords: activityLogs.length,
+      fileSize: fileSizeMB + " MB",
     });
   } catch (error) {
     console.error("Error exporting activity logs:", error);
