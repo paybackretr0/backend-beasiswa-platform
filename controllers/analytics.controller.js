@@ -256,14 +256,14 @@ const getScholarshipPerformance = async (req, res) => {
     return successResponse(
       res,
       "Scholarship performance retrieved successfully",
-      scholarshipData
+      scholarshipData,
     );
   } catch (error) {
     console.error("Error fetching scholarship performance:", error);
     return errorResponse(
       res,
       "Failed to retrieve scholarship performance",
-      500
+      500,
     );
   }
 };
@@ -314,20 +314,20 @@ const getTopPerformingFaculties = async (req, res) => {
       {
         replacements,
         type: sequelize.QueryTypes.SELECT,
-      }
+      },
     );
 
     return successResponse(
       res,
       "Top performing faculties retrieved successfully",
-      facultyPerformance
+      facultyPerformance,
     );
   } catch (error) {
     console.error("Error fetching top performing faculties:", error);
     return errorResponse(
       res,
       "Failed to retrieve top performing faculties",
-      500
+      500,
     );
   }
 };
@@ -393,7 +393,7 @@ const getSelectionSummary = async (req, res) => {
     return successResponse(
       res,
       "Selection summary retrieved successfully",
-      summary
+      summary,
     );
   } catch (error) {
     console.error("Error fetching selection summary:", error);
@@ -441,13 +441,13 @@ const getFacultyDistribution = async (req, res) => {
       {
         replacements,
         type: sequelize.QueryTypes.SELECT,
-      }
+      },
     );
 
     return successResponse(
       res,
       "Faculty distribution retrieved successfully",
-      facultyData
+      facultyData,
     );
   } catch (error) {
     console.error("Error fetching faculty distribution:", error);
@@ -495,20 +495,20 @@ const getDepartmentDistribution = async (req, res) => {
       {
         replacements,
         type: sequelize.QueryTypes.SELECT,
-      }
+      },
     );
 
     return successResponse(
       res,
       "Department distribution retrieved successfully",
-      departmentData
+      departmentData,
     );
   } catch (error) {
     console.error("Error fetching department distribution:", error);
     return errorResponse(
       res,
       "Failed to retrieve department distribution",
-      500
+      500,
     );
   }
 };
@@ -565,13 +565,13 @@ const getYearlyTrend = async (req, res) => {
           label: year.toString(),
           value: found ? parseInt(found.count) : 0,
         };
-      }
+      },
     );
 
     return successResponse(
       res,
       "Yearly trend retrieved successfully",
-      yearlyData
+      yearlyData,
     );
   } catch (error) {
     console.error("Error fetching yearly trend:", error);
@@ -622,7 +622,7 @@ const getGenderDistribution = async (req, res) => {
       {
         replacements,
         type: sequelize.QueryTypes.SELECT,
-      }
+      },
     );
 
     const transformedData = genderData.map((item) => ({
@@ -633,7 +633,7 @@ const getGenderDistribution = async (req, res) => {
     return successResponse(
       res,
       "Gender distribution retrieved successfully",
-      transformedData
+      transformedData,
     );
   } catch (error) {
     console.error("Error fetching gender distribution:", error);
@@ -700,13 +700,13 @@ const getStatusSummary = async (req, res) => {
           value: found ? parseInt(found.count) : 0,
           color,
         };
-      }
+      },
     );
 
     return successResponse(
       res,
       "Status summary retrieved successfully",
-      statusSummary
+      statusSummary,
     );
   } catch (error) {
     console.error("Error fetching status summary:", error);
@@ -784,7 +784,7 @@ const getActivities = async (req, res) => {
     return successResponse(
       res,
       "Activities retrieved successfully",
-      recentActivities
+      recentActivities,
     );
   } catch (error) {
     console.error("Error fetching activities:", error);
@@ -902,7 +902,7 @@ const getApplicationsList = async (req, res) => {
     return successResponse(
       res,
       "Applications list retrieved successfully",
-      transformedApplications
+      transformedApplications,
     );
   } catch (error) {
     console.error("Error fetching applications list:", error);
