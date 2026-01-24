@@ -21,6 +21,26 @@ const ExcelJS = require("exceljs");
 const path = require("path");
 const fs = require("fs");
 
+const buildYearFilter = (year) => {
+  if (!year || year === "all") {
+    return "1=1";
+  }
+  return `YEAR(a.createdAt) = ${parseInt(year)}`;
+};
+
+const getYearCondition = (year) => {
+  if (!year || year === "all") {
+    return {
+      condition: "1=1",
+      replacements: {},
+    };
+  }
+  return {
+    condition: "YEAR(a.createdAt) = :year",
+    replacements: { year: parseInt(year) },
+  };
+};
+
 const getStatusLabel = (status) => {
   const statusMap = {
     MENUNGGU_VERIFIKASI: "Menunggu Verifikasi",
@@ -33,25 +53,33 @@ const getStatusLabel = (status) => {
 };
 
 const getSummaryData = async (year) => {
+  let whereCondition = {
+    status: { [Op.ne]: "DRAFT" },
+  };
+
+  if (year && year !== "all") {
+    whereCondition.createdAt = {
+      [Op.gte]: new Date(`${year}-01-01`),
+      [Op.lte]: new Date(`${year}-12-31`),
+    };
+  }
+
   const totalPendaftar = await Application.count({
-    where: {
-      status: { [Op.ne]: "DRAFT" },
-      createdAt: {
-        [Op.gte]: new Date(`${year}-01-01`),
-        [Op.lte]: new Date(`${year}-12-31`),
-      },
-    },
+    where: whereCondition,
   });
 
+  let scholarshipWhere = {};
+  if (year && year !== "all") {
+    scholarshipWhere.year = year;
+  }
+
   const totalBeasiswa = await Scholarship.count({
-    where: {
-      year: year,
-    },
+    where: scholarshipWhere,
   });
 
   const beasiswaMasihBuka = await Scholarship.count({
     where: {
-      year: year,
+      ...scholarshipWhere,
       is_active: true,
       end_date: { [Op.gte]: new Date() },
     },
@@ -59,7 +87,7 @@ const getSummaryData = async (year) => {
 
   const beasiswaSudahTutup = await Scholarship.count({
     where: {
-      year: year,
+      ...scholarshipWhere,
       end_date: { [Op.lt]: new Date() },
     },
   });
@@ -81,6 +109,15 @@ const getSummaryData = async (year) => {
 };
 
 const getSelectionSummaryData = async (year) => {
+  let whereCondition = {};
+
+  if (year && year !== "all") {
+    whereCondition.createdAt = {
+      [Op.gte]: new Date(`${year}-01-01`),
+      [Op.lte]: new Date(`${year}-12-31`),
+    };
+  }
+
   const [
     lolosSeleksiBerkas,
     menungguVerifikasi,
@@ -91,46 +128,31 @@ const getSelectionSummaryData = async (year) => {
     Application.count({
       where: {
         status: "VALIDATED",
-        createdAt: {
-          [Op.gte]: new Date(`${year}-01-01`),
-          [Op.lte]: new Date(`${year}-12-31`),
-        },
+        ...whereCondition,
       },
     }),
     Application.count({
       where: {
         status: "MENUNGGU_VERIFIKASI",
-        createdAt: {
-          [Op.gte]: new Date(`${year}-01-01`),
-          [Op.lte]: new Date(`${year}-12-31`),
-        },
+        ...whereCondition,
       },
     }),
     Application.count({
       where: {
         status: "VERIFIED",
-        createdAt: {
-          [Op.gte]: new Date(`${year}-01-01`),
-          [Op.lte]: new Date(`${year}-12-31`),
-        },
+        ...whereCondition,
       },
     }),
     Application.count({
       where: {
         status: "REJECTED",
-        createdAt: {
-          [Op.gte]: new Date(`${year}-01-01`),
-          [Op.lte]: new Date(`${year}-12-31`),
-        },
+        ...whereCondition,
       },
     }),
     Application.count({
       where: {
         status: "REVISION_NEEDED",
-        createdAt: {
-          [Op.gte]: new Date(`${year}-01-01`),
-          [Op.lte]: new Date(`${year}-12-31`),
-        },
+        ...whereCondition,
       },
     }),
   ]);
@@ -156,11 +178,14 @@ const getApplicationsListData = async (filters) => {
 
   let whereCondition = {
     status: { [Op.ne]: "DRAFT" },
-    createdAt: {
+  };
+
+  if (year && year !== "all") {
+    whereCondition.createdAt = {
       [Op.gte]: new Date(`${year}-01-01`),
       [Op.lte]: new Date(`${year}-12-31`),
-    },
-  };
+    };
+  }
 
   let userWhereCondition = {
     role: "MAHASISWA",
@@ -192,7 +217,6 @@ const getApplicationsListData = async (filters) => {
     ];
   }
 
-  // ✅ FIX: Include melalui ScholarshipSchema
   const applications = await Application.findAll({
     where: whereCondition,
     include: [
@@ -266,6 +290,11 @@ const getApplicationsListData = async (filters) => {
 };
 
 const getMonthlyTrendData = async (year) => {
+  const yearCondition =
+    year && year !== "all" ? "AND YEAR(createdAt) = :year" : "";
+
+  const replacements = year && year !== "all" ? { year: parseInt(year) } : {};
+
   const monthlyData = await sequelize.query(
     `
     SELECT 
@@ -273,12 +302,12 @@ const getMonthlyTrendData = async (year) => {
       COUNT(*) as value
     FROM applications 
     WHERE status != 'DRAFT' 
-      AND YEAR(createdAt) = :year
+      ${yearCondition}
     GROUP BY MONTH(createdAt)
     ORDER BY month
     `,
     {
-      replacements: { year },
+      replacements,
       type: sequelize.QueryTypes.SELECT,
     },
   );
@@ -308,6 +337,11 @@ const getMonthlyTrendData = async (year) => {
 };
 
 const getFacultyDistributionData = async (year) => {
+  const yearCondition =
+    year && year !== "all" ? "AND YEAR(a.createdAt) = :year" : "";
+
+  const replacements = year && year !== "all" ? { year: parseInt(year) } : {};
+
   return await sequelize.query(
     `
     SELECT 
@@ -318,7 +352,7 @@ const getFacultyDistributionData = async (year) => {
     LEFT JOIN users u ON u.department_id = d.id AND u.role = 'MAHASISWA'
     LEFT JOIN applications a ON u.id = a.student_id 
       AND a.status != 'DRAFT'
-      AND YEAR(a.createdAt) = :year
+      ${yearCondition}
     WHERE f.is_active = true
     GROUP BY f.id, f.name
     HAVING COUNT(a.id) > 0
@@ -326,13 +360,18 @@ const getFacultyDistributionData = async (year) => {
     LIMIT 10
     `,
     {
-      replacements: { year },
+      replacements,
       type: sequelize.QueryTypes.SELECT,
     },
   );
 };
 
 const getDepartmentDistributionData = async (year) => {
+  const yearCondition =
+    year && year !== "all" ? "AND YEAR(a.createdAt) = :year" : "";
+
+  const replacements = year && year !== "all" ? { year: parseInt(year) } : {};
+
   return await sequelize.query(
     `
     SELECT 
@@ -342,7 +381,7 @@ const getDepartmentDistributionData = async (year) => {
     LEFT JOIN users u ON u.department_id = d.id AND u.role = 'MAHASISWA'
     LEFT JOIN applications a ON u.id = a.student_id 
       AND a.status != 'DRAFT'
-      AND YEAR(a.createdAt) = :year
+      ${yearCondition}
     WHERE d.is_active = true
     GROUP BY d.id, d.name
     HAVING COUNT(a.id) > 0
@@ -350,13 +389,18 @@ const getDepartmentDistributionData = async (year) => {
     LIMIT 10
     `,
     {
-      replacements: { year },
+      replacements,
       type: sequelize.QueryTypes.SELECT,
     },
   );
 };
 
 const getStudyProgramDistributionData = async (year) => {
+  const yearCondition =
+    year && year !== "all" ? "AND YEAR(a.createdAt) = :year" : "";
+
+  const replacements = year && year !== "all" ? { year: parseInt(year) } : {};
+
   return await sequelize.query(
     `
     SELECT 
@@ -366,7 +410,7 @@ const getStudyProgramDistributionData = async (year) => {
     LEFT JOIN users u ON u.study_program_id = sp.id AND u.role = 'MAHASISWA'
     LEFT JOIN applications a ON u.id = a.student_id 
       AND a.status != 'DRAFT'
-      AND YEAR(a.createdAt) = :year
+      ${yearCondition}
     WHERE sp.is_active = true
     GROUP BY sp.id, sp.degree
     HAVING COUNT(a.id) > 0
@@ -374,13 +418,18 @@ const getStudyProgramDistributionData = async (year) => {
     LIMIT 10
     `,
     {
-      replacements: { year },
+      replacements,
       type: sequelize.QueryTypes.SELECT,
     },
   );
 };
 
 const getGenderDistributionData = async (year) => {
+  const yearCondition =
+    year && year !== "all" ? "AND YEAR(a.createdAt) = :year" : "";
+
+  const replacements = year && year !== "all" ? { year: parseInt(year) } : {};
+
   const genderData = await sequelize.query(
     `
     SELECT 
@@ -394,13 +443,13 @@ const getGenderDistributionData = async (year) => {
     FROM users u
     LEFT JOIN applications a ON u.id = a.student_id 
       AND a.status != 'DRAFT'
-      AND YEAR(a.createdAt) = :year
+      ${yearCondition}
     WHERE u.role = 'MAHASISWA' AND a.id IS NOT NULL
     GROUP BY u.gender
     HAVING COUNT(a.id) > 0
     `,
     {
-      replacements: { year },
+      replacements,
       type: sequelize.QueryTypes.SELECT,
     },
   );
@@ -412,6 +461,14 @@ const getGenderDistributionData = async (year) => {
 };
 
 const getOverallRecapitulation = async (year) => {
+  const yearCondition =
+    year && year !== "all" ? "AND YEAR(a.createdAt) = :year" : "";
+
+  const scholarshipYearCondition =
+    year && year !== "all" ? "AND s.year = :year" : "";
+
+  const replacements = year && year !== "all" ? { year: parseInt(year) } : {};
+
   const result = await sequelize.query(
     `
     SELECT 
@@ -423,14 +480,14 @@ const getOverallRecapitulation = async (year) => {
     LEFT JOIN scholarship_schemas ss ON s.id = ss.scholarship_id
     LEFT JOIN applications a ON ss.id = a.schema_id 
       AND a.status != 'DRAFT'
-      AND YEAR(a.createdAt) = :year
-    WHERE s.year = :year AND s.is_active = true
+      ${yearCondition}
+    WHERE s.is_active = true ${scholarshipYearCondition}
     GROUP BY s.id, s.name
     HAVING COUNT(DISTINCT a.id) > 0
     ORDER BY s.name
     `,
     {
-      replacements: { year },
+      replacements,
       type: sequelize.QueryTypes.SELECT,
     },
   );
@@ -450,6 +507,11 @@ const getOverallRecapitulation = async (year) => {
 };
 
 const getOngoingRecipients = async (year) => {
+  const yearCondition =
+    year && year !== "all" ? "AND YEAR(a.createdAt) = :year" : "";
+
+  const replacements = year && year !== "all" ? { year: parseInt(year) } : {};
+
   return await sequelize.query(
     `
     SELECT 
@@ -476,18 +538,26 @@ const getOngoingRecipients = async (year) => {
     LEFT JOIN departments d ON sp.department_id = d.id
     LEFT JOIN faculties f ON d.faculty_id = f.id
     WHERE a.status = 'VALIDATED'
-      AND YEAR(a.createdAt) = :year
+      ${yearCondition}
       AND DATE_ADD(a.createdAt, INTERVAL (s.duration_semesters * 6) MONTH) > NOW()
     ORDER BY a.createdAt DESC
     `,
     {
-      replacements: { year },
+      replacements,
       type: sequelize.QueryTypes.SELECT,
     },
   );
 };
 
 const getRecipientsByScholarshipDetail = async (year, scholarshipId) => {
+  const yearCondition =
+    year && year !== "all" ? "AND YEAR(a.createdAt) = :year" : "";
+
+  const replacements =
+    year && year !== "all"
+      ? { year: parseInt(year), scholarshipId }
+      : { scholarshipId };
+
   return await sequelize.query(
     `
     SELECT 
@@ -514,7 +584,7 @@ const getRecipientsByScholarshipDetail = async (year, scholarshipId) => {
     LEFT JOIN faculties f ON d.faculty_id = f.id
     WHERE a.status = 'VALIDATED'
       AND s.id = :scholarshipId
-      AND YEAR(a.createdAt) = :year
+      ${yearCondition}
     ORDER BY 
       CASE 
         WHEN a.status = 'VALIDATED' THEN 1
@@ -525,13 +595,21 @@ const getRecipientsByScholarshipDetail = async (year, scholarshipId) => {
       a.createdAt DESC
     `,
     {
-      replacements: { year, scholarshipId },
+      replacements,
       type: sequelize.QueryTypes.SELECT,
     },
   );
 };
 
 const getApplicantsByScholarshipDetail = async (year, scholarshipId) => {
+  const yearCondition =
+    year && year !== "all" ? "AND YEAR(a.createdAt) = :year" : "";
+
+  const replacements =
+    year && year !== "all"
+      ? { year: parseInt(year), scholarshipId }
+      : { scholarshipId };
+
   return await sequelize.query(
     `
     SELECT 
@@ -571,7 +649,7 @@ const getApplicantsByScholarshipDetail = async (year, scholarshipId) => {
     LEFT JOIN faculties f ON d.faculty_id = f.id
     WHERE a.status != 'DRAFT'
       AND s.id = :scholarshipId
-      AND YEAR(a.createdAt) = :year
+      ${yearCondition}
     ORDER BY 
       CASE 
         WHEN a.status = 'VALIDATED' THEN 1
@@ -583,31 +661,40 @@ const getApplicantsByScholarshipDetail = async (year, scholarshipId) => {
       a.createdAt DESC
     `,
     {
-      replacements: { year, scholarshipId },
+      replacements,
       type: sequelize.QueryTypes.SELECT,
     },
   );
 };
 
 const getAllScholarshipsWithData = async (year) => {
+  const yearCondition =
+    year && year !== "all" ? "AND YEAR(a.createdAt) = :year" : "";
+
+  const scholarshipYearCondition =
+    year && year !== "all" ? "AND s.year = :year" : "";
+
+  const replacements = year && year !== "all" ? { year: parseInt(year) } : {};
+
   return await sequelize.query(
     `
     SELECT DISTINCT
       s.id,
       s.name,
+      s.year,
+      s.organizer,
       COUNT(CASE WHEN a.status = 'VALIDATED' THEN 1 END) as jumlah_penerima,
-      COUNT(CASE WHEN a.status != 'DRAFT' THEN 1 END) as jumlah_pendaftar
+      COUNT(CASE WHEN a.status != 'DRAFT' AND a.status IS NOT NULL THEN 1 END) as jumlah_pendaftar
     FROM scholarships s
     LEFT JOIN scholarship_schemas ss ON s.id = ss.scholarship_id
     LEFT JOIN applications a ON ss.id = a.schema_id 
-      AND YEAR(a.createdAt) = :year
-    WHERE s.year = :year AND s.is_active = true
-    GROUP BY s.id, s.name
-    HAVING jumlah_pendaftar > 0
+      ${yearCondition}
+    WHERE s.is_active = true ${scholarshipYearCondition} AND s.is_external = false
+    GROUP BY s.id, s.name, s.year, s.organizer
     ORDER BY s.name
     `,
     {
-      replacements: { year },
+      replacements,
       type: sequelize.QueryTypes.SELECT,
     },
   );
@@ -615,7 +702,11 @@ const getAllScholarshipsWithData = async (year) => {
 
 const exportLaporanBeasiswa = async (req, res) => {
   try {
-    const { year = new Date().getFullYear() } = req.query;
+    let { year = new Date().getFullYear() } = req.query;
+
+    if (year === "all") {
+      year = null;
+    }
 
     const [
       mainSummary,
@@ -632,7 +723,7 @@ const exportLaporanBeasiswa = async (req, res) => {
     ] = await Promise.all([
       getSummaryData(year),
       getSelectionSummaryData(year),
-      getApplicationsListData({ year }),
+      getApplicationsListData({ year: year || "all" }),
       getMonthlyTrendData(year),
       getFacultyDistributionData(year),
       getDepartmentDistributionData(year),
@@ -1168,6 +1259,26 @@ const exportLaporanBeasiswa = async (req, res) => {
           nim: applicantsDetail.length,
         });
         applyTotalRowStyle(totalRow);
+      } else {
+        const emptyRow = applicantSheet.addRow({
+          no: "",
+          nama: "Belum ada pendaftar untuk beasiswa ini",
+          nim: "",
+          gender: "",
+          fakultas: "",
+          departemen: "",
+          prodi: "",
+          no_hp: "",
+          email: "",
+          tanggal_daftar: "",
+          status_label: "",
+          alasan_ditolak: "",
+        });
+
+        emptyRow.font = { italic: true, color: { argb: "FF6C757D" } };
+        emptyRow.alignment = { horizontal: "center" };
+
+        applicantSheet.mergeCells(`A${emptyRow.number}:L${emptyRow.number}`);
       }
 
       applyCenterAlignment(applicantSheet, [
@@ -1180,7 +1291,8 @@ const exportLaporanBeasiswa = async (req, res) => {
     }
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const fileName = `laporan_beasiswa_${year}_${timestamp}.xlsx`;
+    const yearLabel = year || "Semua_Tahun";
+    const fileName = `laporan_beasiswa_${yearLabel}_${timestamp}.xlsx`;
     const tempDir = path.join(__dirname, "../uploads/exports");
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
     const filePath = path.join(tempDir, fileName);
