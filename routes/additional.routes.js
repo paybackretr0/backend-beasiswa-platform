@@ -18,6 +18,9 @@ const {
   verifiedUser,
 } = require("../middlewares/auth.middleware");
 const authorize = require("../middlewares/role.middleware");
+const {
+  invalidateCommentTemplateCache,
+} = require("../middlewares/cache.middleware");
 
 router.get(
   "/comment-templates/active/:type",
@@ -28,7 +31,7 @@ router.get(
     "VERIFIKATOR_DITMAWA",
     "VALIDATOR_DITMAWA",
   ]),
-  getActiveTemplatesByType
+  getActiveTemplatesByType,
 );
 
 router.use(authenticate, verifiedUser, authorize("SUPERADMIN"));
@@ -39,9 +42,25 @@ router.get("/activity-logs/export", exportActivityLogsToExcel);
 
 router.get("/comment-templates", getAllCommentTemplates);
 router.get("/comment-templates/:id", getCommentTemplateById);
-router.post("/comment-templates", createCommentTemplate);
-router.put("/comment-templates/:id", updateCommentTemplate);
-router.patch("/comment-templates/activate/:id", activateCommentTemplate);
-router.patch("/comment-templates/deactivate/:id", deactivateCommentTemplate);
+router.post(
+  "/comment-templates",
+  invalidateCommentTemplateCache,
+  createCommentTemplate,
+);
+router.put(
+  "/comment-templates/:id",
+  invalidateCommentTemplateCache,
+  updateCommentTemplate,
+);
+router.patch(
+  "/comment-templates/activate/:id",
+  invalidateCommentTemplateCache,
+  activateCommentTemplate,
+);
+router.patch(
+  "/comment-templates/deactivate/:id",
+  invalidateCommentTemplateCache,
+  deactivateCommentTemplate,
+);
 
 module.exports = router;

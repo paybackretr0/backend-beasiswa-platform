@@ -18,6 +18,7 @@ const {
 } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 const { Op } = require("sequelize");
+const { getOrSetCache } = require("../utils/cacheHelper");
 
 const getAllApplications = async (req, res) => {
   try {
@@ -123,124 +124,128 @@ const getApplicationsSummary = async (req, res) => {
   try {
     const user = req.user;
 
-    let includeOptions = [];
+    const cacheKey = `applications_summary:${user.role}:${user.faculty_id || "all"}`;
 
-    if (user.role === "VERIFIKATOR_FAKULTAS") {
-      if (!user.faculty_id) {
-        return errorResponse(
-          res,
-          "User tidak memiliki fakultas terdaftar",
-          400,
-        );
+    const summary = await getOrSetCache(cacheKey, 300, async () => {
+      let includeOptions = [];
+
+      if (user.role === "VERIFIKATOR_FAKULTAS") {
+        if (!user.faculty_id) {
+          throw new Error("User tidak memiliki fakultas terdaftar");
+        }
+
+        includeOptions = [
+          {
+            model: ScholarshipSchema,
+            as: "schema",
+            attributes: [],
+            required: true,
+            include: [
+              {
+                model: Scholarship,
+                as: "scholarship",
+                attributes: [],
+                where: { verification_level: "FACULTY" },
+                required: true,
+                include: [
+                  {
+                    model: ScholarshipFaculty,
+                    as: "scholarshipFaculties",
+                    where: { faculty_id: user.faculty_id },
+                    attributes: [],
+                    required: true,
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            model: User,
+            as: "student",
+            attributes: [],
+            required: true,
+            include: [
+              {
+                model: Department,
+                as: "department",
+                attributes: [],
+                where: { faculty_id: user.faculty_id },
+                required: true,
+              },
+            ],
+          },
+        ];
+      } else if (user.role === "VERIFIKATOR_DITMAWA") {
+        includeOptions = [
+          {
+            model: ScholarshipSchema,
+            as: "schema",
+            attributes: [],
+            required: true,
+            include: [
+              {
+                model: Scholarship,
+                as: "scholarship",
+                attributes: [],
+                where: { verification_level: "DITMAWA" },
+                required: true,
+              },
+            ],
+          },
+        ];
       }
 
-      includeOptions = [
-        {
-          model: ScholarshipSchema,
-          as: "schema",
-          attributes: [],
-          required: true,
-          include: [
-            {
-              model: Scholarship,
-              as: "scholarship",
-              attributes: [],
-              where: { verification_level: "FACULTY" },
-              required: true,
-              include: [
-                {
-                  model: ScholarshipFaculty,
-                  as: "scholarshipFaculties",
-                  where: { faculty_id: user.faculty_id },
-                  attributes: [],
-                  required: true,
-                },
-              ],
-            },
-          ],
-        },
-        {
-          model: User,
-          as: "student",
-          attributes: [],
-          required: true,
-          include: [
-            {
-              model: Department,
-              as: "department",
-              attributes: [],
-              where: { faculty_id: user.faculty_id },
-              required: true,
-            },
-          ],
-        },
-      ];
-    } else if (user.role === "VERIFIKATOR_DITMAWA") {
-      includeOptions = [
-        {
-          model: ScholarshipSchema,
-          as: "schema",
-          attributes: [],
-          required: true,
-          include: [
-            {
-              model: Scholarship,
-              as: "scholarship",
-              attributes: [],
-              where: { verification_level: "DITMAWA" },
-              required: true,
-            },
-          ],
-        },
-      ];
-    }
+      const baseWhere = { status: { [Op.ne]: "DRAFT" } };
 
-    const baseWhere = { status: { [Op.ne]: "DRAFT" } };
+      const [
+        total,
+        menungguVerifikasi,
+        menungguValidasi,
+        ditolak,
+        revisi,
+        lolosValidasi,
+      ] = await Promise.all([
+        Application.count({
+          where: baseWhere,
+          include: includeOptions,
+          distinct: true,
+        }),
+        Application.count({
+          where: { ...baseWhere, status: "MENUNGGU_VERIFIKASI" },
+          include: includeOptions,
+          distinct: true,
+        }),
+        Application.count({
+          where: { ...baseWhere, status: "VERIFIED" },
+          include: includeOptions,
+          distinct: true,
+        }),
+        Application.count({
+          where: { ...baseWhere, status: "REJECTED" },
+          include: includeOptions,
+          distinct: true,
+        }),
+        Application.count({
+          where: { ...baseWhere, status: "REVISION_NEEDED" },
+          include: includeOptions,
+          distinct: true,
+        }),
+        Application.count({
+          where: { ...baseWhere, status: "VALIDATED" },
+          include: includeOptions,
+          distinct: true,
+        }),
+      ]);
 
-    const totalApplications = await Application.count({
-      where: baseWhere,
-      include: includeOptions,
-      distinct: true,
+      return {
+        total,
+        menunggu_verifikasi: menungguVerifikasi,
+        menunggu_validasi: menungguValidasi,
+        ditolak,
+        revisi,
+        lolos_validasi: lolosValidasi,
+      };
     });
-
-    const menungguVerifikasi = await Application.count({
-      where: { ...baseWhere, status: "MENUNGGU_VERIFIKASI" },
-      include: includeOptions,
-      distinct: true,
-    });
-
-    const menungguValidasi = await Application.count({
-      where: { ...baseWhere, status: "VERIFIED" },
-      include: includeOptions,
-      distinct: true,
-    });
-
-    const ditolak = await Application.count({
-      where: { ...baseWhere, status: "REJECTED" },
-      include: includeOptions,
-      distinct: true,
-    });
-
-    const revisi = await Application.count({
-      where: { ...baseWhere, status: "REVISION_NEEDED" },
-      include: includeOptions,
-      distinct: true,
-    });
-
-    const lolosValidasi = await Application.count({
-      where: { ...baseWhere, status: "VALIDATED" },
-      include: includeOptions,
-      distinct: true,
-    });
-
-    const summary = {
-      total: totalApplications,
-      menunggu_verifikasi: menungguVerifikasi,
-      menunggu_validasi: menungguValidasi,
-      ditolak: ditolak,
-      revisi: revisi,
-      lolos_validasi: lolosValidasi,
-    };
 
     return successResponse(
       res,
@@ -249,6 +254,11 @@ const getApplicationsSummary = async (req, res) => {
     );
   } catch (error) {
     console.error("Error fetching applications summary:", error);
+
+    if (error.message.includes("fakultas")) {
+      return errorResponse(res, error.message, 400);
+    }
+
     return errorResponse(res, "Failed to retrieve applications summary", 500);
   }
 };

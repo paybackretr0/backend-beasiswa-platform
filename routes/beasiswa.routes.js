@@ -18,6 +18,10 @@ const {
   activateSchema,
   deactivateSchema,
 } = require("../controllers/beasiswa.controller");
+const {
+  invalidateScholarshipCache,
+  invalidateApplicationCache,
+} = require("../middlewares/cache.middleware");
 const authorize = require("../middlewares/role.middleware");
 
 const scholarshipUpload = createUploadMiddleware({
@@ -37,27 +41,51 @@ router.use(authenticate, verifiedUser, authorize("SUPERADMIN"));
 router.get("/", getAllScholarships);
 router.post(
   "/",
+  invalidateApplicationCache,
+  invalidateScholarshipCache,
   scholarshipUpload.fields([
     { name: "requirement_file", maxCount: 1 },
     { name: "logo_file", maxCount: 1 },
   ]),
-  createScholarship
+  createScholarship,
 );
 
 router.get("/:id", getBeasiswaById);
 
 router.put(
   "/:id",
+  invalidateApplicationCache,
+  invalidateScholarshipCache,
   scholarshipUpload.fields([
     { name: "requirement_file", maxCount: 1 },
     { name: "logo_file", maxCount: 1 },
   ]),
-  updateScholarship
+  updateScholarship,
 );
 
-router.patch("/:id/deactivate", deactivateScholarship);
-router.patch("/:id/activate", activateScholarship);
-router.patch("/schema/:schemaId/deactivate", deactivateSchema);
-router.patch("/schema/:schemaId/activate", activateSchema);
+router.patch(
+  "/:id/deactivate",
+  invalidateApplicationCache,
+  invalidateScholarshipCache,
+  deactivateScholarship,
+);
+router.patch(
+  "/:id/activate",
+  invalidateApplicationCache,
+  invalidateScholarshipCache,
+  activateScholarship,
+);
+router.patch(
+  "/schema/:schemaId/deactivate",
+  invalidateApplicationCache,
+  invalidateScholarshipCache,
+  deactivateSchema,
+);
+router.patch(
+  "/schema/:schemaId/activate",
+  invalidateApplicationCache,
+  invalidateScholarshipCache,
+  activateSchema,
+);
 
 module.exports = router;

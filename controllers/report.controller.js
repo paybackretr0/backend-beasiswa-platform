@@ -21,26 +21,6 @@ const ExcelJS = require("exceljs");
 const path = require("path");
 const fs = require("fs");
 
-const buildYearFilter = (year) => {
-  if (!year || year === "all") {
-    return "1=1";
-  }
-  return `YEAR(a.createdAt) = ${parseInt(year)}`;
-};
-
-const getYearCondition = (year) => {
-  if (!year || year === "all") {
-    return {
-      condition: "1=1",
-      replacements: {},
-    };
-  }
-  return {
-    condition: "YEAR(a.createdAt) = :year",
-    replacements: { year: parseInt(year) },
-  };
-};
-
 const getStatusLabel = (status) => {
   const statusMap = {
     MENUNGGU_VERIFIKASI: "Menunggu Verifikasi",

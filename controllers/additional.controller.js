@@ -10,6 +10,7 @@ const {
   applyCenterAlignment,
 } = require("../utils/style");
 const { successResponse, errorResponse } = require("../utils/response");
+const { getOrSetCache } = require("../utils/cacheHelper");
 const { sequelize } = require("../models");
 const { Op } = require("sequelize");
 const ExcelJS = require("exceljs");
@@ -1171,28 +1172,36 @@ const createActivityLog = async (
 
 const getAllCommentTemplates = async (req, res) => {
   try {
-    const { page = 1, limit = 10, search, type, status } = req.query;
+    const {
+      page = 1,
+      limit = 10,
+      search = "",
+      type = "",
+      status = "",
+    } = req.query;
     const offset = (page - 1) * limit;
 
-    const whereConditions = {};
+    const cacheKey = `comment_templates:list:${page}:${limit}:${search}:${type}:${status}`;
 
-    if (search) {
-      whereConditions[Op.or] = [
-        { template_name: { [Op.like]: `%${search}%` } },
-        { comment_text: { [Op.like]: `%${search}%` } },
-      ];
-    }
+    const data = await getOrSetCache(cacheKey, 300, async () => {
+      const whereConditions = {};
 
-    if (type && type !== "Semua") {
-      whereConditions.template_type = type;
-    }
+      if (search) {
+        whereConditions[Op.or] = [
+          { template_name: { [Op.like]: `%${search}%` } },
+          { comment_text: { [Op.like]: `%${search}%` } },
+        ];
+      }
 
-    if (status !== undefined && status !== "Semua") {
-      whereConditions.is_active = status === "Aktif";
-    }
+      if (type && type !== "Semua") {
+        whereConditions.template_type = type;
+      }
 
-    const { count, rows: templates } =
-      await ApplicationCommentTemplate.findAndCountAll({
+      if (status !== undefined && status !== "Semua") {
+        whereConditions.is_active = status === "Aktif";
+      }
+
+      const { count, rows } = await ApplicationCommentTemplate.findAndCountAll({
         where: whereConditions,
         include: [
           {
@@ -1206,15 +1215,18 @@ const getAllCommentTemplates = async (req, res) => {
         offset: parseInt(offset),
       });
 
-    return successResponse(res, "Template berhasil diambil", {
-      templates,
-      pagination: {
-        currentPage: parseInt(page),
-        totalPages: Math.ceil(count / limit),
-        totalRecords: count,
-        limit: parseInt(limit),
-      },
+      return {
+        templates: rows,
+        pagination: {
+          currentPage: parseInt(page),
+          totalPages: Math.ceil(count / limit),
+          totalRecords: count,
+          limit: parseInt(limit),
+        },
+      };
     });
+
+    return successResponse(res, "Template berhasil diambil", data);
   } catch (error) {
     console.error("Error fetching comment templates:", error);
     return errorResponse(res, "Gagal mengambil template komentar", 500);
@@ -1225,15 +1237,21 @@ const getCommentTemplateById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const template = await ApplicationCommentTemplate.findByPk(id, {
-      include: [
-        {
-          model: User,
-          as: "creator",
-          attributes: ["id", "full_name", "email"],
-        },
-      ],
-    });
+    const template = await getOrSetCache(
+      `comment_template:${id}`,
+      600,
+      async () => {
+        return await ApplicationCommentTemplate.findByPk(id, {
+          include: [
+            {
+              model: User,
+              as: "creator",
+              attributes: ["id", "full_name", "email"],
+            },
+          ],
+        });
+      },
+    );
 
     if (!template) {
       return errorResponse(res, "Template tidak ditemukan", 404);
@@ -1424,13 +1442,17 @@ const getActiveTemplatesByType = async (req, res) => {
       return errorResponse(res, "Tipe template tidak valid", 400);
     }
 
-    const templates = await ApplicationCommentTemplate.findAll({
-      where: {
-        template_type: type,
-        is_active: true,
-      },
-      attributes: ["id", "template_name", "comment_text"],
-      order: [["template_name", "ASC"]],
+    const cacheKey = `comment_templates:active:${type}`;
+
+    const templates = await getOrSetCache(cacheKey, 600, async () => {
+      return await ApplicationCommentTemplate.findAll({
+        where: {
+          template_type: type,
+          is_active: true,
+        },
+        attributes: ["id", "template_name", "comment_text"],
+        order: [["template_name", "ASC"]],
+      });
     });
 
     return successResponse(res, "Template berhasil diambil", templates);

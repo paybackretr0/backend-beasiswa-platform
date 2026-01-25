@@ -44,7 +44,7 @@ const createFaculty = async (req, res) => {
       return errorResponse(
         res,
         "Kode fakultas harus terdiri dari 2 karakter",
-        400
+        400,
       );
     }
 
@@ -84,7 +84,7 @@ const editFaculty = async (req, res) => {
       return errorResponse(
         res,
         "Kode fakultas harus terdiri dari 2 karakter",
-        400
+        400,
       );
     }
 

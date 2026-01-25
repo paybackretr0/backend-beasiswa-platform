@@ -15,148 +15,167 @@ const {
   ActivityLog,
   sequelize,
 } = require("../models");
+const { Op } = require("sequelize");
 const { successResponse, errorResponse } = require("../utils/response");
+const { getOrSetCache } = require("../utils/cacheHelper");
 
 const getAllScholarships = async (req, res) => {
   try {
-    const scholarships = await Scholarship.findAll({
-      include: [
-        {
-          model: ScholarshipSchema,
-          as: "schemas",
-          required: false,
-          attributes: [
-            "id",
-            "name",
-            "description",
-            "quota",
-            "gpa_minimum",
-            "semester_minimum",
-            "is_active",
-          ],
-          include: [
-            {
-              model: ScholarshipSchemaRequirement,
-              as: "requirements",
-              attributes: ["id", "requirement_type", "requirement_text"],
-            },
-            {
-              model: ScholarshipSchemaDocument,
-              as: "documents",
-              attributes: ["id", "document_name"],
-            },
-            {
-              model: ScholarshipSchemaStage,
-              as: "stages",
-              attributes: ["id", "stage_name", "order_no"],
-              order: [["order_no", "ASC"]],
-            },
-          ],
-        },
-        {
-          model: ScholarshipBenefit,
-          as: "benefits",
-          attributes: ["id", "benefit_text"],
-        },
-        {
-          model: Faculty,
-          as: "faculties",
-          through: { attributes: [] },
-          attributes: ["id", "name"],
-        },
-        {
-          model: Department,
-          as: "departments",
-          through: { attributes: [] },
-          attributes: ["id", "name"],
-        },
-        {
-          model: StudyProgram,
-          as: "studyPrograms",
-          through: { attributes: [] },
-          attributes: ["id", "degree"],
-        },
-      ],
-      order: [
-        ["end_date", "DESC"],
-        ["createdAt", "ASC"],
-      ],
+    const cacheKey = "all_scholarships";
+
+    const transformedData = await getOrSetCache(cacheKey, 600, async () => {
+      const scholarships = await Scholarship.findAll({
+        include: [
+          {
+            model: ScholarshipSchema,
+            as: "schemas",
+            required: false,
+            attributes: [
+              "id",
+              "name",
+              "description",
+              "quota",
+              "gpa_minimum",
+              "semester_minimum",
+              "is_active",
+            ],
+            include: [
+              {
+                model: ScholarshipSchemaRequirement,
+                as: "requirements",
+                attributes: ["id", "requirement_type", "requirement_text"],
+              },
+              {
+                model: ScholarshipSchemaDocument,
+                as: "documents",
+                attributes: ["id", "document_name"],
+              },
+              {
+                model: ScholarshipSchemaStage,
+                as: "stages",
+                attributes: ["id", "stage_name", "order_no"],
+                order: [["order_no", "ASC"]],
+              },
+            ],
+          },
+          {
+            model: ScholarshipBenefit,
+            as: "benefits",
+            attributes: ["id", "benefit_text"],
+          },
+          {
+            model: Faculty,
+            as: "faculties",
+            through: { attributes: [] },
+            attributes: ["id", "name"],
+          },
+          {
+            model: Department,
+            as: "departments",
+            through: { attributes: [] },
+            attributes: ["id", "name"],
+          },
+          {
+            model: StudyProgram,
+            as: "studyPrograms",
+            through: { attributes: [] },
+            attributes: ["id", "degree"],
+          },
+        ],
+        order: [
+          ["end_date", "DESC"],
+          ["createdAt", "ASC"],
+        ],
+      });
+
+      return scholarships.map((scholarship) => ({
+        id: scholarship.id,
+        name: scholarship.name,
+        organizer: scholarship.organizer,
+        year: scholarship.year,
+        description: scholarship.description,
+        logo_path: scholarship.logo_path,
+        scholarship_value: scholarship.scholarship_value,
+        duration_semesters: scholarship.duration_semesters,
+        start_date: scholarship.start_date,
+        end_date: scholarship.end_date,
+        is_active: scholarship.is_active,
+        is_external: scholarship.is_external,
+        verification_level: scholarship.verification_level,
+        website_url: scholarship.website_url,
+        contact_person_name: scholarship.contact_person_name,
+        contact_person_email: scholarship.contact_person_email,
+        contact_person_phone: scholarship.contact_person_phone,
+
+        benefits: scholarship.benefits?.map((b) => b.benefit_text) || [],
+
+        schemas:
+          scholarship.schemas?.map((schema) => ({
+            id: schema.id,
+            name: schema.name,
+            description: schema.description,
+            quota: schema.quota,
+            gpa_minimum: schema.gpa_minimum,
+            semester_minimum: schema.semester_minimum,
+            is_active: schema.is_active,
+            requirements_count: schema.requirements?.length || 0,
+            documents_count: schema.documents?.length || 0,
+            stages_count: schema.stages?.length || 0,
+          })) || [],
+
+        total_schemas: scholarship.schemas?.length || 0,
+        active_schemas:
+          scholarship.schemas?.filter((s) => s.is_active).length || 0,
+
+        min_gpa: scholarship.schemas?.reduce(
+          (min, s) =>
+            s.gpa_minimum && (!min || s.gpa_minimum < min)
+              ? s.gpa_minimum
+              : min,
+          null,
+        ),
+
+        min_semester: scholarship.schemas?.reduce(
+          (min, s) =>
+            s.semester_minimum && (!min || s.semester_minimum < min)
+              ? s.semester_minimum
+              : min,
+          null,
+        ),
+
+        total_quota: scholarship.schemas?.reduce(
+          (sum, s) => sum + (s.quota || 0),
+          0,
+        ),
+
+        faculties:
+          scholarship.faculties?.map((f) => ({
+            id: f.id,
+            name: f.name,
+          })) || [],
+
+        departments:
+          scholarship.departments?.map((d) => ({
+            id: d.id,
+            name: d.name,
+          })) || [],
+
+        study_programs:
+          scholarship.studyPrograms?.map((sp) => ({
+            id: sp.id,
+            name: sp.name,
+          })) || [],
+      }));
     });
 
-    const transformedData = scholarships.map((scholarship) => ({
-      id: scholarship.id,
-      name: scholarship.name,
-      organizer: scholarship.organizer,
-      year: scholarship.year,
-      description: scholarship.description,
-      logo_path: scholarship.logo_path,
-      scholarship_value: scholarship.scholarship_value,
-      duration_semesters: scholarship.duration_semesters,
-      start_date: scholarship.start_date,
-      end_date: scholarship.end_date,
-      is_active: scholarship.is_active,
-      is_external: scholarship.is_external,
-      verification_level: scholarship.verification_level,
-      website_url: scholarship.website_url,
-      contact_person_name: scholarship.contact_person_name,
-      contact_person_email: scholarship.contact_person_email,
-      contact_person_phone: scholarship.contact_person_phone,
-
-      benefits: scholarship.benefits?.map((b) => b.benefit_text) || [],
-
-      schemas:
-        scholarship.schemas?.map((schema) => ({
-          id: schema.id,
-          name: schema.name,
-          description: schema.description,
-          quota: schema.quota,
-          gpa_minimum: schema.gpa_minimum,
-          semester_minimum: schema.semester_minimum,
-          is_active: schema.is_active,
-          requirements_count: schema.requirements?.length || 0,
-          documents_count: schema.documents?.length || 0,
-          stages_count: schema.stages?.length || 0,
-        })) || [],
-
-      total_schemas: scholarship.schemas?.length || 0,
-      active_schemas:
-        scholarship.schemas?.filter((s) => s.is_active).length || 0,
-      min_gpa: scholarship.schemas?.reduce(
-        (min, s) =>
-          s.gpa_minimum && (!min || s.gpa_minimum < min) ? s.gpa_minimum : min,
-        null,
-      ),
-      min_semester: scholarship.schemas?.reduce(
-        (min, s) =>
-          s.semester_minimum && (!min || s.semester_minimum < min)
-            ? s.semester_minimum
-            : min,
-        null,
-      ),
-      total_quota: scholarship.schemas?.reduce(
-        (sum, s) => sum + (s.quota || 0),
-        0,
-      ),
-
-      faculties:
-        scholarship.faculties?.map((f) => ({ id: f.id, name: f.name })) || [],
-      departments:
-        scholarship.departments?.map((d) => ({ id: d.id, name: d.name })) || [],
-      study_programs:
-        scholarship.studyPrograms?.map((sp) => ({
-          id: sp.id,
-          name: sp.name,
-        })) || [],
-    }));
-
-    successResponse(
+    return successResponse(
       res,
       "Daftar beasiswa aktif berhasil didapatkan",
       transformedData,
     );
   } catch (error) {
-    console.error("Error fetching active scholarships for user:", error);
-    errorResponse(res, "Gagal mendapatkan daftar beasiswa aktif", 500);
+    console.error("Error fetching all scholarships:", error);
+    return errorResponse(res, "Gagal mendapatkan daftar beasiswa aktif", 500);
   }
 };
 
@@ -1020,129 +1039,138 @@ const getOtherScholarships = async (req, res) => {
 
 const getActiveScholarshipsForInfo = async (req, res) => {
   try {
+    const cacheKey = "active_scholarships_info";
     const currentDate = new Date();
 
-    const scholarships = await Scholarship.findAll({
-      where: {
-        is_active: true,
-        end_date: {
-          [require("sequelize").Op.gte]: currentDate,
+    const transformedData = await getOrSetCache(cacheKey, 300, async () => {
+      const scholarships = await Scholarship.findAll({
+        where: {
+          is_active: true,
+          end_date: {
+            [Op.gte]: currentDate,
+          },
         },
-      },
-      include: [
-        {
-          model: ScholarshipSchema,
-          as: "schemas",
-          where: { is_active: true },
-          required: false,
-          attributes: [
-            "id",
-            "name",
-            "description",
-            "quota",
-            "gpa_minimum",
-            "semester_minimum",
-          ],
-          include: [
-            {
-              model: ScholarshipSchemaRequirement,
-              as: "requirements",
-              attributes: [
-                "id",
-                "requirement_type",
-                "requirement_text",
-                "requirement_file",
-              ],
-            },
-            {
-              model: ScholarshipSchemaDocument,
-              as: "documents",
-              attributes: ["id", "document_name", "template_file"],
-            },
-            {
-              model: ScholarshipSchemaStage,
-              as: "stages",
-              attributes: ["id", "stage_name", "order_no"],
-              order: [["order_no", "ASC"]],
-            },
-          ],
-        },
-        {
-          model: ScholarshipBenefit,
-          as: "benefits",
-          attributes: ["id", "benefit_text"],
-        },
-      ],
-      order: [
-        ["end_date", "ASC"],
-        ["createdAt", "DESC"],
-      ],
+        include: [
+          {
+            model: ScholarshipSchema,
+            as: "schemas",
+            where: { is_active: true },
+            required: false,
+            attributes: [
+              "id",
+              "name",
+              "description",
+              "quota",
+              "gpa_minimum",
+              "semester_minimum",
+            ],
+            include: [
+              {
+                model: ScholarshipSchemaRequirement,
+                as: "requirements",
+                attributes: [
+                  "id",
+                  "requirement_type",
+                  "requirement_text",
+                  "requirement_file",
+                ],
+              },
+              {
+                model: ScholarshipSchemaDocument,
+                as: "documents",
+                attributes: ["id", "document_name", "template_file"],
+              },
+              {
+                model: ScholarshipSchemaStage,
+                as: "stages",
+                attributes: ["id", "stage_name", "order_no"],
+                order: [["order_no", "ASC"]],
+              },
+            ],
+          },
+          {
+            model: ScholarshipBenefit,
+            as: "benefits",
+            attributes: ["id", "benefit_text"],
+          },
+        ],
+        order: [
+          ["end_date", "ASC"],
+          ["createdAt", "DESC"],
+        ],
+      });
+
+      return scholarships.map((scholarship) => ({
+        id: scholarship.id,
+        name: scholarship.name,
+        organizer: scholarship.organizer,
+        year: scholarship.year,
+        description: scholarship.description,
+        logo_path: scholarship.logo_path,
+        scholarship_value: scholarship.scholarship_value,
+        duration_semesters: scholarship.duration_semesters,
+        start_date: scholarship.start_date,
+        end_date: scholarship.end_date,
+        is_active: scholarship.is_active,
+        is_external: scholarship.is_external,
+        website_url: scholarship.website_url,
+        contact_person_name: scholarship.contact_person_name,
+        contact_person_email: scholarship.contact_person_email,
+        contact_person_phone: scholarship.contact_person_phone,
+
+        schemas:
+          scholarship.schemas?.map((schema) => ({
+            id: schema.id,
+            name: schema.name,
+            description: schema.description,
+            quota: schema.quota,
+            gpa_minimum: schema.gpa_minimum,
+            semester_minimum: schema.semester_minimum,
+            requirements: schema.requirements || [],
+            documents: schema.documents || [],
+            stages: schema.stages || [],
+          })) || [],
+
+        total_schemas: scholarship.schemas?.length || 0,
+        active_schemas:
+          scholarship.schemas?.filter((s) => s.is_active).length || 0,
+
+        total_quota: scholarship.schemas?.reduce(
+          (sum, s) => sum + (s.quota || 0),
+          0,
+        ),
+
+        min_gpa: scholarship.schemas?.reduce(
+          (min, s) =>
+            s.gpa_minimum && (!min || s.gpa_minimum < min)
+              ? s.gpa_minimum
+              : min,
+          null,
+        ),
+
+        min_semester: scholarship.schemas?.reduce(
+          (min, s) =>
+            s.semester_minimum && (!min || s.semester_minimum < min)
+              ? s.semester_minimum
+              : min,
+          null,
+        ),
+
+        benefits:
+          scholarship.benefits?.map((b) => ({
+            benefit_text: b.benefit_text,
+          })) || [],
+      }));
     });
 
-    const transformedData = scholarships.map((scholarship) => ({
-      id: scholarship.id,
-      name: scholarship.name,
-      organizer: scholarship.organizer,
-      year: scholarship.year,
-      description: scholarship.description,
-      logo_path: scholarship.logo_path,
-      scholarship_value: scholarship.scholarship_value,
-      duration_semesters: scholarship.duration_semesters,
-      start_date: scholarship.start_date,
-      end_date: scholarship.end_date,
-      is_active: scholarship.is_active,
-      is_external: scholarship.is_external,
-      website_url: scholarship.website_url,
-      contact_person_name: scholarship.contact_person_name,
-      contact_person_email: scholarship.contact_person_email,
-      contact_person_phone: scholarship.contact_person_phone,
-
-      schemas:
-        scholarship.schemas?.map((schema) => ({
-          id: schema.id,
-          name: schema.name,
-          description: schema.description,
-          quota: schema.quota,
-          gpa_minimum: schema.gpa_minimum,
-          semester_minimum: schema.semester_minimum,
-          requirements: schema.requirements || [],
-          documents: schema.documents || [],
-          stages: schema.stages || [],
-        })) || [],
-
-      total_schemas: scholarship.schemas?.length || 0,
-      active_schemas:
-        scholarship.schemas?.filter((s) => s.is_active).length || 0,
-      total_quota: scholarship.schemas?.reduce(
-        (sum, s) => sum + (s.quota || 0),
-        0,
-      ),
-      min_gpa: scholarship.schemas?.reduce(
-        (min, s) =>
-          s.gpa_minimum && (!min || s.gpa_minimum < min) ? s.gpa_minimum : min,
-        null,
-      ),
-      min_semester: scholarship.schemas?.reduce(
-        (min, s) =>
-          s.semester_minimum && (!min || s.semester_minimum < min)
-            ? s.semester_minimum
-            : min,
-        null,
-      ),
-
-      benefits:
-        scholarship.benefits?.map((b) => ({ benefit_text: b.benefit_text })) ||
-        [],
-    }));
-
-    successResponse(
+    return successResponse(
       res,
       "Daftar beasiswa aktif berhasil didapatkan",
       transformedData,
     );
   } catch (error) {
     console.error("Error fetching active scholarships for info:", error);
-    errorResponse(res, "Gagal mendapatkan daftar beasiswa aktif", 500);
+    return errorResponse(res, "Gagal mendapatkan daftar beasiswa aktif", 500);
   }
 };
 
