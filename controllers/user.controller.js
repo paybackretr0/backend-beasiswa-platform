@@ -9,21 +9,26 @@ const {
   parseNimFromEmail,
   extractKodeFakultasDepartemen,
 } = require("../utils/parse_nim");
+const { getOrSetCache } = require("../utils/cacheHelper");
 
 const getMahasiswa = async (req, res) => {
   try {
-    const mahasiswa = await User.findAll({
-      where: { role: "MAHASISWA" },
-      attributes: [
-        "id",
-        "email",
-        "full_name",
-        "phone_number",
-        "role",
-        "is_active",
-        "last_login_at",
-        "createdAt",
-      ],
+    const cacheKey = "users:mahasiswa";
+
+    const mahasiswa = await getOrSetCache(cacheKey, 600, async () => {
+      return await User.findAll({
+        where: { role: "MAHASISWA" },
+        attributes: [
+          "id",
+          "email",
+          "full_name",
+          "phone_number",
+          "role",
+          "is_active",
+          "last_login_at",
+          "createdAt",
+        ],
+      });
     });
 
     return successResponse(res, "Daftar mahasiswa berhasil diambil", mahasiswa);
@@ -35,27 +40,31 @@ const getMahasiswa = async (req, res) => {
 
 const getPimpinanFakultas = async (req, res) => {
   try {
-    const pimpinanFakultas = await User.findAll({
-      where: { role: "PIMPINAN_FAKULTAS" },
-      attributes: [
-        "id",
-        "email",
-        "full_name",
-        "phone_number",
-        "role",
-        "faculty_id",
-        "is_active",
-        "last_login_at",
-        "createdAt",
-      ],
-      include: [
-        {
-          model: Faculty,
-          as: "faculty",
-          attributes: ["id", "name", "code"],
-        },
-      ],
-      order: [["createdAt", "DESC"]],
+    const cacheKey = "users:pimpinan_fakultas";
+
+    const pimpinanFakultas = await getOrSetCache(cacheKey, 600, async () => {
+      return await User.findAll({
+        where: { role: "PIMPINAN_FAKULTAS" },
+        attributes: [
+          "id",
+          "email",
+          "full_name",
+          "phone_number",
+          "role",
+          "faculty_id",
+          "is_active",
+          "last_login_at",
+          "createdAt",
+        ],
+        include: [
+          {
+            model: Faculty,
+            as: "faculty",
+            attributes: ["id", "name", "code"],
+          },
+        ],
+        order: [["createdAt", "DESC"]],
+      });
     });
 
     return successResponse(
@@ -71,18 +80,22 @@ const getPimpinanFakultas = async (req, res) => {
 
 const getPimpinanDitmawa = async (req, res) => {
   try {
-    const pimpinanDitmawa = await User.findAll({
-      where: { role: "PIMPINAN_DITMAWA" },
-      attributes: [
-        "id",
-        "email",
-        "full_name",
-        "phone_number",
-        "role",
-        "is_active",
-        "last_login_at",
-        "createdAt",
-      ],
+    const cacheKey = "users:pimpinan_ditmawa";
+
+    const pimpinanDitmawa = await getOrSetCache(cacheKey, 600, async () => {
+      return await User.findAll({
+        where: { role: "PIMPINAN_DITMAWA" },
+        attributes: [
+          "id",
+          "email",
+          "full_name",
+          "phone_number",
+          "role",
+          "is_active",
+          "last_login_at",
+          "createdAt",
+        ],
+      });
     });
 
     return successResponse(
@@ -98,27 +111,33 @@ const getPimpinanDitmawa = async (req, res) => {
 
 const getVerifikator = async (req, res) => {
   try {
-    const verifikator = await User.findAll({
-      where: { role: ["VERIFIKATOR_FAKULTAS", "VERIFIKATOR_DITMAWA"] },
-      attributes: [
-        "id",
-        "email",
-        "full_name",
-        "phone_number",
-        "role",
-        "faculty_id",
-        "is_active",
-        "last_login_at",
-        "createdAt",
-      ],
-      include: [
-        {
-          model: Faculty,
-          as: "faculty",
-          attributes: ["id", "name", "code"],
+    const cacheKey = "users:verifikator";
+
+    const verifikator = await getOrSetCache(cacheKey, 600, async () => {
+      return await User.findAll({
+        where: {
+          role: ["VERIFIKATOR_FAKULTAS", "VERIFIKATOR_DITMAWA"],
         },
-      ],
-      order: [["createdAt", "DESC"]],
+        attributes: [
+          "id",
+          "email",
+          "full_name",
+          "phone_number",
+          "role",
+          "faculty_id",
+          "is_active",
+          "last_login_at",
+          "createdAt",
+        ],
+        include: [
+          {
+            model: Faculty,
+            as: "faculty",
+            attributes: ["id", "name", "code"],
+          },
+        ],
+        order: [["createdAt", "DESC"]],
+      });
     });
 
     return successResponse(
@@ -134,18 +153,22 @@ const getVerifikator = async (req, res) => {
 
 const getValidator = async (req, res) => {
   try {
-    const validator = await User.findAll({
-      where: { role: "VALIDATOR_DITMAWA" },
-      attributes: [
-        "id",
-        "email",
-        "full_name",
-        "phone_number",
-        "role",
-        "is_active",
-        "last_login_at",
-        "createdAt",
-      ],
+    const cacheKey = "users:validator";
+
+    const validator = await getOrSetCache(cacheKey, 600, async () => {
+      return await User.findAll({
+        where: { role: "VALIDATOR_DITMAWA" },
+        attributes: [
+          "id",
+          "email",
+          "full_name",
+          "phone_number",
+          "role",
+          "is_active",
+          "last_login_at",
+          "createdAt",
+        ],
+      });
     });
 
     return successResponse(res, "Daftar validator berhasil diambil", validator);

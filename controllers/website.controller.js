@@ -2,14 +2,18 @@ const { Information, ActivityLog } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 const { getFileInfo } = require("../utils/upload");
 const { generateUniqueSlug } = require("../utils/slug");
+const { getOrSetCache } = require("../utils/cacheHelper");
 
 const getAllNews = async (req, res) => {
   try {
-    const news = await Information.findAll({
-      where: { type: "NEWS" },
-      order: [["createdAt", "DESC"]],
+    const data = await getOrSetCache("admin_news", 300, async () => {
+      return await Information.findAll({
+        where: { type: "NEWS" },
+        order: [["createdAt", "DESC"]],
+      });
     });
-    return successResponse(res, "Berita berhasil diambil", news);
+
+    return successResponse(res, "Berita berhasil diambil", data);
   } catch (error) {
     console.error("Error fetching news:", error);
     return errorResponse(res, "Gagal mengambil berita", 500);
@@ -18,11 +22,14 @@ const getAllNews = async (req, res) => {
 
 const getAllArticles = async (req, res) => {
   try {
-    const articles = await Information.findAll({
-      where: { type: "ARTICLE" },
-      order: [["createdAt", "DESC"]],
+    const data = await getOrSetCache("admin_articles", 300, async () => {
+      return await Information.findAll({
+        where: { type: "ARTICLE" },
+        order: [["createdAt", "DESC"]],
+      });
     });
-    return successResponse(res, "Artikel berhasil diambil", articles);
+
+    return successResponse(res, "Artikel berhasil diambil", data);
   } catch (error) {
     console.error("Error fetching articles:", error);
     return errorResponse(res, "Gagal mengambil artikel", 500);
@@ -88,7 +95,7 @@ const createInformation = async (req, res) => {
       res,
       "Informasi berhasil dibuat",
       newInformation,
-      201
+      201,
     );
   } catch (error) {
     console.error("Error creating information:", error);
@@ -218,7 +225,7 @@ const publishInformation = async (req, res) => {
     return successResponse(
       res,
       "Informasi berhasil dipublikasikan",
-      information
+      information,
     );
   } catch (error) {
     console.error("Error publishing information:", error);
@@ -258,16 +265,15 @@ const archiveInformation = async (req, res) => {
 
 const getLatestInformation = async (req, res) => {
   try {
-    const information = await Information.findAll({
-      where: { status: "PUBLISHED" },
-      order: [["published_at", "DESC"]],
-      limit: 3,
+    const data = await getOrSetCache("latest_informations", 300, async () => {
+      return await Information.findAll({
+        where: { status: "PUBLISHED" },
+        order: [["published_at", "DESC"]],
+        limit: 3,
+      });
     });
-    return successResponse(
-      res,
-      "Informasi terbaru berhasil diambil",
-      information
-    );
+
+    return successResponse(res, "Informasi terbaru berhasil diambil", data);
   } catch (error) {
     console.error("Error fetching latest information:", error);
     return errorResponse(res, "Gagal mengambil informasi terbaru", 500);
@@ -277,12 +283,20 @@ const getLatestInformation = async (req, res) => {
 const getInformationBySlug = async (req, res) => {
   try {
     const { slug } = req.params;
-    console.log("Fetching information for slug:", slug);
-    const information = await Information.findOne({ where: { slug } });
-    if (!information) {
+
+    const data = await getOrSetCache(
+      `information_slug:${slug}`,
+      600,
+      async () => {
+        return await Information.findOne({ where: { slug } });
+      },
+    );
+
+    if (!data) {
       return errorResponse(res, "Informasi tidak ditemukan", 404);
     }
-    return successResponse(res, "Informasi berhasil diambil", information);
+
+    return successResponse(res, "Informasi berhasil diambil", data);
   } catch (error) {
     console.error("Error fetching information by slug:", error);
     return errorResponse(res, "Gagal mengambil informasi", 500);
@@ -291,15 +305,14 @@ const getInformationBySlug = async (req, res) => {
 
 const getAllInformations = async (req, res) => {
   try {
-    const informations = await Information.findAll({
-      where: { status: "PUBLISHED" },
-      order: [["createdAt", "DESC"]],
+    const data = await getOrSetCache("public_informations", 300, async () => {
+      return await Information.findAll({
+        where: { status: "PUBLISHED" },
+        order: [["createdAt", "DESC"]],
+      });
     });
-    return successResponse(
-      res,
-      "Semua informasi berhasil diambil",
-      informations
-    );
+
+    return successResponse(res, "Semua informasi berhasil diambil", data);
   } catch (error) {
     console.error("Error fetching all informations:", error);
     return errorResponse(res, "Gagal mengambil informasi", 500);

@@ -15,6 +15,10 @@ const {
   validateGovernmentScholarshipFile,
   importGovernmentScholarships,
 } = require("../controllers/government.controller");
+const {
+  invalidateGovScholarshipCache,
+} = require("../middlewares/cache.middleware");
+
 const { excelUpload } = require("../middlewares/upload.middleware");
 
 router.use(authenticate, verifiedUser);
@@ -61,6 +65,7 @@ router.post(
     "VALIDATOR_DITMAWA",
     "VERIFIKATOR_DITMAWA",
   ]),
+  invalidateGovScholarshipCache,
   excelUpload.single("file"),
   importGovernmentScholarships,
 );

@@ -83,7 +83,7 @@ const register = async (req, res) => {
         return errorResponse(
           res,
           "Fakultas tidak ditemukan untuk kode: " + kodeFakultas,
-          400
+          400,
         );
       }
 
@@ -109,7 +109,7 @@ const register = async (req, res) => {
         return errorResponse(
           res,
           `Program studi tidak ditemukan untuk kode: ${kodeProdi} di fakultas: ${faculty.name}`,
-          400
+          400,
         );
       }
 
@@ -117,7 +117,7 @@ const register = async (req, res) => {
       department_id = studyProgram.department.id;
 
       console.log(
-        `User assignment - Faculty: ${faculty.name}, Department: ${studyProgram.department.name}, Study Program: ${studyProgram.name}`
+        `User assignment - Faculty: ${faculty.name}, Department: ${studyProgram.department.name}, Study Program: ${studyProgram.name}`,
       );
     }
 
@@ -158,7 +158,7 @@ const register = async (req, res) => {
       res,
       "Registration successful. Silakan cek email untuk verifikasi.",
       { user_id: newUser.id },
-      201
+      201,
     );
   } catch (error) {
     return errorResponse(res, "Internal server error", 500, error.message);
@@ -266,7 +266,7 @@ const login = async (req, res) => {
       { last_login_at: new Date() },
       {
         where: { id: user.id },
-      }
+      },
     );
 
     return successResponse(res, "Login successful", {
@@ -349,7 +349,7 @@ const forgotPassword = async (req, res) => {
       return successResponse(
         res,
         "Jika email terdaftar, kode reset akan dikirim",
-        200
+        200,
       );
     }
 
@@ -369,7 +369,7 @@ const forgotPassword = async (req, res) => {
 
     return successResponse(
       res,
-      "Kode reset password telah dikirim ke email Anda"
+      "Kode reset password telah dikirim ke email Anda",
     );
   } catch (error) {
     return errorResponse(res, "Internal server error", 500, error.message);
@@ -397,7 +397,7 @@ const verifyResetCode = async (req, res) => {
 
     return successResponse(
       res,
-      "Kode reset valid, silakan lanjutkan reset password"
+      "Kode reset valid, silakan lanjutkan reset password",
     );
   } catch (error) {
     return errorResponse(res, "Internal server error", 500, error.message);
@@ -500,7 +500,7 @@ const updatePassword = async (req, res) => {
       return errorResponse(
         res,
         "New password and confirmation do not match",
-        400
+        400,
       );
     }
 
@@ -511,7 +511,7 @@ const updatePassword = async (req, res) => {
 
     const isPasswordValid = await comparePassword(
       current_password,
-      user.password
+      user.password,
     );
     if (!isPasswordValid) {
       return errorResponse(res, "Current password is incorrect", 401);

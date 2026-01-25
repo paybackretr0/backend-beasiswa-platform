@@ -1,132 +1,120 @@
 const { GovernmentScholarship, sequelize } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
+const {
+  getOrSetCache,
+  invalidateGovernmentScholarshipCaches,
+} = require("../utils/cacheHelper");
 const ExcelJS = require("exceljs");
 const fs = require("fs");
 const path = require("path");
 
 const getGovernmentScholarshipSummary = async (req, res) => {
   try {
-    const { year } = req.query;
+    const { year = "all" } = req.query;
+    const cacheKey = `gov_summary:${year}`;
 
-    let whereCondition = {};
-    if (year && year !== "all") {
-      whereCondition.fiscal_year = year;
-    }
+    const summary = await getOrSetCache(cacheKey, 600, async () => {
+      let whereCondition = {};
+      if (year !== "all") whereCondition.fiscal_year = year;
 
-    const [totalPenerima, totalUnik, totalProgram] = await Promise.all([
-      GovernmentScholarship.count({
-        where: whereCondition,
-      }),
-      sequelize.query(
-        year && year !== "all"
-          ? `SELECT COUNT(DISTINCT nim) as count FROM government_scholarships WHERE fiscal_year = :year`
-          : `SELECT COUNT(DISTINCT nim) as count FROM government_scholarships`,
-        {
-          replacements: year && year !== "all" ? { year } : {},
-          type: sequelize.QueryTypes.SELECT,
-        },
-      ),
-      GovernmentScholarship.count({
-        distinct: true,
-        col: "assistance_scheme",
-        where: whereCondition,
-      }),
-    ]);
+      const [totalPenerima, totalUnik, totalProgram] = await Promise.all([
+        GovernmentScholarship.count({ where: whereCondition }),
+        sequelize.query(
+          year !== "all"
+            ? `SELECT COUNT(DISTINCT nim) as count FROM government_scholarships WHERE fiscal_year = :year`
+            : `SELECT COUNT(DISTINCT nim) as count FROM government_scholarships`,
+          {
+            replacements: year !== "all" ? { year } : {},
+            type: sequelize.QueryTypes.SELECT,
+          },
+        ),
+        GovernmentScholarship.count({
+          distinct: true,
+          col: "assistance_scheme",
+          where: whereCondition,
+        }),
+      ]);
 
-    const summary = {
-      totalPenerima: totalPenerima || 0,
-      totalNominal: 0,
-      totalMahasiswaUnik: totalUnik[0]?.count || 0,
-      totalProgram: totalProgram || 0,
-    };
+      return {
+        totalPenerima: totalPenerima || 0,
+        totalNominal: 0,
+        totalMahasiswaUnik: totalUnik[0]?.count || 0,
+        totalProgram: totalProgram || 0,
+      };
+    });
 
-    return successResponse(
-      res,
-      "Government scholarship summary retrieved successfully",
-      summary,
-    );
-  } catch (error) {
-    console.error("Error fetching government scholarship summary:", error);
-    return errorResponse(
-      res,
-      "Failed to retrieve government scholarship summary",
-      500,
-    );
+    return successResponse(res, "Summary retrieved", summary);
+  } catch (err) {
+    console.error(err);
+    return errorResponse(res, "Failed to retrieve summary", 500);
   }
 };
 
 const getGovernmentScholarshipDistribution = async (req, res) => {
   try {
-    const { year } = req.query;
+    const { year = "all" } = req.query;
+    const cacheKey = `gov_distribution:program:${year}`;
 
-    let whereClause = "";
-    let replacements = {};
+    const data = await getOrSetCache(cacheKey, 600, async () => {
+      let whereClause = "";
+      let replacements = {};
 
-    if (year && year !== "all") {
-      whereClause = "WHERE fiscal_year = :year";
-      replacements.year = year;
-    }
+      if (year !== "all") {
+        whereClause = "WHERE fiscal_year = :year";
+        replacements.year = year;
+      }
 
-    const distribution = await sequelize.query(
-      `
-      SELECT 
-        study_program as label,
-        COUNT(*) as value
-      FROM government_scholarships
-      ${whereClause}
-      GROUP BY study_program
-      ORDER BY value DESC
-      LIMIT 10
-      `,
-      {
-        replacements,
-        type: sequelize.QueryTypes.SELECT,
-      },
-    );
+      return sequelize.query(
+        `
+        SELECT study_program as label, COUNT(*) as value
+        FROM government_scholarships
+        ${whereClause}
+        GROUP BY study_program
+        ORDER BY value DESC
+        LIMIT 10
+        `,
+        { replacements, type: sequelize.QueryTypes.SELECT },
+      );
+    });
 
-    return successResponse(
-      res,
-      "Government scholarship distribution retrieved successfully",
-      distribution,
-    );
-  } catch (error) {
-    console.error("Error fetching government scholarship distribution:", error);
-    return errorResponse(
-      res,
-      "Failed to retrieve government scholarship distribution",
-      500,
-    );
+    return successResponse(res, "Distribution retrieved", data);
+  } catch (err) {
+    console.error(err);
+    return errorResponse(res, "Failed to retrieve distribution", 500);
   }
 };
 
 const getGovernmentScholarshipByCategory = async (req, res) => {
   try {
-    const { year } = req.query;
+    const { year = "all" } = req.query;
+    const cacheKey = `gov_category:${year}`;
 
-    let whereClause = "";
-    let replacements = {};
+    const categories = await getOrSetCache(cacheKey, 600, async () => {
+      let whereClause = "";
+      let replacements = {};
 
-    if (year && year !== "all") {
-      whereClause = "WHERE fiscal_year = :year";
-      replacements.year = year;
-    }
+      if (year !== "all") {
+        whereClause = "WHERE fiscal_year = :year";
+        replacements.year = year;
+      }
 
-    const categories = await sequelize.query(
-      `
-      SELECT 
-        assistance_scheme as label, 
-        COUNT(*) as value,
-        '#2D60FF' as color
-      FROM government_scholarships
-      ${whereClause}
-      GROUP BY assistance_scheme
-      ORDER BY value DESC
-      `,
-      {
-        replacements,
-        type: sequelize.QueryTypes.SELECT,
-      },
-    );
+      return sequelize.query(
+        `
+        SELECT 
+          assistance_scheme as label, 
+          COUNT(*) as value,
+          '#2D60FF' as color
+        FROM government_scholarships
+        ${whereClause}
+        GROUP BY assistance_scheme
+        ORDER BY value DESC
+        `,
+        {
+          replacements,
+          type: sequelize.QueryTypes.SELECT,
+        },
+      );
+    });
 
     return successResponse(
       res,

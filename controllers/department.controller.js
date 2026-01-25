@@ -16,7 +16,7 @@ const getAllDepartments = async (req, res) => {
     return successResponse(
       res,
       "Daftar Departemen berhasil diambil",
-      departments
+      departments,
     );
   } catch (error) {
     console.error("Error fetching departments:", error);
@@ -31,7 +31,7 @@ const createDepartment = async (req, res) => {
       return errorResponse(
         res,
         "Nama, kode, dan fakultas Departemen harus diisi",
-        400
+        400,
       );
     }
     const faculty = await Faculty.findByPk(faculty_id);
@@ -45,7 +45,7 @@ const createDepartment = async (req, res) => {
       return errorResponse(
         res,
         "Departemen dengan kode, dan jenjang yang sama sudah ada di fakultas ini",
-        409
+        409,
       );
     }
     const newDepartment = await Department.create({
@@ -80,7 +80,7 @@ const editDepartment = async (req, res) => {
       return errorResponse(
         res,
         "Nama, kode, dan fakultas Departemen harus diisi",
-        400
+        400,
       );
     }
 
@@ -104,7 +104,7 @@ const editDepartment = async (req, res) => {
       return errorResponse(
         res,
         "Departemen dengan nama, kode, dan fakultas yang sama sudah ada di fakultas ini",
-        409
+        409,
       );
     }
 
@@ -172,7 +172,7 @@ const deactivateDepartment = async (req, res) => {
     return successResponse(
       res,
       "Departemen berhasil dinonaktifkan",
-      department
+      department,
     );
   } catch (error) {
     console.error("Error deactivating department:", error);
