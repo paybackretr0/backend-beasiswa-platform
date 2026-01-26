@@ -11,7 +11,7 @@ const getAllFaculties = async (req, res) => {
         "code",
         "is_active",
         [
-          sequelize.fn("COUNT", sequelize.col("Departments.id")),
+          sequelize.fn("COUNT", sequelize.col("departments.id")),
           "departments_count",
         ],
       ],
