@@ -19,43 +19,43 @@ app.use("/api", routes);
 
 app.get("/", (req, res) => res.send("API Beasiswa berjalan"));
 
-// app.get("/health", async (req, res) => {
-//   try {
-//     await db.sequelize.authenticate();
+app.get("/health", async (req, res) => {
+  try {
+    await db.sequelize.authenticate();
 
-//     res.status(200).json({
-//       success: true,
-//       message: "Backend is healthy",
-//       timestamp: new Date().toISOString(),
-//       database: "connected",
-//     });
-//   } catch (error) {
-//     res.status(503).json({
-//       success: false,
-//       message: "Backend unhealthy",
-//       timestamp: new Date().toISOString(),
-//       database: "disconnected",
-//       error: error.message,
-//     });
-//   }
-// });
+    res.status(200).json({
+      success: true,
+      message: "Backend is healthy",
+      timestamp: new Date().toISOString(),
+      database: "connected",
+    });
+  } catch (error) {
+    res.status(503).json({
+      success: false,
+      message: "Backend unhealthy",
+      timestamp: new Date().toISOString(),
+      database: "disconnected",
+      error: error.message,
+    });
+  }
+});
 
-// app.get("/redis-test", async (req, res) => {
-//   try {
-//     await redis.set("ping", "pong");
-//     const value = await redis.get("ping");
+app.get("/redis-test", async (req, res) => {
+  try {
+    await redis.set("ping", "pong");
+    const value = await redis.get("ping");
 
-//     res.json({
-//       success: true,
-//       redis: value,
-//     });
-//   } catch (error) {
-//     res.status(500).json({
-//       success: false,
-//       message: error.message,
-//     });
-//   }
-// });
+    res.json({
+      success: true,
+      redis: value,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
 
 db.sequelize
   .authenticate()
