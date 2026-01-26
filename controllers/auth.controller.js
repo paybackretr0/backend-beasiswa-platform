@@ -7,6 +7,7 @@ const {
   Department,
   StudyProgram,
   ActivityLog,
+  sequelize,
 } = require("../models");
 const nodemailer = require("nodemailer");
 const { Op } = require("sequelize");
@@ -21,16 +22,24 @@ const {
   generateVerificationCode,
 } = require("../utils/parse_nim");
 
-const sendVerificationEmail = async (user, code) => {
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASSWORD,
-    },
-  });
+const transporter = nodemailer.createTransport({
+  host: process.env.EMAIL_HOST,
+  port: Number(process.env.EMAIL_PORT) || 587,
+  secure: false,
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASSWORD,
+  },
+  tls: {
+    rejectUnauthorized: false,
+  },
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 10000,
+});
 
-  const mailOptions = {
+const sendVerificationEmail = async (user, code) => {
+  await transporter.sendMail({
     from: process.env.EMAIL_FROM,
     to: user.email,
     subject: "Kode Verifikasi Email Akun Beasiswa",
@@ -40,12 +49,12 @@ const sendVerificationEmail = async (user, code) => {
       <h2 style="color:#2D60FF;">${code}</h2>
       <p>Kode ini berlaku selama 10 menit.</p>
     `,
-  };
-
-  await transporter.sendMail(mailOptions);
+  });
 };
 
 const register = async (req, res) => {
+  const t = await sequelize.transaction();
+
   const {
     full_name,
     email,
@@ -56,103 +65,104 @@ const register = async (req, res) => {
     gender,
     phone_number,
   } = req.body;
+
   try {
-    const existingUser = await User.findOne({ where: { email } });
+    const existingUser = await User.findOne({
+      where: { email },
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
+
     if (existingUser) {
+      await t.rollback();
       return errorResponse(res, "User already exists", 400);
     }
 
     if (password !== password_confirmation) {
+      await t.rollback();
       return errorResponse(res, "Password confirmation does not match", 400);
     }
 
     const nim = parseNimFromEmail(email);
-
     let faculty_id = null;
     let department_id = null;
     let study_program_id = null;
 
     if (nim) {
       const { kodeFakultas, kodeProdi } = extractKodeFakultasProdi(nim);
-      if (!kodeFakultas || !kodeProdi) {
-        return errorResponse(res, "Invalid NIM format", 400);
-      }
 
-      const faculty = await Faculty.findOne({ where: { code: kodeFakultas } });
+      const faculty = await Faculty.findOne({
+        where: { code: kodeFakultas },
+        transaction: t,
+      });
+
       if (!faculty) {
-        return errorResponse(
-          res,
-          "Fakultas tidak ditemukan untuk kode: " + kodeFakultas,
-          400,
-        );
+        await t.rollback();
+        return errorResponse(res, "Fakultas tidak ditemukan", 400);
       }
-
-      faculty_id = faculty.id;
 
       const studyProgram = await StudyProgram.findOne({
-        where: {
-          code: kodeProdi,
-        },
+        where: { code: kodeProdi },
         include: [
           {
             model: Department,
             as: "department",
-            where: {
-              faculty_id: faculty.id,
-            },
+            where: { faculty_id: faculty.id },
             required: true,
           },
         ],
+        transaction: t,
       });
 
       if (!studyProgram) {
-        return errorResponse(
-          res,
-          `Program studi tidak ditemukan untuk kode: ${kodeProdi} di fakultas: ${faculty.name}`,
-          400,
-        );
+        await t.rollback();
+        return errorResponse(res, "Program studi tidak ditemukan", 400);
       }
 
-      study_program_id = studyProgram.id;
+      faculty_id = faculty.id;
       department_id = studyProgram.department.id;
-
-      console.log(
-        `User assignment - Faculty: ${faculty.name}, Department: ${studyProgram.department.name}, Study Program: ${studyProgram.name}`,
-      );
+      study_program_id = studyProgram.id;
     }
 
     const hashedPassword = await hashPassword(password);
-
     const verificationCode = generateVerificationCode();
 
-    const newUser = await User.create({
-      email,
-      password: hashedPassword,
-      full_name,
-      role: "MAHASISWA",
-      nim,
-      faculty_id,
-      department_id,
-      study_program_id,
-      phone_number,
-      gender,
-      birth_date,
-      birth_place,
-      emailVerificationCode: verificationCode,
-      emailVerified: false,
-    });
+    const newUser = await User.create(
+      {
+        email,
+        password: hashedPassword,
+        full_name,
+        role: "MAHASISWA",
+        nim,
+        faculty_id,
+        department_id,
+        study_program_id,
+        phone_number,
+        gender,
+        birth_date,
+        birth_place,
+        emailVerificationCode: verificationCode,
+        emailVerified: false,
+      },
+      { transaction: t },
+    );
 
     await sendVerificationEmail(newUser, verificationCode);
 
-    await ActivityLog.create({
-      user_id: newUser.id,
-      action: "REGISTER",
-      entity_type: "User",
-      entity_id: newUser.id,
-      description: `Pengguna dengan email ${newUser.email} melakukan registrasi.`,
-      ip_address: req.ip,
-      user_agent: req.headers["user-agent"],
-    });
+    await ActivityLog.create(
+      {
+        user_id: newUser.id,
+        action: "REGISTER",
+        entity_type: "User",
+        entity_id: newUser.id,
+        description: `User ${newUser.email} registered`,
+        ip_address: req.ip,
+        user_agent: req.headers["user-agent"],
+      },
+      { transaction: t },
+    );
+
+    await t.commit();
 
     return successCreatedResponse(
       res,
@@ -161,7 +171,15 @@ const register = async (req, res) => {
       201,
     );
   } catch (error) {
-    return errorResponse(res, "Internal server error", 500, error.message);
+    console.error("[REGISTER ERROR]", {
+      email,
+      message: error.message,
+      stack: error.stack,
+    });
+
+    await t.rollback();
+
+    return errorResponse(res, "Internal server error", 500);
   }
 };
 
@@ -317,15 +335,7 @@ const login = async (req, res) => {
 };
 
 const sendResetEmail = async (user, code) => {
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASSWORD,
-    },
-  });
-
-  const mailOptions = {
+  await transporter.sendMail({
     from: process.env.EMAIL_FROM,
     to: user.email,
     subject: "Kode Reset Password Akun Beasiswa",
@@ -335,9 +345,7 @@ const sendResetEmail = async (user, code) => {
       <h2 style="color:#2D60FF;">${code}</h2>
       <p>Kode ini berlaku selama 10 menit.</p>
     `,
-  };
-
-  await transporter.sendMail(mailOptions);
+  });
 };
 
 const forgotPassword = async (req, res) => {

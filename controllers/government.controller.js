@@ -1,9 +1,6 @@
 const { GovernmentScholarship, sequelize } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
-const {
-  getOrSetCache,
-  invalidateGovernmentScholarshipCaches,
-} = require("../utils/cacheHelper");
+const { getOrSetCache } = require("../utils/cacheHelper");
 const ExcelJS = require("exceljs");
 const fs = require("fs");
 const path = require("path");
