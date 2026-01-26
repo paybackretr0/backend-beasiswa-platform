@@ -4,11 +4,7 @@ const {
   BackupHistory,
   ApplicationCommentTemplate,
 } = require("../models");
-const {
-  applyHeaderStyle,
-  applyDataRowStyle,
-  applyCenterAlignment,
-} = require("../utils/style");
+const { applyHeaderStyle, applyDataRowStyle } = require("../utils/style");
 const { successResponse, errorResponse } = require("../utils/response");
 const { getOrSetCache } = require("../utils/cacheHelper");
 const { sequelize } = require("../models");
