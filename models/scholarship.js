@@ -70,10 +70,6 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.INTEGER,
         allowNull: false,
       },
-      quota: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-      },
       description: {
         type: DataTypes.TEXT,
         allowNull: true,
@@ -147,7 +143,7 @@ module.exports = (sequelize, DataTypes) => {
       modelName: "Scholarship",
       tableName: "scholarships",
       timestamps: true,
-    }
+    },
   );
   return Scholarship;
 };

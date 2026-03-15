@@ -22,10 +22,6 @@ module.exports = {
         type: Sequelize.INTEGER,
         allowNull: false,
       },
-      quota: {
-        type: Sequelize.INTEGER,
-        allowNull: true,
-      },
       description: {
         type: Sequelize.TEXT,
         allowNull: true,

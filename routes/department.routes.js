@@ -5,6 +5,7 @@ const {
   verifiedUser,
 } = require("../middlewares/auth.middleware");
 const {
+  getStudyProgramsByDepartmentId,
   getAllDepartments,
   createDepartment,
   editDepartment,
@@ -12,6 +13,11 @@ const {
   deactivateDepartment,
 } = require("../controllers/department.controller");
 const authorize = require("../middlewares/role.middleware");
+
+router.get(
+  "/public/:departmentId/study-programs",
+  getStudyProgramsByDepartmentId,
+);
 
 router.use(authenticate, verifiedUser, authorize("SUPERADMIN"));
 router.get("/", getAllDepartments);
