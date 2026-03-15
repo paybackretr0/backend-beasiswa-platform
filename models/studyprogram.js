@@ -24,6 +24,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.UUID,
         allowNull: false,
       },
+      name: {
+        type: DataTypes.STRING(255),
+        allowNull: false,
+      },
       code: {
         type: DataTypes.STRING(50),
         allowNull: false,
@@ -43,7 +47,7 @@ module.exports = (sequelize, DataTypes) => {
       modelName: "StudyProgram",
       tableName: "study_programs",
       timestamps: true,
-    }
+    },
   );
   return StudyProgram;
 };

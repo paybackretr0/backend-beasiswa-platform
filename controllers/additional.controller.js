@@ -1189,11 +1189,11 @@ const getAllCommentTemplates = async (req, res) => {
         ];
       }
 
-      if (type && type !== "Semua") {
+      if (type && type !== "Semua" && type !== "") {
         whereConditions.template_type = type;
       }
 
-      if (status !== undefined && status !== "Semua") {
+      if (status && status !== "Semua" && status !== "") {
         whereConditions.is_active = status === "Aktif";
       }
 

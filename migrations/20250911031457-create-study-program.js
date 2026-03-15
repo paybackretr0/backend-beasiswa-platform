@@ -19,12 +19,17 @@ module.exports = {
         onUpdate: "CASCADE",
         onDelete: "RESTRICT",
       },
+      name: {
+        type: Sequelize.STRING(255),
+        allowNull: false,
+      },
       code: {
         type: Sequelize.STRING(50),
         allowNull: false,
       },
       degree: {
         type: Sequelize.ENUM("D3", "D4", "S1", "S2", "S3", "Profesi"),
+        allowNull: true,
       },
       is_active: {
         type: Sequelize.BOOLEAN,

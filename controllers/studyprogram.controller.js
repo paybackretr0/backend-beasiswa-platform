@@ -4,7 +4,14 @@ const { successResponse, errorResponse } = require("../utils/response");
 const getAllStudyPrograms = async (req, res) => {
   try {
     const studyPrograms = await StudyProgram.findAll({
-      attributes: ["id", "code", "degree", "department_id", "is_active"],
+      attributes: [
+        "id",
+        "name",
+        "code",
+        "degree",
+        "department_id",
+        "is_active",
+      ],
       include: [
         {
           model: Department,
@@ -28,26 +35,26 @@ const getAllStudyPrograms = async (req, res) => {
     return successResponse(
       res,
       "Daftar Program Studi berhasil diambil",
-      studyPrograms
+      studyPrograms,
     );
   } catch (error) {
     console.error("Error fetching study programs:", error);
     return errorResponse(
       res,
-      error.message || "Failed to fetch study programs"
+      error.message || "Failed to fetch study programs",
     );
   }
 };
 
 const createStudyProgram = async (req, res) => {
   try {
-    const { code, degree, department_id } = req.body;
+    const { name, code, degree, department_id } = req.body;
 
-    if (!code || !degree || !department_id) {
+    if (!name || !code || !degree || !department_id) {
       return errorResponse(
         res,
-        "Kode, jenjang, dan departemen Program Studi harus diisi",
-        400
+        "Nama, Kode, jenjang, dan departemen Program Studi harus diisi",
+        400,
       );
     }
 
@@ -67,11 +74,12 @@ const createStudyProgram = async (req, res) => {
       return errorResponse(
         res,
         "Program Studi dengan kode yang sama sudah ada di departemen ini",
-        409
+        409,
       );
     }
 
     const newStudyProgram = await StudyProgram.create({
+      name,
       code,
       degree,
       department_id,
@@ -87,7 +95,7 @@ const createStudyProgram = async (req, res) => {
             attributes: ["id", "name"],
           },
         ],
-      }
+      },
     );
 
     const userName = req.user.full_name || "User";
@@ -96,7 +104,7 @@ const createStudyProgram = async (req, res) => {
       action: "CREATE_STUDY_PROGRAM",
       entity_type: "StudyProgram",
       entity_id: newStudyProgram.id,
-      description: `Program Studi ${newStudyProgram.degree} ${department.name} dengan kode ${code} telah dibuat oleh ${userName}.`,
+      description: `Program Studi ${newStudyProgram.degree} ${newStudyProgram.name} dengan kode ${code} telah dibuat oleh ${userName}.`,
       ip_address: req.ip,
       user_agent: req.headers["user-agent"],
     });
@@ -104,13 +112,13 @@ const createStudyProgram = async (req, res) => {
     return successResponse(
       res,
       "Program Studi berhasil dibuat",
-      studyProgramWithDepartment
+      studyProgramWithDepartment,
     );
   } catch (error) {
     console.error("Error creating study program:", error);
     return errorResponse(
       res,
-      error.message || "Failed to create study program"
+      error.message || "Failed to create study program",
     );
   }
 };
@@ -118,13 +126,13 @@ const createStudyProgram = async (req, res) => {
 const editStudyProgram = async (req, res) => {
   try {
     const { id } = req.params;
-    const { code, degree, department_id } = req.body;
+    const { name, code, degree, department_id } = req.body;
 
-    if (!code || !degree || !department_id) {
+    if (!name || !code || !degree || !department_id) {
       return errorResponse(
         res,
         "Kode, jenjang, dan departemen Program Studi harus diisi",
-        400
+        400,
       );
     }
 
@@ -140,6 +148,7 @@ const editStudyProgram = async (req, res) => {
 
     const existingStudyProgram = await StudyProgram.findOne({
       where: {
+        name: name,
         code: code,
         department_id: department_id,
         id: { [require("sequelize").Op.ne]: id },
@@ -150,7 +159,7 @@ const editStudyProgram = async (req, res) => {
       return errorResponse(
         res,
         "Program Studi dengan kode yang sama sudah ada di departemen ini",
-        409
+        409,
       );
     }
 
@@ -172,7 +181,7 @@ const editStudyProgram = async (req, res) => {
       action: "EDIT_STUDY_PROGRAM",
       entity_type: "StudyProgram",
       entity_id: studyProgram.id,
-      description: `Program Studi ${degree} ${department.name} dengan kode ${code} telah diperbarui oleh ${userName}.`,
+      description: `Program Studi ${degree} ${name} dengan kode ${code} telah diperbarui oleh ${userName}.`,
       ip_address: req.ip,
       user_agent: req.headers["user-agent"],
     });
@@ -180,13 +189,13 @@ const editStudyProgram = async (req, res) => {
     return successResponse(
       res,
       "Program Studi berhasil diperbarui",
-      updatedStudyProgram
+      updatedStudyProgram,
     );
   } catch (error) {
     console.error("Error updating study program:", error);
     return errorResponse(
       res,
-      error.message || "Failed to update study program"
+      error.message || "Failed to update study program",
     );
   }
 };
@@ -217,7 +226,7 @@ const activateStudyProgram = async (req, res) => {
       entity_type: "StudyProgram",
       entity_id: studyProgram.id,
       description: `Program Studi ${studyProgram.degree} ${
-        studyProgram.department?.name || "Unknown"
+        studyProgram.name || "Unknown"
       } telah diaktifkan oleh ${userName}.`,
       ip_address: req.ip,
       user_agent: req.headers["user-agent"],
@@ -226,7 +235,7 @@ const activateStudyProgram = async (req, res) => {
     return successResponse(
       res,
       "Program Studi berhasil diaktifkan",
-      studyProgram
+      studyProgram,
     );
   } catch (error) {
     console.error("Error activating study program:", error);
@@ -260,7 +269,7 @@ const deactivateStudyProgram = async (req, res) => {
       entity_type: "StudyProgram",
       entity_id: studyProgram.id,
       description: `Program Studi ${studyProgram.degree} ${
-        studyProgram.department?.name || "Unknown"
+        studyProgram.name || "Unknown"
       } telah dinonaktifkan oleh ${userName}.`,
       ip_address: req.ip,
       user_agent: req.headers["user-agent"],
@@ -269,7 +278,7 @@ const deactivateStudyProgram = async (req, res) => {
     return successResponse(
       res,
       "Program Studi berhasil dinonaktifkan",
-      studyProgram
+      studyProgram,
     );
   } catch (error) {
     console.error("Error deactivating study program:", error);

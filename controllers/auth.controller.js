@@ -587,7 +587,7 @@ const getProfile = async (req, res) => {
         {
           model: StudyProgram,
           as: "study_program",
-          attributes: ["code", "degree"],
+          attributes: ["code", "name", "degree"],
         },
       ],
       attributes: {
