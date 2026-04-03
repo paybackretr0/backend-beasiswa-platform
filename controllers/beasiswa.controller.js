@@ -15,7 +15,7 @@ const {
   ActivityLog,
   sequelize,
 } = require("../models");
-const { Op } = require("sequelize");
+const { Op, or } = require("sequelize");
 const { successResponse, errorResponse } = require("../utils/response");
 const { getOrSetCache } = require("../utils/cacheHelper");
 
@@ -600,17 +600,20 @@ const getBeasiswaById = async (req, res) => {
           as: "faculties",
           through: { attributes: [] },
           attributes: ["id", "name"],
+          order: [["name", "ASC"]],
         },
         {
           model: Department,
           as: "departments",
           through: { attributes: [] },
           attributes: ["id", "name"],
+          order: [["name", "ASC"]],
           include: [
             {
               model: Faculty,
               as: "faculty",
               attributes: ["id", "name"],
+              order: [["name", "ASC"]],
             },
           ],
         },
@@ -619,16 +622,19 @@ const getBeasiswaById = async (req, res) => {
           as: "studyPrograms",
           through: { attributes: [] },
           attributes: ["id", "name", "degree"],
+          order: [["name", "ASC"]],
           include: [
             {
               model: Department,
               as: "department",
               attributes: ["id", "name"],
+              order: [["name", "ASC"]],
               include: [
                 {
                   model: Faculty,
                   as: "faculty",
                   attributes: ["id", "name"],
+                  order: [["name", "ASC"]],
                 },
               ],
             },
