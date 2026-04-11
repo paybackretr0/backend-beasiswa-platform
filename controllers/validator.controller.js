@@ -9,6 +9,42 @@ const {
 } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 const moment = require("moment-timezone");
+const { sendWhatsAppMessage } = require("../utils/fonnte");
+const { buildApplicationProcessMessage } = require("../utils/whatsappTemplate");
+
+const normalizeWhatsAppTarget = (phoneNumber) => {
+  if (!phoneNumber) return null;
+
+  const digitsOnly = String(phoneNumber).replace(/[^0-9]/g, "");
+  if (!digitsOnly) return null;
+
+  if (digitsOnly.startsWith("62")) return digitsOnly;
+  if (digitsOnly.startsWith("0")) return `62${digitsOnly.slice(1)}`;
+  return digitsOnly;
+};
+
+const notifyApplicationStatusWhatsApp = async ({
+  application,
+  statusKey,
+  comments = [],
+  revisionDeadline,
+}) => {
+  if (!process.env.FONNTE_TOKEN) return;
+
+  const target = normalizeWhatsAppTarget(application?.student?.phone_number);
+  if (!target) return;
+
+  const message = buildApplicationProcessMessage({
+    recipientName: application?.student?.full_name,
+    statusKey,
+    scholarshipName: application?.schema?.scholarship?.name,
+    schemaName: application?.schema?.name,
+    comments,
+    revisionDeadline,
+  });
+
+  await sendWhatsAppMessage(target, message);
+};
 
 const validateApplication = async (req, res) => {
   try {
@@ -21,7 +57,7 @@ const validateApplication = async (req, res) => {
         {
           model: User,
           as: "student",
-          attributes: ["full_name", "email"],
+          attributes: ["full_name", "email", "phone_number"],
         },
         {
           model: ScholarshipSchema,
@@ -76,6 +112,20 @@ const validateApplication = async (req, res) => {
       user_agent: req.get("User-Agent"),
     });
 
+    try {
+      const comments = notes && notes.trim() !== "" ? [notes.trim()] : [];
+      await notifyApplicationStatusWhatsApp({
+        application,
+        statusKey: "VALIDATED",
+        comments,
+      });
+    } catch (waError) {
+      console.error(
+        "Gagal mengirim WA status validasi:",
+        waError.response?.data || waError.message,
+      );
+    }
+
     return successResponse(res, "Application validated successfully", {
       id: application.id,
       status: "VALIDATED",
@@ -109,7 +159,7 @@ const rejectApplication = async (req, res) => {
         {
           model: User,
           as: "student",
-          attributes: ["full_name", "email"],
+          attributes: ["full_name", "email", "phone_number"],
         },
         {
           model: ScholarshipSchema,
@@ -187,6 +237,19 @@ const rejectApplication = async (req, res) => {
       user_agent: req.get("User-Agent"),
     });
 
+    try {
+      await notifyApplicationStatusWhatsApp({
+        application,
+        statusKey: "REJECTED",
+        comments: createdComments.map((comment) => comment.comment_text),
+      });
+    } catch (waError) {
+      console.error(
+        "Gagal mengirim WA status penolakan (validator):",
+        waError.response?.data || waError.message,
+      );
+    }
+
     return successResponse(res, "Application rejected successfully", {
       id: application.id,
       status: "REJECTED",
@@ -234,7 +297,7 @@ const requestRevision = async (req, res) => {
         {
           model: User,
           as: "student",
-          attributes: ["full_name", "email"],
+          attributes: ["full_name", "email", "phone_number"],
         },
         {
           model: ScholarshipSchema,
@@ -315,6 +378,20 @@ const requestRevision = async (req, res) => {
       ip_address: req.ip,
       user_agent: req.get("User-Agent"),
     });
+
+    try {
+      await notifyApplicationStatusWhatsApp({
+        application,
+        statusKey: "REVISION_NEEDED",
+        comments: createdComments.map((comment) => comment.comment_text),
+        revisionDeadline: deadlineWIB.toDate(),
+      });
+    } catch (waError) {
+      console.error(
+        "Gagal mengirim WA status revisi (validator):",
+        waError.response?.data || waError.message,
+      );
+    }
 
     return successResponse(res, "Revision requested successfully", {
       id: application.id,

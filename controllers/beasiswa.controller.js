@@ -12,12 +12,109 @@ const {
   Faculty,
   Department,
   StudyProgram,
+  User,
   ActivityLog,
   sequelize,
 } = require("../models");
 const { Op, or } = require("sequelize");
 const { successResponse, errorResponse } = require("../utils/response");
 const { getOrSetCache } = require("../utils/cacheHelper");
+const { sendWhatsAppMessage } = require("../utils/fonnte");
+const { buildNewScholarshipMessage } = require("../utils/whatsappTemplate");
+
+const normalizeWhatsAppTarget = (phoneNumber) => {
+  if (!phoneNumber) return null;
+
+  const digitsOnly = String(phoneNumber).replace(/[^0-9]/g, "");
+  if (!digitsOnly) return null;
+
+  if (digitsOnly.startsWith("62")) return digitsOnly;
+  if (digitsOnly.startsWith("0")) return `62${digitsOnly.slice(1)}`;
+  return digitsOnly;
+};
+
+const isUserEligibleForScholarship = (user, eligibilitySets) => {
+  const { facultyIds, departmentIds, studyProgramIds } = eligibilitySets;
+
+  if (facultyIds.size > 0 && !facultyIds.has(user.faculty_id)) return false;
+  if (departmentIds.size > 0 && !departmentIds.has(user.department_id))
+    return false;
+  if (studyProgramIds.size > 0 && !studyProgramIds.has(user.study_program_id))
+    return false;
+
+  return true;
+};
+
+const notifyEligibleStudentsForNewScholarship = async (
+  scholarship,
+  parsedSchemas,
+) => {
+  if (!process.env.FONNTE_TOKEN) {
+    return;
+  }
+
+  const eligibilitySets = {
+    facultyIds: new Set(),
+    departmentIds: new Set(),
+    studyProgramIds: new Set(),
+  };
+
+  parsedSchemas.forEach((schema) => {
+    (schema.faculties || []).forEach((id) =>
+      eligibilitySets.facultyIds.add(id),
+    );
+    (schema.departments || []).forEach((id) =>
+      eligibilitySets.departmentIds.add(id),
+    );
+    (schema.study_programs || []).forEach((id) =>
+      eligibilitySets.studyProgramIds.add(id),
+    );
+  });
+
+  const mahasiswaUsers = await User.findAll({
+    where: {
+      role: "MAHASISWA",
+      is_active: true,
+      phone_number: { [Op.ne]: null },
+    },
+    attributes: [
+      "id",
+      "full_name",
+      "phone_number",
+      "faculty_id",
+      "department_id",
+      "study_program_id",
+    ],
+  });
+
+  const eligibleRecipients = new Map();
+  mahasiswaUsers.forEach((user) => {
+    if (!isUserEligibleForScholarship(user, eligibilitySets)) return;
+
+    const normalizedTarget = normalizeWhatsAppTarget(user.phone_number);
+    if (!normalizedTarget) return;
+
+    if (!eligibleRecipients.has(normalizedTarget)) {
+      eligibleRecipients.set(normalizedTarget, user.full_name);
+    }
+  });
+
+  if (eligibleRecipients.size === 0) {
+    console.log(
+      `Tidak ada mahasiswa eligible untuk notifikasi beasiswa ${scholarship.id}`,
+    );
+    return;
+  }
+
+  for (const [target, recipientName] of eligibleRecipients.entries()) {
+    const message = buildNewScholarshipMessage({
+      scholarship,
+      totalSchemas: parsedSchemas.length,
+      recipientName,
+    });
+    await sendWhatsAppMessage(target, message);
+  }
+};
 
 const getAllScholarships = async (req, res) => {
   try {
@@ -575,6 +672,15 @@ const createScholarship = async (req, res) => {
       ip_address: req.ip,
       user_agent: req.headers["user-agent"],
     });
+
+    try {
+      await notifyEligibleStudentsForNewScholarship(scholarship, parsedSchemas);
+    } catch (waError) {
+      console.error(
+        "Gagal mengirim notifikasi WhatsApp beasiswa:",
+        waError.response?.data || waError.message,
+      );
+    }
 
     return successResponse(res, "Beasiswa berhasil dibuat", result);
   } catch (error) {
