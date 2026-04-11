@@ -378,6 +378,14 @@ const createScholarship = async (req, res) => {
       );
     }
 
+    if (start_date && end_date && new Date(end_date) < new Date(start_date)) {
+      return errorResponse(
+        res,
+        "Tanggal selesai pendaftaran tidak boleh kurang dari tanggal mulai",
+        400,
+      );
+    }
+
     let logoPath = null;
     if (req.files && req.files.logo_file && req.files.logo_file[0]) {
       const logoFileInfo = req.filesInfo.logo_file[0];
@@ -860,6 +868,14 @@ const updateScholarship = async (req, res) => {
       return errorResponse(
         res,
         "Website URL wajib untuk beasiswa eksternal",
+        400,
+      );
+    }
+
+    if (start_date && end_date && new Date(end_date) < new Date(start_date)) {
+      return errorResponse(
+        res,
+        "Tanggal selesai pendaftaran tidak boleh kurang dari tanggal mulai",
         400,
       );
     }

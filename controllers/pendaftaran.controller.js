@@ -2,6 +2,9 @@ const {
   FormField,
   Scholarship,
   ScholarshipSchema,
+  Faculty,
+  Department,
+  StudyProgram,
   Application,
   FormAnswer,
   ApplicationDocument,
@@ -11,6 +14,29 @@ const {
 } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 const { Op } = require("sequelize");
+
+const isUserEligibleForScholarship = (user, scholarship) => {
+  const facultyIds = new Set((scholarship.faculties || []).map((f) => f.id));
+  const departmentIds = new Set(
+    (scholarship.departments || []).map((d) => d.id),
+  );
+  const studyProgramIds = new Set(
+    (scholarship.studyPrograms || []).map((sp) => sp.id),
+  );
+
+  const hasRestriction =
+    facultyIds.size > 0 || departmentIds.size > 0 || studyProgramIds.size > 0;
+  if (!hasRestriction) return true;
+
+  const isStudyProgramEligible =
+    studyProgramIds.size > 0 && studyProgramIds.has(user.study_program_id);
+  const isDepartmentEligible =
+    departmentIds.size > 0 && departmentIds.has(user.department_id);
+  const isFacultyEligible =
+    facultyIds.size > 0 && facultyIds.has(user.faculty_id);
+
+  return isStudyProgramEligible || isDepartmentEligible || isFacultyEligible;
+};
 
 const getScholarshipForm = async (req, res) => {
   try {
@@ -30,6 +56,24 @@ const getScholarshipForm = async (req, res) => {
         "website_url",
       ],
       include: [
+        {
+          model: Faculty,
+          as: "faculties",
+          through: { attributes: [] },
+          attributes: ["id"],
+        },
+        {
+          model: Department,
+          as: "departments",
+          through: { attributes: [] },
+          attributes: ["id"],
+        },
+        {
+          model: StudyProgram,
+          as: "studyPrograms",
+          through: { attributes: [] },
+          attributes: ["id"],
+        },
         {
           model: ScholarshipSchema,
           as: "schemas",
@@ -52,6 +96,28 @@ const getScholarshipForm = async (req, res) => {
         res,
         "Beasiswa tidak ditemukan atau tidak aktif",
         404,
+      );
+    }
+
+    const user = await User.findByPk(userId, {
+      attributes: [
+        "id",
+        "nim",
+        "faculty_id",
+        "department_id",
+        "study_program_id",
+      ],
+    });
+
+    if (!user) {
+      return errorResponse(res, "User tidak ditemukan", 404);
+    }
+
+    if (!isUserEligibleForScholarship(user, scholarship)) {
+      return errorResponse(
+        res,
+        "Anda tidak memenuhi cakupan fakultas/departemen/program studi untuk beasiswa ini",
+        403,
       );
     }
 
@@ -163,16 +229,6 @@ const getScholarshipForm = async (req, res) => {
       });
     }
 
-    const user = await User.findByPk(userId, {
-      attributes: [
-        "id",
-        "nim",
-        "faculty_id",
-        "department_id",
-        "study_program_id",
-      ],
-    });
-
     const responseData = {
       scholarship: {
         id: scholarship.id,
@@ -240,6 +296,26 @@ const submitApplication = async (req, res) => {
 
     const scholarship = await Scholarship.findOne({
       where: { id: scholarshipId, is_active: true },
+      include: [
+        {
+          model: Faculty,
+          as: "faculties",
+          through: { attributes: [] },
+          attributes: ["id"],
+        },
+        {
+          model: Department,
+          as: "departments",
+          through: { attributes: [] },
+          attributes: ["id"],
+        },
+        {
+          model: StudyProgram,
+          as: "studyPrograms",
+          through: { attributes: [] },
+          attributes: ["id"],
+        },
+      ],
     });
 
     if (!scholarship) {
@@ -259,6 +335,22 @@ const submitApplication = async (req, res) => {
           is_external: true,
           external_url: scholarship.website_url,
         },
+      );
+    }
+
+    const user = await User.findByPk(userId, {
+      attributes: ["id", "faculty_id", "department_id", "study_program_id"],
+    });
+
+    if (!user) {
+      return errorResponse(res, "User tidak ditemukan", 404);
+    }
+
+    if (!isUserEligibleForScholarship(user, scholarship)) {
+      return errorResponse(
+        res,
+        "Anda tidak memenuhi cakupan fakultas/departemen/program studi untuk beasiswa ini",
+        403,
       );
     }
 
