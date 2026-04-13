@@ -1,14 +1,16 @@
-const { User, Faculty, Department, ActivityLog } = require("../models");
+const {
+  User,
+  Faculty,
+  Department,
+  StudyProgram,
+  ActivityLog,
+} = require("../models");
 const {
   successResponse,
   errorResponse,
   successCreatedResponse,
 } = require("../utils/response");
 const { hashPassword } = require("../utils/password");
-const {
-  parseNimFromEmail,
-  extractKodeFakultasDepartemen,
-} = require("../utils/parse_nim");
 const { getOrSetCache } = require("../utils/cacheHelper");
 
 const getMahasiswa = async (req, res) => {
@@ -22,8 +24,14 @@ const getMahasiswa = async (req, res) => {
           "id",
           "email",
           "full_name",
+          "birth_date",
+          "birth_place",
+          "gender",
           "phone_number",
           "role",
+          "faculty_id",
+          "department_id",
+          "study_program_id",
           "is_active",
           "last_login_at",
           "createdAt",
@@ -339,43 +347,73 @@ const updateVerifikator = async (req, res) => {
 };
 
 const addMahasiswa = async (req, res) => {
-  const { email, password, full_name } = req.body;
+  const {
+    email,
+    password,
+    full_name,
+    birth_date,
+    birth_place,
+    gender,
+    phone_number,
+    faculty_id,
+    department_id,
+    study_program_id,
+  } = req.body;
 
   try {
+    if (
+      !email ||
+      !password ||
+      !full_name ||
+      !birth_date ||
+      !birth_place ||
+      !gender ||
+      !phone_number ||
+      !faculty_id ||
+      !department_id ||
+      !study_program_id
+    ) {
+      return errorResponse(
+        res,
+        "Data mahasiswa belum lengkap. Pastikan semua field wajib terisi",
+        400,
+      );
+    }
+
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
       return errorResponse(res, "Email sudah digunakan", 400);
     }
 
-    const nim = parseNimFromEmail(email);
-
-    if (!nim) {
-      return errorResponse(
-        res,
-        "Format email tidak valid untuk mahasiswa",
-        400,
-      );
-    }
-
-    const { kodeFakultas, kodeDepartemen } = extractKodeFakultasDepartemen(nim);
-
-    if (!kodeFakultas || !kodeDepartemen) {
-      return errorResponse(res, "Format NIM tidak valid", 400);
-    }
-
-    const faculty = await Faculty.findOne({ where: { code: kodeFakultas } });
+    const faculty = await Faculty.findByPk(faculty_id);
     if (!faculty) {
       return errorResponse(res, "Fakultas tidak ditemukan", 404);
     }
 
-    const department = await Department.findOne({
-      where: {
-        faculty_id: faculty.id,
-        code: kodeDepartemen,
-      },
-    });
+    const department = await Department.findByPk(department_id);
     if (!department) {
       return errorResponse(res, "Departemen tidak ditemukan", 404);
+    }
+
+    if (department.faculty_id !== faculty.id) {
+      return errorResponse(
+        res,
+        "Departemen tidak sesuai dengan fakultas yang dipilih",
+        400,
+      );
+    }
+
+    const studyProgram = await StudyProgram.findByPk(study_program_id);
+    if (!studyProgram) {
+      return errorResponse(res, "Program studi tidak ditemukan", 404);
+    }
+
+    if (studyProgram.department_id !== department.id) {
+      return errorResponse(
+        res,
+        "Program studi tidak sesuai dengan departemen yang dipilih",
+        400,
+      );
     }
 
     const hashedPassword = await hashPassword(password);
@@ -385,8 +423,13 @@ const addMahasiswa = async (req, res) => {
       password: hashedPassword,
       full_name,
       role: "MAHASISWA",
-      faculty_id: faculty.id,
-      department_id: department.id,
+      birth_date,
+      birth_place,
+      gender,
+      phone_number,
+      faculty_id,
+      department_id,
+      study_program_id,
       is_active: true,
       emailVerified: true,
     });
@@ -465,7 +508,17 @@ const addPimpinanFakultas = async (req, res) => {
 
 const updateUser = async (req, res) => {
   const { id } = req.params;
-  const { full_name, phone_number, faculty_id, department_id } = req.body;
+  const {
+    email,
+    full_name,
+    birth_date,
+    birth_place,
+    gender,
+    phone_number,
+    faculty_id,
+    department_id,
+    study_program_id,
+  } = req.body;
 
   try {
     const user = await User.findByPk(id);
@@ -473,21 +526,79 @@ const updateUser = async (req, res) => {
       return errorResponse(res, "User tidak ditemukan", 404);
     }
 
-    if (faculty_id) {
-      const faculty = await Faculty.findByPk(faculty_id);
+    if (email && email !== user.email) {
+      const existingUser = await User.findOne({ where: { email } });
+      if (existingUser) {
+        return errorResponse(res, "Email sudah digunakan", 400);
+      }
+    }
+
+    const nextFacultyId = faculty_id ?? user.faculty_id;
+    const nextDepartmentId = department_id ?? user.department_id;
+    let nextStudyProgramId = study_program_id;
+
+    if (nextFacultyId) {
+      const faculty = await Faculty.findByPk(nextFacultyId);
       if (!faculty) {
         return errorResponse(res, "Fakultas tidak ditemukan", 404);
       }
     }
 
-    if (department_id) {
-      const department = await Department.findByPk(department_id);
+    if (nextDepartmentId) {
+      const department = await Department.findByPk(nextDepartmentId);
       if (!department) {
         return errorResponse(res, "Departemen tidak ditemukan", 404);
       }
+
+      if (nextFacultyId && department.faculty_id !== nextFacultyId) {
+        return errorResponse(
+          res,
+          "Departemen tidak sesuai dengan fakultas yang dipilih",
+          400,
+        );
+      }
     }
 
-    await user.update({ full_name, phone_number, faculty_id, department_id });
+    if (nextStudyProgramId) {
+      const studyProgram = await StudyProgram.findByPk(nextStudyProgramId);
+      if (!studyProgram) {
+        return errorResponse(res, "Program studi tidak ditemukan", 404);
+      }
+
+      if (nextDepartmentId && studyProgram.department_id !== nextDepartmentId) {
+        return errorResponse(
+          res,
+          "Program studi tidak sesuai dengan departemen yang dipilih",
+          400,
+        );
+      }
+    }
+
+    if (department_id && !study_program_id && user.study_program_id) {
+      const currentStudyProgram = await StudyProgram.findByPk(
+        user.study_program_id,
+      );
+      if (
+        !currentStudyProgram ||
+        currentStudyProgram.department_id !== nextDepartmentId
+      ) {
+        nextStudyProgramId = null;
+      }
+    }
+
+    const payload = {};
+    if (email !== undefined) payload.email = email;
+    if (full_name !== undefined) payload.full_name = full_name;
+    if (birth_date !== undefined) payload.birth_date = birth_date;
+    if (birth_place !== undefined) payload.birth_place = birth_place;
+    if (gender !== undefined) payload.gender = gender;
+    if (phone_number !== undefined) payload.phone_number = phone_number;
+    if (faculty_id !== undefined) payload.faculty_id = faculty_id;
+    if (department_id !== undefined) payload.department_id = department_id;
+    if (nextStudyProgramId !== undefined)
+      payload.study_program_id = nextStudyProgramId;
+
+    await user.update(payload);
 
     const userName = req.user.full_name || "User";
     await ActivityLog.create({
