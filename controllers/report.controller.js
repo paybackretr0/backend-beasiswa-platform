@@ -1315,6 +1315,251 @@ const exportLaporanBeasiswa = async (req, res) => {
   }
 };
 
+const getFilteredApplicantsForExport = async ({
+  year,
+  scholarshipId,
+  schemaId,
+  user,
+}) => {
+  const whereCondition = {
+    status: { [Op.ne]: "DRAFT" },
+  };
+
+  if (year && year !== "all") {
+    whereCondition.createdAt = {
+      [Op.gte]: new Date(`${year}-01-01`),
+      [Op.lte]: new Date(`${year}-12-31`),
+    };
+  }
+
+  const role = user?.role;
+  const facultyScopedRoles = ["PIMPINAN_FAKULTAS", "VERIFIKATOR_FAKULTAS"];
+  const studentWhere = {
+    role: "MAHASISWA",
+    ...(facultyScopedRoles.includes(role) && user?.faculty_id
+      ? { faculty_id: user.faculty_id }
+      : {}),
+  };
+
+  const schemaWhere = {
+    ...(schemaId ? { id: schemaId } : {}),
+  };
+
+  const scholarshipWhere = {
+    ...(scholarshipId ? { id: scholarshipId } : {}),
+  };
+
+  const applications = await Application.findAll({
+    where: whereCondition,
+    include: [
+      {
+        model: User,
+        as: "student",
+        where: studentWhere,
+        attributes: ["id", "full_name", "nim", "gender", "email"],
+        include: [
+          {
+            model: StudyProgram,
+            as: "study_program",
+            required: false,
+            attributes: ["id", "degree"],
+            include: [
+              {
+                model: Department,
+                as: "department",
+                required: false,
+                attributes: ["id", "name"],
+                include: [
+                  {
+                    model: Faculty,
+                    as: "faculty",
+                    required: false,
+                    attributes: ["id", "name"],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        model: ScholarshipSchema,
+        as: "schema",
+        where: Object.keys(schemaWhere).length ? schemaWhere : undefined,
+        required: true,
+        attributes: ["id", "name"],
+        include: [
+          {
+            model: Scholarship,
+            as: "scholarship",
+            where: Object.keys(scholarshipWhere).length
+              ? scholarshipWhere
+              : undefined,
+            required: true,
+            attributes: ["id", "name", "year"],
+          },
+        ],
+      },
+    ],
+    order: [["createdAt", "DESC"]],
+  });
+
+  return applications;
+};
+
+const exportPendaftarLaporan = async (req, res) => {
+  try {
+    const { year = "all", scholarshipId, schemaId } = req.query;
+
+    const applications = await getFilteredApplicantsForExport({
+      year,
+      scholarshipId,
+      schemaId,
+      user: req.user,
+    });
+
+    const totalPendaftar = applications.length;
+    const statusCounts = {
+      menungguVerifikasi: applications.filter(
+        (a) => a.status === "MENUNGGU_VERIFIKASI",
+      ).length,
+      menungguValidasi: applications.filter((a) => a.status === "VERIFIED")
+        .length,
+      divalidasi: applications.filter((a) => a.status === "VALIDATED").length,
+      ditolak: applications.filter((a) => a.status === "REJECTED").length,
+      perluRevisi: applications.filter((a) => a.status === "REVISION_NEEDED")
+        .length,
+    };
+
+    const workbook = new ExcelJS.Workbook();
+
+    const summarySheet = workbook.addWorksheet("Statistik Umum");
+    summarySheet.columns = [
+      { header: "Keterangan", key: "keterangan", width: 40 },
+      { header: "Nilai", key: "nilai", width: 22 },
+    ];
+    applyHeaderStyle(summarySheet.getRow(1));
+
+    const filterScholarshipLabel = scholarshipId
+      ? applications[0]?.schema?.scholarship?.name || "Beasiswa Terpilih"
+      : "Semua Beasiswa";
+    const filterSchemaLabel = schemaId
+      ? applications[0]?.schema?.name || "Skema Terpilih"
+      : "Semua Skema";
+
+    const summaryRows = [
+      { keterangan: "Periode Tahun", nilai: year === "all" ? "Semua" : year },
+      { keterangan: "Filter Beasiswa", nilai: filterScholarshipLabel },
+      { keterangan: "Filter Skema", nilai: filterSchemaLabel },
+      { keterangan: "Total Pendaftar", nilai: totalPendaftar },
+      {
+        keterangan: "Menunggu Verifikasi",
+        nilai: statusCounts.menungguVerifikasi,
+      },
+      { keterangan: "Menunggu Validasi", nilai: statusCounts.menungguValidasi },
+      { keterangan: "Divalidasi", nilai: statusCounts.divalidasi },
+      { keterangan: "Perlu Revisi", nilai: statusCounts.perluRevisi },
+      { keterangan: "Ditolak", nilai: statusCounts.ditolak },
+    ];
+
+    summaryRows.forEach((item, index) => {
+      const row = summarySheet.addRow(item);
+      applyDataRowStyle(row, index);
+    });
+    applyCenterAlignment(summarySheet, ["nilai"]);
+
+    const applicantsSheet = workbook.addWorksheet("Data Pendaftar");
+    applicantsSheet.columns = [
+      { header: "No", key: "no", width: 8 },
+      { header: "Nama", key: "nama", width: 25 },
+      { header: "NIM", key: "nim", width: 18 },
+      { header: "Fakultas", key: "fakultas", width: 25 },
+      { header: "Departemen", key: "departemen", width: 25 },
+      { header: "Program Studi", key: "prodi", width: 20 },
+      { header: "Gender", key: "gender", width: 12 },
+      { header: "Email", key: "email", width: 30 },
+      { header: "Beasiswa", key: "beasiswa", width: 30 },
+      { header: "Skema", key: "skema", width: 30 },
+      { header: "Status", key: "status", width: 30 },
+      { header: "Tanggal Daftar", key: "tanggalDaftar", width: 20 },
+    ];
+    applyHeaderStyle(applicantsSheet.getRow(1));
+
+    applications.forEach((app, index) => {
+      const row = applicantsSheet.addRow({
+        no: index + 1,
+        nama: app.student?.full_name || "N/A",
+        nim: app.student?.nim || "N/A",
+        fakultas:
+          app.student?.study_program?.department?.faculty?.name || "N/A",
+        departemen: app.student?.study_program?.department?.name || "N/A",
+        prodi: app.student?.study_program?.degree || "N/A",
+        gender: app.student?.gender === "L" ? "Laki-laki" : "Perempuan",
+        email: app.student?.email || "-",
+        beasiswa: app.schema?.scholarship?.name || "N/A",
+        skema: app.schema?.name || "N/A",
+        status: getStatusLabel(app.status),
+        tanggalDaftar: app.createdAt
+          ? new Date(app.createdAt).toLocaleDateString("id-ID")
+          : "-",
+      });
+      applyDataRowStyle(row, index);
+    });
+
+    applyCenterAlignment(applicantsSheet, [
+      "no",
+      "nim",
+      "gender",
+      "tanggalDaftar",
+    ]);
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const yearLabel = year || "Semua";
+    const fileName = `laporan_pendaftar_${yearLabel}_${timestamp}.xlsx`;
+    const tempDir = path.join(__dirname, "../uploads/exports");
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+    const filePath = path.join(tempDir, fileName);
+
+    await workbook.xlsx.writeFile(filePath);
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+
+    res.download(filePath, fileName, (err) => {
+      if (err) {
+        console.error("Error sending export file:", err);
+        if (!res.headersSent) {
+          return errorResponse(res, "Gagal mengunduh laporan pendaftar", 500);
+        }
+      }
+
+      setTimeout(() => {
+        fs.unlink(filePath, () => {});
+      }, 10000);
+    });
+
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "EXPORT_APPLICANTS_REPORT",
+      entity_type: "Application",
+      entity_id: req.user.id,
+      description: `${userName} mengekspor laporan data pendaftar`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
+  } catch (error) {
+    console.error("Error exporting laporan pendaftar:", error);
+    if (!res.headersSent) {
+      return errorResponse(res, "Gagal mengunduh laporan pendaftar", 500);
+    }
+  }
+};
+
 module.exports = {
   exportLaporanBeasiswa,
+  exportPendaftarLaporan,
 };

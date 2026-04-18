@@ -18,7 +18,10 @@ const {
   getScholarshipPerformance,
   getTopPerformingFaculties,
 } = require("../controllers/analytics.controller");
-const { exportLaporanBeasiswa } = require("../controllers/report.controller");
+const {
+  exportLaporanBeasiswa,
+  exportPendaftarLaporan,
+} = require("../controllers/report.controller");
 const authorize = require("../middlewares/role.middleware");
 
 router.use(
@@ -31,7 +34,7 @@ router.use(
     "VERIFIKATOR_FAKULTAS",
     "VERIFIKATOR_DITMAWA",
     "VALIDATOR_DITMAWA",
-  ])
+  ]),
 );
 
 // Summary endpoints
@@ -57,5 +60,6 @@ router.get("/applications-list", getApplicationsList);
 router.get("/activities", getActivities);
 
 router.get("/export-laporan", exportLaporanBeasiswa);
+router.get("/export-pendaftar", exportPendaftarLaporan);
 
 module.exports = router;
