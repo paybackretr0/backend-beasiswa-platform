@@ -9,7 +9,7 @@ const {
   ActivityLog,
   sequelize,
 } = require("../models");
-const { errorResponse } = require("../utils/response");
+const { successResponse, errorResponse } = require("../utils/response");
 const {
   applyHeaderStyle,
   applyDataRowStyle,
@@ -18,8 +18,13 @@ const {
 } = require("../utils/style");
 const { Op } = require("sequelize");
 const ExcelJS = require("exceljs");
+const bcrypt = require("bcrypt");
 const path = require("path");
 const fs = require("fs");
+const {
+  invalidateApplicationCaches,
+  invalidateCacheByPattern,
+} = require("../utils/cacheHelper");
 
 const getStatusLabel = (status) => {
   const statusMap = {
@@ -1559,7 +1564,763 @@ const exportPendaftarLaporan = async (req, res) => {
   }
 };
 
+const normalizeText = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase();
+
+const readCellValue = (cellValue) => {
+  if (cellValue === null || cellValue === undefined) return "";
+
+  if (typeof cellValue === "object") {
+    if (cellValue.text) return String(cellValue.text).trim();
+    if (cellValue.result !== undefined && cellValue.result !== null) {
+      return String(cellValue.result).trim();
+    }
+    if (cellValue.richText && Array.isArray(cellValue.richText)) {
+      return cellValue.richText
+        .map((item) => item.text || "")
+        .join("")
+        .trim();
+    }
+  }
+
+  return String(cellValue).trim();
+};
+
+const buildImportRowsFromWorksheet = (worksheet) => {
+  const headerAliases = {
+    nama: ["nama", "nama mahasiswa", "nama lengkap"],
+    nim: ["nim"],
+    fakultas: ["fakultas"],
+    departemen: ["departemen", "jurusan"],
+    prodi: ["prodi", "program studi", "study program"],
+    email: ["email"],
+  };
+
+  let headerRowNumber = null;
+  let headerMap = {};
+
+  worksheet.eachRow((row, rowNumber) => {
+    if (headerRowNumber) return;
+
+    const rowValues = [];
+    row.eachCell((cell) => {
+      rowValues.push(normalizeText(readCellValue(cell.value)));
+    });
+
+    if (!rowValues.length) return;
+
+    const hasNim = rowValues.includes("nim");
+    const hasNama =
+      rowValues.includes("nama") || rowValues.includes("nama mahasiswa");
+
+    if (hasNim && hasNama) {
+      headerRowNumber = rowNumber;
+      const resolvedMap = {};
+
+      row.eachCell((cell, colNumber) => {
+        const cellText = normalizeText(readCellValue(cell.value));
+        Object.entries(headerAliases).forEach(([key, aliases]) => {
+          if (aliases.includes(cellText)) {
+            resolvedMap[key] = colNumber;
+          }
+        });
+      });
+
+      headerMap = resolvedMap;
+    }
+  });
+
+  if (!headerRowNumber) {
+    throw new Error(
+      "Header tidak ditemukan. Gunakan template import yang disediakan sistem.",
+    );
+  }
+
+  const requiredColumns = ["nama", "nim"];
+  const missingColumns = requiredColumns.filter((key) => !headerMap[key]);
+  if (missingColumns.length) {
+    throw new Error(
+      `Kolom wajib tidak ditemukan: ${missingColumns.join(", ")}`,
+    );
+  }
+
+  const rows = [];
+  worksheet.eachRow((row, rowNumber) => {
+    if (rowNumber <= headerRowNumber) return;
+    if (row.actualCellCount === 0) return;
+
+    const record = {
+      nama: readCellValue(row.getCell(headerMap.nama).value),
+      nim: readCellValue(row.getCell(headerMap.nim).value),
+      fakultas: headerMap.fakultas
+        ? readCellValue(row.getCell(headerMap.fakultas).value)
+        : "",
+      departemen: headerMap.departemen
+        ? readCellValue(row.getCell(headerMap.departemen).value)
+        : "",
+      prodi: headerMap.prodi
+        ? readCellValue(row.getCell(headerMap.prodi).value)
+        : "",
+      email: headerMap.email
+        ? readCellValue(row.getCell(headerMap.email).value)
+        : "",
+      excelRow: rowNumber,
+    };
+
+    if (
+      !record.nama &&
+      !record.nim &&
+      !record.fakultas &&
+      !record.departemen &&
+      !record.prodi
+    ) {
+      return;
+    }
+
+    rows.push(record);
+  });
+
+  return rows;
+};
+
+const getOrCreateFaculty = async (name, cache, transaction) => {
+  const normalized = normalizeText(name);
+  if (!normalized) return null;
+  if (cache.has(normalized)) return cache.get(normalized);
+
+  let faculty = await Faculty.findOne({
+    where: sequelize.where(
+      sequelize.fn("LOWER", sequelize.col("name")),
+      normalized,
+    ),
+    transaction,
+  });
+
+  if (!faculty) {
+    const code = `FAC-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 9999)}`;
+    faculty = await Faculty.create(
+      {
+        name: String(name).trim(),
+        code,
+        is_active: true,
+      },
+      { transaction },
+    );
+  }
+
+  cache.set(normalized, faculty);
+  return faculty;
+};
+
+const getOrCreateDepartment = async (name, facultyId, cache, transaction) => {
+  const normalized = normalizeText(name);
+  if (!normalized || !facultyId) return null;
+
+  const cacheKey = `${facultyId}:${normalized}`;
+  if (cache.has(cacheKey)) return cache.get(cacheKey);
+
+  let department = await Department.findOne({
+    where: {
+      faculty_id: facultyId,
+      [Op.and]: sequelize.where(
+        sequelize.fn("LOWER", sequelize.col("name")),
+        normalized,
+      ),
+    },
+    transaction,
+  });
+
+  if (!department) {
+    const code = `DEP-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 9999)}`;
+    department = await Department.create(
+      {
+        faculty_id: facultyId,
+        name: String(name).trim(),
+        code,
+        is_active: true,
+      },
+      { transaction },
+    );
+  }
+
+  cache.set(cacheKey, department);
+  return department;
+};
+
+const getOrCreateStudyProgram = async (
+  name,
+  departmentId,
+  cache,
+  transaction,
+) => {
+  const normalized = normalizeText(name);
+  if (!normalized || !departmentId) return null;
+
+  const cacheKey = `${departmentId}:${normalized}`;
+  if (cache.has(cacheKey)) return cache.get(cacheKey);
+
+  let program = await StudyProgram.findOne({
+    where: {
+      department_id: departmentId,
+      [Op.and]: sequelize.where(
+        sequelize.fn("LOWER", sequelize.col("name")),
+        normalized,
+      ),
+    },
+    transaction,
+  });
+
+  if (!program) {
+    const code = `PRODI-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 9999)}`;
+    program = await StudyProgram.create(
+      {
+        department_id: departmentId,
+        name: String(name).trim(),
+        code,
+        degree: "S1",
+        is_active: true,
+      },
+      { transaction },
+    );
+  }
+
+  cache.set(cacheKey, program);
+  return program;
+};
+
+const ensureUserForImportedRecipient = async ({
+  row,
+  transaction,
+  passwordHash,
+  facultyCache,
+  departmentCache,
+  programCache,
+}) => {
+  let user = await User.findOne({
+    where: { nim: row.nim },
+    transaction,
+  });
+
+  if (!user && row.email) {
+    user = await User.findOne({ where: { email: row.email }, transaction });
+  }
+
+  if (user) {
+    return { user, isDummyCreated: false };
+  }
+
+  const faculty = await getOrCreateFaculty(
+    row.fakultas,
+    facultyCache,
+    transaction,
+  );
+  const department = await getOrCreateDepartment(
+    row.departemen,
+    faculty?.id,
+    departmentCache,
+    transaction,
+  );
+  const program = await getOrCreateStudyProgram(
+    row.prodi,
+    department?.id,
+    programCache,
+    transaction,
+  );
+
+  const nimSafe = String(row.nim || "mahasiswa").replace(/[^a-zA-Z0-9]/g, "");
+  const emailBase = `dummy.${nimSafe || Date.now()}@dummy.local`;
+
+  let emailToUse = emailBase;
+  let emailCounter = 1;
+  while (await User.findOne({ where: { email: emailToUse }, transaction })) {
+    emailToUse = `dummy.${nimSafe || Date.now()}.${emailCounter}@dummy.local`;
+    emailCounter += 1;
+  }
+
+  user = await User.create(
+    {
+      email: emailToUse,
+      password: passwordHash,
+      full_name: row.nama,
+      role: "MAHASISWA",
+      nim: row.nim,
+      faculty_id: faculty?.id || null,
+      department_id: department?.id || null,
+      study_program_id: program?.id || null,
+      is_active: true,
+      emailVerified: false,
+    },
+    { transaction },
+  );
+
+  return { user, isDummyCreated: true };
+};
+
+const downloadTemplateImportPenerima = async (req, res) => {
+  try {
+    const [faculties, departments, studyPrograms] = await Promise.all([
+      Faculty.findAll({
+        where: { is_active: true },
+        attributes: ["name"],
+        order: [["name", "ASC"]],
+      }),
+      Department.findAll({
+        where: { is_active: true },
+        attributes: ["name"],
+        order: [["name", "ASC"]],
+      }),
+      StudyProgram.findAll({
+        where: { is_active: true },
+        attributes: ["name"],
+        order: [["name", "ASC"]],
+      }),
+    ]);
+
+    const workbook = new ExcelJS.Workbook();
+    const templateSheet = workbook.addWorksheet("Template Import Penerima");
+    const infoSheet = workbook.addWorksheet("Petunjuk");
+    const referenceSheet = workbook.addWorksheet("Referensi");
+
+    const facultyOptions = faculties.map((item) => item.name).filter(Boolean);
+    const departmentOptions = departments
+      .map((item) => item.name)
+      .filter(Boolean);
+    const studyProgramOptions = studyPrograms
+      .map((item) => item.name)
+      .filter(Boolean);
+
+    const safeFacultyOptions =
+      facultyOptions.length > 0 ? facultyOptions : ["Tidak ada data fakultas"];
+    const safeDepartmentOptions =
+      departmentOptions.length > 0
+        ? departmentOptions
+        : ["Tidak ada data departemen"];
+    const safeStudyProgramOptions =
+      studyProgramOptions.length > 0
+        ? studyProgramOptions
+        : ["Tidak ada data prodi"];
+
+    referenceSheet.columns = [
+      { header: "fakultas", key: "fakultas", width: 30 },
+      { header: "departemen", key: "departemen", width: 30 },
+      { header: "prodi", key: "prodi", width: 30 },
+    ];
+
+    const maxRefRows = Math.max(
+      safeFacultyOptions.length,
+      safeDepartmentOptions.length,
+      safeStudyProgramOptions.length,
+    );
+
+    for (let i = 0; i < maxRefRows; i += 1) {
+      referenceSheet.addRow({
+        fakultas: safeFacultyOptions[i] || null,
+        departemen: safeDepartmentOptions[i] || null,
+        prodi: safeStudyProgramOptions[i] || null,
+      });
+    }
+
+    referenceSheet.state = "hidden";
+
+    templateSheet.columns = [
+      { header: "nama", key: "nama", width: 30 },
+      { header: "nim", key: "nim", width: 18 },
+      { header: "fakultas", key: "fakultas", width: 25 },
+      { header: "departemen", key: "departemen", width: 25 },
+      { header: "prodi", key: "prodi", width: 25 },
+      { header: "email", key: "email", width: 30 },
+    ];
+
+    applyHeaderStyle(templateSheet.getRow(1));
+
+    const dropdownEndRow = 1000;
+    const facultyEndRow = safeFacultyOptions.length + 1;
+    const departmentEndRow = safeDepartmentOptions.length + 1;
+    const studyProgramEndRow = safeStudyProgramOptions.length + 1;
+
+    for (let rowNumber = 2; rowNumber <= dropdownEndRow; rowNumber += 1) {
+      templateSheet.getCell(`C${rowNumber}`).dataValidation = {
+        type: "list",
+        allowBlank: true,
+        formulae: [`Referensi!$A$2:$A$${facultyEndRow}`],
+        showErrorMessage: true,
+        errorTitle: "Pilihan tidak valid",
+        error: "Pilih fakultas dari dropdown.",
+      };
+
+      templateSheet.getCell(`D${rowNumber}`).dataValidation = {
+        type: "list",
+        allowBlank: true,
+        formulae: [`Referensi!$B$2:$B$${departmentEndRow}`],
+        showErrorMessage: true,
+        errorTitle: "Pilihan tidak valid",
+        error: "Pilih departemen dari dropdown.",
+      };
+
+      templateSheet.getCell(`E${rowNumber}`).dataValidation = {
+        type: "list",
+        allowBlank: true,
+        formulae: [`Referensi!$C$2:$C$${studyProgramEndRow}`],
+        showErrorMessage: true,
+        errorTitle: "Pilihan tidak valid",
+        error: "Pilih program studi dari dropdown.",
+      };
+    }
+
+    infoSheet.columns = [{ header: "Petunjuk", key: "petunjuk", width: 120 }];
+    applyHeaderStyle(infoSheet.getRow(1));
+    [
+      "Kolom wajib: nama dan nim.",
+      "Kolom fakultas, departemen, dan prodi memiliki dropdown berdasarkan data aktif di database.",
+      "Nama beasiswa dipilih saat proses import di dalam modal.",
+      "Sistem akan menggunakan skema aktif pertama dari beasiswa yang dipilih.",
+      "Sistem akan mencocokkan user berdasarkan NIM (prioritas) lalu email.",
+      "Jika user tidak ditemukan, sistem akan membuat akun dummy mahasiswa secara otomatis.",
+      "Password akun dummy default: dummy12345 (bisa diubah kemudian oleh admin).",
+    ].forEach((text, index) => {
+      const row = infoSheet.addRow({ petunjuk: text });
+      applyDataRowStyle(row, index);
+    });
+
+    const fileName = "template_import_penerima_beasiswa.xlsx";
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=\"${fileName}\"`,
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error("Error downloading import template:", error);
+    return errorResponse(res, "Gagal mengunduh template import", 500);
+  }
+};
+
+const validateImportPenerimaBeasiswa = async (req, res) => {
+  const filePath = req.file?.path ?? null;
+
+  try {
+    const { scholarshipId } = req.body;
+
+    if (!req.file) {
+      return errorResponse(res, "File Excel wajib diupload", 400);
+    }
+
+    if (!scholarshipId) {
+      return errorResponse(res, "Pilih beasiswa terlebih dahulu", 400);
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(filePath);
+
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) {
+      throw new Error("Worksheet tidak ditemukan");
+    }
+
+    const rows = buildImportRowsFromWorksheet(worksheet);
+
+    if (!rows.length) {
+      throw new Error("Tidak ada data yang dapat diproses");
+    }
+
+    const selectedScholarship = await Scholarship.findByPk(scholarshipId, {
+      attributes: ["id", "name", "year"],
+      include: [
+        {
+          model: ScholarshipSchema,
+          as: "schemas",
+          attributes: ["id", "name", "is_active"],
+          required: false,
+        },
+      ],
+    });
+
+    if (!selectedScholarship) {
+      return errorResponse(res, "Beasiswa tidak ditemukan", 404);
+    }
+
+    const selectedSchema =
+      (selectedScholarship.schemas || []).find((schema) => schema.is_active) ||
+      (selectedScholarship.schemas || [])[0] ||
+      null;
+
+    if (!selectedSchema) {
+      return errorResponse(
+        res,
+        "Beasiswa terpilih belum memiliki skema aktif untuk import",
+        400,
+      );
+    }
+
+    const errors = [];
+    const preview = [];
+
+    for (const row of rows) {
+      if (!row.nama) {
+        errors.push({
+          row: row.excelRow,
+          field: "nama",
+          message: "Nama wajib diisi",
+        });
+        continue;
+      }
+      if (!row.nim) {
+        errors.push({
+          row: row.excelRow,
+          field: "nim",
+          message: "NIM wajib diisi",
+        });
+        continue;
+      }
+
+      const existingUser = await User.findOne({
+        where: {
+          [Op.or]: [
+            { nim: row.nim },
+            ...(row.email ? [{ email: row.email }] : []),
+          ],
+        },
+        attributes: ["id", "full_name", "nim", "email"],
+      });
+
+      preview.push({
+        nim: row.nim,
+        nama: row.nama,
+        fakultas: row.fakultas || "-",
+        departemen: row.departemen || "-",
+        prodi: row.prodi || "-",
+        beasiswa: selectedScholarship.name,
+        skema: selectedSchema.name,
+        tahun: selectedScholarship.year,
+        userStatus: existingUser ? "MATCHED" : "DUMMY_AKAN_DIBUAT",
+      });
+    }
+
+    return successResponse(res, "Validasi import penerima berhasil", {
+      total_rows: rows.length,
+      valid_count: preview.length,
+      error_count: errors.length,
+      errors: errors.slice(0, 30),
+      preview: preview.slice(0, 20),
+    });
+  } catch (error) {
+    console.error("Error validating recipient import:", error);
+    return errorResponse(
+      res,
+      error.message || "Gagal memvalidasi file import",
+      500,
+    );
+  } finally {
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  }
+};
+
+const importPenerimaBeasiswa = async (req, res) => {
+  const transaction = await sequelize.transaction();
+  const filePath = req.file?.path ?? null;
+
+  try {
+    const { scholarshipId } = req.body;
+
+    if (!req.file) {
+      return errorResponse(res, "File Excel wajib diupload", 400);
+    }
+
+    if (!scholarshipId) {
+      return errorResponse(res, "Pilih beasiswa terlebih dahulu", 400);
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(filePath);
+
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) {
+      throw new Error("Worksheet tidak ditemukan");
+    }
+
+    const rows = buildImportRowsFromWorksheet(worksheet);
+    if (!rows.length) {
+      throw new Error("Tidak ada data yang dapat diproses");
+    }
+
+    const selectedScholarship = await Scholarship.findByPk(scholarshipId, {
+      attributes: ["id", "name", "year"],
+      include: [
+        {
+          model: ScholarshipSchema,
+          as: "schemas",
+          attributes: ["id", "name", "is_active"],
+          required: false,
+        },
+      ],
+      transaction,
+    });
+
+    if (!selectedScholarship) {
+      await transaction.rollback();
+      return errorResponse(res, "Beasiswa tidak ditemukan", 404);
+    }
+
+    const selectedSchema =
+      (selectedScholarship.schemas || []).find((schema) => schema.is_active) ||
+      (selectedScholarship.schemas || [])[0] ||
+      null;
+
+    if (!selectedSchema) {
+      await transaction.rollback();
+      return errorResponse(
+        res,
+        "Beasiswa terpilih belum memiliki skema aktif untuk import",
+        400,
+      );
+    }
+
+    const facultyCache = new Map();
+    const departmentCache = new Map();
+    const programCache = new Map();
+    const dummyPasswordHash = await bcrypt.hash("dummy12345", 10);
+
+    let createdApplications = 0;
+    let updatedApplications = 0;
+    let matchedUsers = 0;
+    let createdDummyUsers = 0;
+    const errors = [];
+
+    for (const row of rows) {
+      if (!row.nama || !row.nim) {
+        errors.push(`Baris ${row.excelRow}: kolom nama dan nim wajib diisi`);
+        continue;
+      }
+
+      const { user, isDummyCreated } = await ensureUserForImportedRecipient({
+        row,
+        transaction,
+        passwordHash: dummyPasswordHash,
+        facultyCache,
+        departmentCache,
+        programCache,
+      });
+
+      if (isDummyCreated) createdDummyUsers += 1;
+      else matchedUsers += 1;
+
+      const importYear = selectedScholarship.year || new Date().getFullYear();
+
+      const importDate = new Date(`${importYear}-01-01T00:00:00.000Z`);
+
+      const existingApplication = await Application.findOne({
+        where: {
+          student_id: user.id,
+          schema_id: selectedSchema.id,
+        },
+        transaction,
+      });
+
+      if (existingApplication) {
+        await existingApplication.update(
+          {
+            status: "VALIDATED",
+            submitted_at: existingApplication.submitted_at || importDate,
+            validated_by: req.user?.id || null,
+            validated_at: new Date(),
+          },
+          { transaction },
+        );
+        updatedApplications += 1;
+      } else {
+        await Application.create(
+          {
+            schema_id: selectedSchema.id,
+            student_id: user.id,
+            status: "VALIDATED",
+            submitted_at: importDate,
+            validated_by: req.user?.id || null,
+            validated_at: new Date(),
+            createdAt: importDate,
+            updatedAt: new Date(),
+          },
+          { transaction },
+        );
+        createdApplications += 1;
+      }
+    }
+
+    if (errors.length > 0) {
+      await transaction.rollback();
+      return errorResponse(
+        res,
+        `Ditemukan ${errors.length} error:\n${errors
+          .slice(0, 10)
+          .join(
+            "\n",
+          )}${errors.length > 10 ? `\n... dan ${errors.length - 10} error lainnya` : ""}`,
+        400,
+      );
+    }
+
+    await transaction.commit();
+
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "IMPORT_SCHOLARSHIP_RECIPIENTS",
+      entity_type: "Application",
+      entity_id: req.user.id,
+      description: `${req.user.full_name || "User"} mengimpor data penerima untuk ${selectedScholarship.name} (${createdApplications} baru, ${updatedApplications} diperbarui)`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
+
+    try {
+      await Promise.all([
+        invalidateApplicationCaches(),
+        invalidateCacheByPattern("applications_summary:*"),
+      ]);
+    } catch (cacheError) {
+      console.error(
+        "Error invalidating caches after recipient import:",
+        cacheError,
+      );
+    }
+
+    return successResponse(res, "Import data penerima berhasil", {
+      total_processed: rows.length,
+      created_applications: createdApplications,
+      updated_applications: updatedApplications,
+      matched_users: matchedUsers,
+      created_dummy_users: createdDummyUsers,
+      dummy_password_default: "dummy12345",
+    });
+  } catch (error) {
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
+
+    console.error("Error importing scholarship recipients:", error);
+    return errorResponse(
+      res,
+      error.message || "Gagal mengimpor data penerima",
+      500,
+    );
+  } finally {
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  }
+};
+
 module.exports = {
   exportLaporanBeasiswa,
   exportPendaftarLaporan,
+  downloadTemplateImportPenerima,
+  validateImportPenerimaBeasiswa,
+  importPenerimaBeasiswa,
 };
