@@ -2,27 +2,56 @@ const { Faculty, Department, ActivityLog } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 const { sequelize } = require("../models");
 
+const getDepartmentsByFacultyId = async (req, res) => {
+  try {
+    const { facultyId } = req.params;
+
+    const departments = await Department.findAll({
+      where: {
+        faculty_id: facultyId,
+        is_active: true,
+      },
+      attributes: ["id", "name", "code"],
+      order: [["name", "ASC"]],
+    });
+
+    return res.json({ success: true, data: departments });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ success: false, message: "Gagal mengambil departemen" });
+  }
+};
+
 const getAllFaculties = async (req, res) => {
   try {
+    const isPublic = req.path.includes("/public");
+
     const faculties = await Faculty.findAll({
-      attributes: [
-        "id",
-        "name",
-        "code",
-        "is_active",
-        [
-          sequelize.fn("COUNT", sequelize.col("departments.id")),
-          "departments_count",
-        ],
-      ],
-      include: [
-        {
-          model: Department,
-          as: "departments",
-          attributes: [],
-        },
-      ],
-      group: ["Faculty.id"],
+      where: isPublic ? { is_active: true } : {},
+      attributes: isPublic
+        ? ["id", "name", "code"]
+        : [
+            "id",
+            "name",
+            "code",
+            "is_active",
+            [
+              sequelize.fn("COUNT", sequelize.col("departments.id")),
+              "departments_count",
+            ],
+          ],
+      include: isPublic
+        ? []
+        : [
+            {
+              model: Department,
+              as: "departments",
+              attributes: [],
+            },
+          ],
+      group: isPublic ? undefined : ["Faculty.id"],
+      order: [["name", "ASC"]],
     });
 
     return successResponse(res, "Daftar fakultas berhasil diambil", faculties);
@@ -173,6 +202,7 @@ const deactivateFaculty = async (req, res) => {
 };
 
 module.exports = {
+  getDepartmentsByFacultyId,
   getAllFaculties,
   createFaculty,
   editFaculty,

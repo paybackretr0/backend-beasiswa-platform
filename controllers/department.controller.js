@@ -1,5 +1,29 @@
-const { Department, Faculty, ActivityLog } = require("../models");
+const { Department, Faculty, StudyProgram, ActivityLog } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
+
+const getStudyProgramsByDepartmentId = async (req, res) => {
+  try {
+    const { departmentId } = req.params;
+
+    const studyPrograms = await StudyProgram.findAll({
+      where: {
+        department_id: departmentId,
+        is_active: true,
+      },
+      attributes: ["id", "name", "code", "degree"],
+      order: [
+        ["degree", "ASC"],
+        ["name", "ASC"],
+      ],
+    });
+
+    return res.json({ success: true, data: studyPrograms });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ success: false, message: "Gagal mengambil program studi" });
+  }
+};
 
 const getAllDepartments = async (req, res) => {
   try {
@@ -181,6 +205,7 @@ const deactivateDepartment = async (req, res) => {
 };
 
 module.exports = {
+  getStudyProgramsByDepartmentId,
   getAllDepartments,
   createDepartment,
   editDepartment,

@@ -18,7 +18,6 @@ const {
 } = require("../utils/response");
 const {
   parseNimFromEmail,
-  extractKodeFakultasProdi,
   generateVerificationCode,
 } = require("../utils/parse_nim");
 
@@ -55,73 +54,104 @@ const sendVerificationEmail = async (user, code) => {
 const register = async (req, res) => {
   const t = await sequelize.transaction();
 
-  const {
-    full_name,
-    email,
-    password,
-    password_confirmation,
-    birth_date,
-    birth_place,
-    gender,
-    phone_number,
-  } = req.body;
-
   try {
+    const {
+      full_name,
+      email,
+      password,
+      password_confirmation,
+      birth_date,
+      birth_place,
+      gender,
+      phone_number,
+      faculty_id,
+      department_id,
+      study_program_id,
+    } = req.body;
+
+    if (!faculty_id || !department_id || !study_program_id) {
+      await t.rollback();
+      return errorResponse(
+        res,
+        "Fakultas, Departemen, dan Program Studi harus dipilih",
+        400,
+      );
+    }
+
     const existingUser = await User.findOne({
       where: { email },
       transaction: t,
-      lock: t.LOCK.UPDATE,
+      lock: true,
     });
 
     if (existingUser) {
       await t.rollback();
-      return errorResponse(res, "User already exists", 400);
+      return errorResponse(
+        res,
+        "Email sudah terdaftar. Silakan gunakan email lain.",
+        409,
+      );
     }
 
     if (password !== password_confirmation) {
       await t.rollback();
-      return errorResponse(res, "Password confirmation does not match", 400);
+      return errorResponse(res, "Konfirmasi password tidak cocok", 400);
     }
 
     const nim = parseNimFromEmail(email);
-    let faculty_id = null;
-    let department_id = null;
-    let study_program_id = null;
+    if (!nim) {
+      await t.rollback();
+      return errorResponse(
+        res,
+        "Format email tidak valid. Gunakan format: NIM_nama@student.unand.ac.id",
+        400,
+      );
+    }
 
-    if (nim) {
-      const { kodeFakultas, kodeProdi } = extractKodeFakultasProdi(nim);
+    const faculty = await Faculty.findOne({
+      where: { id: faculty_id, is_active: true },
+      transaction: t,
+    });
 
-      const faculty = await Faculty.findOne({
-        where: { code: kodeFakultas },
-        transaction: t,
-      });
+    if (!faculty) {
+      await t.rollback();
+      return errorResponse(res, "Fakultas tidak valid atau tidak aktif", 400);
+    }
 
-      if (!faculty) {
-        await t.rollback();
-        return errorResponse(res, "Fakultas tidak ditemukan", 400);
-      }
+    const department = await Department.findOne({
+      where: {
+        id: department_id,
+        faculty_id: faculty_id,
+        is_active: true,
+      },
+      transaction: t,
+    });
 
-      const studyProgram = await StudyProgram.findOne({
-        where: { code: kodeProdi },
-        include: [
-          {
-            model: Department,
-            as: "department",
-            where: { faculty_id: faculty.id },
-            required: true,
-          },
-        ],
-        transaction: t,
-      });
+    if (!department) {
+      await t.rollback();
+      return errorResponse(
+        res,
+        "Departemen tidak valid atau tidak sesuai dengan fakultas",
+        400,
+      );
+    }
 
-      if (!studyProgram) {
-        await t.rollback();
-        return errorResponse(res, "Program studi tidak ditemukan", 400);
-      }
+    const studyProgram = await StudyProgram.findOne({
+      where: {
+        id: study_program_id,
+        department_id: department_id,
+        is_active: true,
+      },
+      transaction: t,
+    });
 
-      faculty_id = faculty.id;
-      department_id = studyProgram.department.id;
-      study_program_id = studyProgram.id;
+    if (!studyProgram) {
+      await t.rollback();
+      return errorResponse(
+        res,
+        "Program Studi tidak valid atau tidak sesuai dengan departemen",
+        400,
+      );
     }
 
     const hashedPassword = await hashPassword(password);
@@ -129,25 +159,23 @@ const register = async (req, res) => {
 
     const newUser = await User.create(
       {
-        email,
-        password: hashedPassword,
         full_name,
-        role: "MAHASISWA",
+        email,
         nim,
+        password: hashedPassword,
+        birth_date,
+        birth_place,
+        role: "MAHASISWA",
+        gender,
+        phone_number,
         faculty_id,
         department_id,
         study_program_id,
-        phone_number,
-        gender,
-        birth_date,
-        birth_place,
         emailVerificationCode: verificationCode,
         emailVerified: false,
       },
       { transaction: t },
     );
-
-    await sendVerificationEmail(newUser, verificationCode);
 
     await ActivityLog.create(
       {
@@ -155,7 +183,7 @@ const register = async (req, res) => {
         action: "REGISTER",
         entity_type: "User",
         entity_id: newUser.id,
-        description: `User ${newUser.email} registered`,
+        description: `User baru "${full_name}" berhasil mendaftar dengan email ${email}`,
         ip_address: req.ip,
         user_agent: req.headers["user-agent"],
       },
@@ -164,22 +192,25 @@ const register = async (req, res) => {
 
     await t.commit();
 
+    try {
+      await sendVerificationEmail(email, verificationCode, full_name);
+    } catch (emailError) {
+      console.error("Failed to send verification email:", emailError);
+    }
+
     return successCreatedResponse(
       res,
-      "Registration successful. Silakan cek email untuk verifikasi.",
-      { user_id: newUser.id },
-      201,
+      "Registrasi berhasil. Silakan cek email untuk verifikasi.",
+      {
+        user_id: newUser.id,
+      },
     );
   } catch (error) {
-    console.error("[REGISTER ERROR]", {
-      email,
-      message: error.message,
-      stack: error.stack,
-    });
-
-    await t.rollback();
-
-    return errorResponse(res, "Internal server error", 500);
+    if (!t.finished) {
+      await t.rollback();
+    }
+    console.error("Registration error:", error);
+    return errorResponse(res, "Terjadi kesalahan saat registrasi", 500);
   }
 };
 
@@ -587,7 +618,7 @@ const getProfile = async (req, res) => {
         {
           model: StudyProgram,
           as: "study_program",
-          attributes: ["code", "degree"],
+          attributes: ["code", "name", "degree"],
         },
       ],
       attributes: {

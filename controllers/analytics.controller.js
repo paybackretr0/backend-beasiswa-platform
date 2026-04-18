@@ -249,7 +249,7 @@ const getScholarshipPerformance = async (req, res) => {
         GROUP BY s.id, s.name
         HAVING COUNT(a.id) > 0
         ORDER BY pendaftar DESC
-        LIMIT 10
+        LIMIT 5
       `;
 
       const result = await sequelize.query(query, {
@@ -451,7 +451,7 @@ const getFacultyDistribution = async (req, res) => {
         GROUP BY f.id, f.name
         HAVING COUNT(a.id) > 0
         ORDER BY value DESC
-        LIMIT 10
+        LIMIT 5
         `,
         {
           replacements,
@@ -511,7 +511,7 @@ const getDepartmentDistribution = async (req, res) => {
         GROUP BY d.id, d.name
         HAVING COUNT(a.id) > 0
         ORDER BY value DESC
-        LIMIT 10
+        LIMIT 5
         `,
         {
           replacements,

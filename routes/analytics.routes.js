@@ -18,8 +18,15 @@ const {
   getScholarshipPerformance,
   getTopPerformingFaculties,
 } = require("../controllers/analytics.controller");
-const { exportLaporanBeasiswa } = require("../controllers/report.controller");
+const {
+  exportLaporanBeasiswa,
+  exportPendaftarLaporan,
+  downloadTemplateImportPenerima,
+  validateImportPenerimaBeasiswa,
+  importPenerimaBeasiswa,
+} = require("../controllers/report.controller");
 const authorize = require("../middlewares/role.middleware");
+const { excelUpload } = require("../middlewares/upload.middleware");
 
 router.use(
   authenticate,
@@ -31,7 +38,7 @@ router.use(
     "VERIFIKATOR_FAKULTAS",
     "VERIFIKATOR_DITMAWA",
     "VALIDATOR_DITMAWA",
-  ])
+  ]),
 );
 
 // Summary endpoints
@@ -57,5 +64,23 @@ router.get("/applications-list", getApplicationsList);
 router.get("/activities", getActivities);
 
 router.get("/export-laporan", exportLaporanBeasiswa);
+router.get("/export-pendaftar", exportPendaftarLaporan);
+router.get(
+  "/import-penerima/template",
+  authorize(["SUPERADMIN", "PIMPINAN_DITMAWA", "VALIDATOR_DITMAWA"]),
+  downloadTemplateImportPenerima,
+);
+router.post(
+  "/import-penerima/validate",
+  authorize(["SUPERADMIN", "PIMPINAN_DITMAWA", "VALIDATOR_DITMAWA"]),
+  excelUpload.single("file"),
+  validateImportPenerimaBeasiswa,
+);
+router.post(
+  "/import-penerima",
+  authorize(["SUPERADMIN", "PIMPINAN_DITMAWA", "VALIDATOR_DITMAWA"]),
+  excelUpload.single("file"),
+  importPenerimaBeasiswa,
+);
 
 module.exports = router;

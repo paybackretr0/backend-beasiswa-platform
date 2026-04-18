@@ -9,7 +9,7 @@ const {
   ActivityLog,
   sequelize,
 } = require("../models");
-const { errorResponse } = require("../utils/response");
+const { successResponse, errorResponse } = require("../utils/response");
 const {
   applyHeaderStyle,
   applyDataRowStyle,
@@ -18,8 +18,13 @@ const {
 } = require("../utils/style");
 const { Op } = require("sequelize");
 const ExcelJS = require("exceljs");
+const bcrypt = require("bcrypt");
 const path = require("path");
 const fs = require("fs");
+const {
+  invalidateApplicationCaches,
+  invalidateCacheByPattern,
+} = require("../utils/cacheHelper");
 
 const getStatusLabel = (status) => {
   const statusMap = {
@@ -1315,6 +1320,1187 @@ const exportLaporanBeasiswa = async (req, res) => {
   }
 };
 
+const getFilteredApplicantsForExport = async ({
+  year,
+  scholarshipId,
+  schemaId,
+  user,
+}) => {
+  const whereCondition = {
+    status: { [Op.ne]: "DRAFT" },
+  };
+
+  if (year && year !== "all") {
+    whereCondition.createdAt = {
+      [Op.gte]: new Date(`${year}-01-01`),
+      [Op.lte]: new Date(`${year}-12-31`),
+    };
+  }
+
+  const role = user?.role;
+  const facultyScopedRoles = ["PIMPINAN_FAKULTAS", "VERIFIKATOR_FAKULTAS"];
+  const studentWhere = {
+    role: "MAHASISWA",
+    ...(facultyScopedRoles.includes(role) && user?.faculty_id
+      ? { faculty_id: user.faculty_id }
+      : {}),
+  };
+
+  const schemaWhere = {
+    ...(schemaId ? { id: schemaId } : {}),
+  };
+
+  const scholarshipWhere = {
+    ...(scholarshipId ? { id: scholarshipId } : {}),
+  };
+
+  const applications = await Application.findAll({
+    where: whereCondition,
+    include: [
+      {
+        model: User,
+        as: "student",
+        where: studentWhere,
+        attributes: ["id", "full_name", "nim", "gender", "email"],
+        include: [
+          {
+            model: StudyProgram,
+            as: "study_program",
+            required: false,
+            attributes: ["id", "degree"],
+            include: [
+              {
+                model: Department,
+                as: "department",
+                required: false,
+                attributes: ["id", "name"],
+                include: [
+                  {
+                    model: Faculty,
+                    as: "faculty",
+                    required: false,
+                    attributes: ["id", "name"],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        model: ScholarshipSchema,
+        as: "schema",
+        where: Object.keys(schemaWhere).length ? schemaWhere : undefined,
+        required: true,
+        attributes: ["id", "name"],
+        include: [
+          {
+            model: Scholarship,
+            as: "scholarship",
+            where: Object.keys(scholarshipWhere).length
+              ? scholarshipWhere
+              : undefined,
+            required: true,
+            attributes: ["id", "name", "year"],
+          },
+        ],
+      },
+    ],
+    order: [["createdAt", "DESC"]],
+  });
+
+  return applications;
+};
+
+const exportPendaftarLaporan = async (req, res) => {
+  try {
+    const { year = "all", scholarshipId, schemaId } = req.query;
+
+    const applications = await getFilteredApplicantsForExport({
+      year,
+      scholarshipId,
+      schemaId,
+      user: req.user,
+    });
+
+    const totalPendaftar = applications.length;
+    const statusCounts = {
+      menungguVerifikasi: applications.filter(
+        (a) => a.status === "MENUNGGU_VERIFIKASI",
+      ).length,
+      menungguValidasi: applications.filter((a) => a.status === "VERIFIED")
+        .length,
+      divalidasi: applications.filter((a) => a.status === "VALIDATED").length,
+      ditolak: applications.filter((a) => a.status === "REJECTED").length,
+      perluRevisi: applications.filter((a) => a.status === "REVISION_NEEDED")
+        .length,
+    };
+
+    const workbook = new ExcelJS.Workbook();
+
+    const summarySheet = workbook.addWorksheet("Statistik Umum");
+    summarySheet.columns = [
+      { header: "Keterangan", key: "keterangan", width: 40 },
+      { header: "Nilai", key: "nilai", width: 22 },
+    ];
+    applyHeaderStyle(summarySheet.getRow(1));
+
+    const filterScholarshipLabel = scholarshipId
+      ? applications[0]?.schema?.scholarship?.name || "Beasiswa Terpilih"
+      : "Semua Beasiswa";
+    const filterSchemaLabel = schemaId
+      ? applications[0]?.schema?.name || "Skema Terpilih"
+      : "Semua Skema";
+
+    const summaryRows = [
+      { keterangan: "Periode Tahun", nilai: year === "all" ? "Semua" : year },
+      { keterangan: "Filter Beasiswa", nilai: filterScholarshipLabel },
+      { keterangan: "Filter Skema", nilai: filterSchemaLabel },
+      { keterangan: "Total Pendaftar", nilai: totalPendaftar },
+      {
+        keterangan: "Menunggu Verifikasi",
+        nilai: statusCounts.menungguVerifikasi,
+      },
+      { keterangan: "Menunggu Validasi", nilai: statusCounts.menungguValidasi },
+      { keterangan: "Divalidasi", nilai: statusCounts.divalidasi },
+      { keterangan: "Perlu Revisi", nilai: statusCounts.perluRevisi },
+      { keterangan: "Ditolak", nilai: statusCounts.ditolak },
+    ];
+
+    summaryRows.forEach((item, index) => {
+      const row = summarySheet.addRow(item);
+      applyDataRowStyle(row, index);
+    });
+    applyCenterAlignment(summarySheet, ["nilai"]);
+
+    const applicantsSheet = workbook.addWorksheet("Data Pendaftar");
+    applicantsSheet.columns = [
+      { header: "No", key: "no", width: 8 },
+      { header: "Nama", key: "nama", width: 25 },
+      { header: "NIM", key: "nim", width: 18 },
+      { header: "Fakultas", key: "fakultas", width: 25 },
+      { header: "Departemen", key: "departemen", width: 25 },
+      { header: "Program Studi", key: "prodi", width: 20 },
+      { header: "Gender", key: "gender", width: 12 },
+      { header: "Email", key: "email", width: 30 },
+      { header: "Beasiswa", key: "beasiswa", width: 30 },
+      { header: "Skema", key: "skema", width: 30 },
+      { header: "Status", key: "status", width: 30 },
+      { header: "Tanggal Daftar", key: "tanggalDaftar", width: 20 },
+    ];
+    applyHeaderStyle(applicantsSheet.getRow(1));
+
+    applications.forEach((app, index) => {
+      const row = applicantsSheet.addRow({
+        no: index + 1,
+        nama: app.student?.full_name || "N/A",
+        nim: app.student?.nim || "N/A",
+        fakultas:
+          app.student?.study_program?.department?.faculty?.name || "N/A",
+        departemen: app.student?.study_program?.department?.name || "N/A",
+        prodi: app.student?.study_program?.degree || "N/A",
+        gender: app.student?.gender === "L" ? "Laki-laki" : "Perempuan",
+        email: app.student?.email || "-",
+        beasiswa: app.schema?.scholarship?.name || "N/A",
+        skema: app.schema?.name || "N/A",
+        status: getStatusLabel(app.status),
+        tanggalDaftar: app.createdAt
+          ? new Date(app.createdAt).toLocaleDateString("id-ID")
+          : "-",
+      });
+      applyDataRowStyle(row, index);
+    });
+
+    applyCenterAlignment(applicantsSheet, [
+      "no",
+      "nim",
+      "gender",
+      "tanggalDaftar",
+    ]);
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const yearLabel = year || "Semua";
+    const fileName = `laporan_pendaftar_${yearLabel}_${timestamp}.xlsx`;
+    const tempDir = path.join(__dirname, "../uploads/exports");
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+    const filePath = path.join(tempDir, fileName);
+
+    await workbook.xlsx.writeFile(filePath);
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+
+    res.download(filePath, fileName, (err) => {
+      if (err) {
+        console.error("Error sending export file:", err);
+        if (!res.headersSent) {
+          return errorResponse(res, "Gagal mengunduh laporan pendaftar", 500);
+        }
+      }
+
+      setTimeout(() => {
+        fs.unlink(filePath, () => {});
+      }, 10000);
+    });
+
+    const userName = req.user.full_name || "User";
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "EXPORT_APPLICANTS_REPORT",
+      entity_type: "Application",
+      entity_id: req.user.id,
+      description: `${userName} mengekspor laporan data pendaftar`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
+  } catch (error) {
+    console.error("Error exporting laporan pendaftar:", error);
+    if (!res.headersSent) {
+      return errorResponse(res, "Gagal mengunduh laporan pendaftar", 500);
+    }
+  }
+};
+
+const normalizeText = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase();
+
+const readCellValue = (cellValue) => {
+  if (cellValue === null || cellValue === undefined) return "";
+
+  if (typeof cellValue === "object") {
+    if (cellValue.text) return String(cellValue.text).trim();
+    if (cellValue.result !== undefined && cellValue.result !== null) {
+      return String(cellValue.result).trim();
+    }
+    if (cellValue.richText && Array.isArray(cellValue.richText)) {
+      return cellValue.richText
+        .map((item) => item.text || "")
+        .join("")
+        .trim();
+    }
+  }
+
+  return String(cellValue).trim();
+};
+
+const buildImportRowsFromWorksheet = (worksheet) => {
+  const headerAliases = {
+    nama: ["nama", "nama mahasiswa", "nama lengkap"],
+    nim: ["nim"],
+    fakultas: ["fakultas"],
+    departemen: ["departemen", "jurusan"],
+    prodi: ["prodi", "program studi", "study program"],
+    email: ["email"],
+  };
+
+  let headerRowNumber = null;
+  let headerMap = {};
+
+  worksheet.eachRow((row, rowNumber) => {
+    if (headerRowNumber) return;
+
+    const rowValues = [];
+    row.eachCell((cell) => {
+      rowValues.push(normalizeText(readCellValue(cell.value)));
+    });
+
+    if (!rowValues.length) return;
+
+    const hasNim = rowValues.includes("nim");
+    const hasNama =
+      rowValues.includes("nama") || rowValues.includes("nama mahasiswa");
+
+    if (hasNim && hasNama) {
+      headerRowNumber = rowNumber;
+      const resolvedMap = {};
+
+      row.eachCell((cell, colNumber) => {
+        const cellText = normalizeText(readCellValue(cell.value));
+        Object.entries(headerAliases).forEach(([key, aliases]) => {
+          if (aliases.includes(cellText)) {
+            resolvedMap[key] = colNumber;
+          }
+        });
+      });
+
+      headerMap = resolvedMap;
+    }
+  });
+
+  if (!headerRowNumber) {
+    throw new Error(
+      "Header tidak ditemukan. Gunakan template import yang disediakan sistem.",
+    );
+  }
+
+  const requiredColumns = ["nama", "nim"];
+  const missingColumns = requiredColumns.filter((key) => !headerMap[key]);
+  if (missingColumns.length) {
+    throw new Error(
+      `Kolom wajib tidak ditemukan: ${missingColumns.join(", ")}`,
+    );
+  }
+
+  const rows = [];
+  worksheet.eachRow((row, rowNumber) => {
+    if (rowNumber <= headerRowNumber) return;
+    if (row.actualCellCount === 0) return;
+
+    const record = {
+      nama: readCellValue(row.getCell(headerMap.nama).value),
+      nim: readCellValue(row.getCell(headerMap.nim).value),
+      fakultas: headerMap.fakultas
+        ? readCellValue(row.getCell(headerMap.fakultas).value)
+        : "",
+      departemen: headerMap.departemen
+        ? readCellValue(row.getCell(headerMap.departemen).value)
+        : "",
+      prodi: headerMap.prodi
+        ? readCellValue(row.getCell(headerMap.prodi).value)
+        : "",
+      email: headerMap.email
+        ? readCellValue(row.getCell(headerMap.email).value)
+        : "",
+      excelRow: rowNumber,
+    };
+
+    if (
+      !record.nama &&
+      !record.nim &&
+      !record.fakultas &&
+      !record.departemen &&
+      !record.prodi
+    ) {
+      return;
+    }
+
+    rows.push(record);
+  });
+
+  return rows;
+};
+
+const getOrCreateFaculty = async (name, cache, transaction) => {
+  const normalized = normalizeText(name);
+  if (!normalized) return null;
+  if (cache.has(normalized)) return cache.get(normalized);
+
+  let faculty = await Faculty.findOne({
+    where: sequelize.where(
+      sequelize.fn("LOWER", sequelize.col("name")),
+      normalized,
+    ),
+    transaction,
+  });
+
+  if (!faculty) {
+    const code = `FAC-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 9999)}`;
+    faculty = await Faculty.create(
+      {
+        name: String(name).trim(),
+        code,
+        is_active: true,
+      },
+      { transaction },
+    );
+  }
+
+  cache.set(normalized, faculty);
+  return faculty;
+};
+
+const getOrCreateDepartment = async (name, facultyId, cache, transaction) => {
+  const normalized = normalizeText(name);
+  if (!normalized || !facultyId) return null;
+
+  const cacheKey = `${facultyId}:${normalized}`;
+  if (cache.has(cacheKey)) return cache.get(cacheKey);
+
+  let department = await Department.findOne({
+    where: {
+      faculty_id: facultyId,
+      [Op.and]: sequelize.where(
+        sequelize.fn("LOWER", sequelize.col("name")),
+        normalized,
+      ),
+    },
+    transaction,
+  });
+
+  if (!department) {
+    const code = `DEP-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 9999)}`;
+    department = await Department.create(
+      {
+        faculty_id: facultyId,
+        name: String(name).trim(),
+        code,
+        is_active: true,
+      },
+      { transaction },
+    );
+  }
+
+  cache.set(cacheKey, department);
+  return department;
+};
+
+const getOrCreateStudyProgram = async (
+  name,
+  departmentId,
+  cache,
+  transaction,
+) => {
+  const normalized = normalizeText(name);
+  if (!normalized || !departmentId) return null;
+
+  const cacheKey = `${departmentId}:${normalized}`;
+  if (cache.has(cacheKey)) return cache.get(cacheKey);
+
+  let program = await StudyProgram.findOne({
+    where: {
+      department_id: departmentId,
+      [Op.and]: sequelize.where(
+        sequelize.fn("LOWER", sequelize.col("name")),
+        normalized,
+      ),
+    },
+    transaction,
+  });
+
+  if (!program) {
+    const code = `PRODI-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 9999)}`;
+    program = await StudyProgram.create(
+      {
+        department_id: departmentId,
+        name: String(name).trim(),
+        code,
+        degree: "S1",
+        is_active: true,
+      },
+      { transaction },
+    );
+  }
+
+  cache.set(cacheKey, program);
+  return program;
+};
+
+const ensureUserForImportedRecipient = async ({
+  row,
+  transaction,
+  passwordHash,
+  facultyCache,
+  departmentCache,
+  programCache,
+}) => {
+  let user = await User.findOne({
+    where: { nim: row.nim },
+    transaction,
+  });
+
+  if (!user && row.email) {
+    user = await User.findOne({ where: { email: row.email }, transaction });
+  }
+
+  if (user) {
+    return { user, isDummyCreated: false };
+  }
+
+  const faculty = await getOrCreateFaculty(
+    row.fakultas,
+    facultyCache,
+    transaction,
+  );
+  const department = await getOrCreateDepartment(
+    row.departemen,
+    faculty?.id,
+    departmentCache,
+    transaction,
+  );
+  const program = await getOrCreateStudyProgram(
+    row.prodi,
+    department?.id,
+    programCache,
+    transaction,
+  );
+
+  const nimSafe = String(row.nim || "mahasiswa").replace(/[^a-zA-Z0-9]/g, "");
+  const emailBase = `dummy.${nimSafe || Date.now()}@dummy.local`;
+
+  let emailToUse = emailBase;
+  let emailCounter = 1;
+  while (await User.findOne({ where: { email: emailToUse }, transaction })) {
+    emailToUse = `dummy.${nimSafe || Date.now()}.${emailCounter}@dummy.local`;
+    emailCounter += 1;
+  }
+
+  user = await User.create(
+    {
+      email: emailToUse,
+      password: passwordHash,
+      full_name: row.nama,
+      role: "MAHASISWA",
+      nim: row.nim,
+      faculty_id: faculty?.id || null,
+      department_id: department?.id || null,
+      study_program_id: program?.id || null,
+      is_active: true,
+      emailVerified: false,
+    },
+    { transaction },
+  );
+
+  return { user, isDummyCreated: true };
+};
+
+const downloadTemplateImportPenerima = async (req, res) => {
+  try {
+    const [faculties, departments, studyPrograms] = await Promise.all([
+      Faculty.findAll({
+        where: { is_active: true },
+        attributes: ["id", "name"],
+        order: [["name", "ASC"]],
+      }),
+      Department.findAll({
+        where: { is_active: true },
+        attributes: ["id", "name", "faculty_id"],
+        order: [["name", "ASC"]],
+      }),
+      StudyProgram.findAll({
+        where: { is_active: true },
+        attributes: ["id", "name", "department_id"],
+        order: [["name", "ASC"]],
+      }),
+    ]);
+
+    const workbook = new ExcelJS.Workbook();
+    const templateSheet = workbook.addWorksheet("Template Import Penerima");
+    const infoSheet = workbook.addWorksheet("Petunjuk");
+    const referenceSheet = workbook.addWorksheet("Referensi");
+
+    const safeName = (value) =>
+      String(value || "")
+        .trim()
+        .replace(/[^A-Za-z0-9_]/g, "_");
+
+    const toExcelColumn = (columnNumber) => {
+      let n = columnNumber;
+      let col = "";
+
+      while (n > 0) {
+        const remainder = (n - 1) % 26;
+        col = String.fromCharCode(65 + remainder) + col;
+        n = Math.floor((n - 1) / 26);
+      }
+
+      return col;
+    };
+
+    const DEPT_EMPTY_RANGE = "DEPT_EMPTY";
+    const PRODI_EMPTY_RANGE = "PRODI_EMPTY";
+
+    const facultiesById = new Map(
+      faculties.map((faculty) => [faculty.id, faculty.name]),
+    );
+
+    const departmentsByFaculty = new Map();
+    const studyProgramsByDepartment = new Map();
+
+    departments.forEach((department) => {
+      const current = departmentsByFaculty.get(department.faculty_id) || [];
+      current.push(department);
+      departmentsByFaculty.set(department.faculty_id, current);
+    });
+
+    studyPrograms.forEach((studyProgram) => {
+      const current =
+        studyProgramsByDepartment.get(studyProgram.department_id) || [];
+      current.push(studyProgram);
+      studyProgramsByDepartment.set(studyProgram.department_id, current);
+    });
+
+    referenceSheet.columns = [
+      { header: "fakultas", key: "fakultas", width: 30 },
+      { header: "_unused", key: "_unused", width: 5 },
+      { header: "_unused2", key: "_unused2", width: 5 },
+      { header: "map_fakultas", key: "map_fakultas", width: 30 },
+      { header: "map_fakultas_range", key: "map_fakultas_range", width: 35 },
+      { header: "_unused3", key: "_unused3", width: 5 },
+      {
+        header: "map_fakultas_departemen",
+        key: "map_fakultas_departemen",
+        width: 50,
+      },
+      { header: "map_prodi_range", key: "map_prodi_range", width: 35 },
+    ];
+
+    const facultyOptions = faculties.map((item) => item.name).filter(Boolean);
+    const safeFacultyOptions =
+      facultyOptions.length > 0 ? facultyOptions : ["Tidak ada data fakultas"];
+
+    safeFacultyOptions.forEach((facultyName, idx) => {
+      referenceSheet.getCell(`A${idx + 2}`).value = facultyName;
+    });
+
+    referenceSheet.getCell("J1").value = DEPT_EMPTY_RANGE;
+    referenceSheet.getCell("J2").value = "-";
+    workbook.definedNames.add("Referensi!$J$2:$J$2", DEPT_EMPTY_RANGE);
+
+    referenceSheet.getCell("K1").value = PRODI_EMPTY_RANGE;
+    referenceSheet.getCell("K2").value = "-";
+    workbook.definedNames.add("Referensi!$K$2:$K$2", PRODI_EMPTY_RANGE);
+
+    let nextListColumn = 12;
+    let facultyMapRow = 2;
+
+    faculties.forEach((faculty) => {
+      const rangeName = `DEPT_${safeName(faculty.id)}`;
+      const facultyDepartments = (departmentsByFaculty.get(faculty.id) || [])
+        .map((department) => department.name)
+        .filter(Boolean);
+
+      referenceSheet.getCell(`D${facultyMapRow}`).value = faculty.name;
+
+      if (!facultyDepartments.length) {
+        referenceSheet.getCell(`E${facultyMapRow}`).value = DEPT_EMPTY_RANGE;
+        facultyMapRow += 1;
+        return;
+      }
+
+      const listColumn = toExcelColumn(nextListColumn);
+      referenceSheet.getCell(`${listColumn}1`).value = rangeName;
+
+      facultyDepartments.forEach((departmentName, index) => {
+        referenceSheet.getCell(`${listColumn}${index + 2}`).value =
+          departmentName;
+      });
+
+      workbook.definedNames.add(
+        `Referensi!$${listColumn}$2:$${listColumn}$${facultyDepartments.length + 1}`,
+        rangeName,
+      );
+
+      referenceSheet.getCell(`E${facultyMapRow}`).value = rangeName;
+      facultyMapRow += 1;
+      nextListColumn += 1;
+    });
+
+    let prodiMapRow = 2;
+
+    departments.forEach((department) => {
+      const facultyName = facultiesById.get(department.faculty_id) || "";
+      const comboKey = `${facultyName}||${department.name}`;
+      const rangeName = `PRODI_${safeName(department.id)}`;
+      const departmentPrograms = (
+        studyProgramsByDepartment.get(department.id) || []
+      )
+        .map((studyProgram) => studyProgram.name)
+        .filter(Boolean);
+
+      referenceSheet.getCell(`G${prodiMapRow}`).value = comboKey;
+
+      if (!departmentPrograms.length) {
+        referenceSheet.getCell(`H${prodiMapRow}`).value = PRODI_EMPTY_RANGE;
+        prodiMapRow += 1;
+        return;
+      }
+
+      const listColumn = toExcelColumn(nextListColumn);
+      referenceSheet.getCell(`${listColumn}1`).value = rangeName;
+
+      departmentPrograms.forEach((studyProgramName, index) => {
+        referenceSheet.getCell(`${listColumn}${index + 2}`).value =
+          studyProgramName;
+      });
+
+      workbook.definedNames.add(
+        `Referensi!$${listColumn}$2:$${listColumn}$${departmentPrograms.length + 1}`,
+        rangeName,
+      );
+
+      referenceSheet.getCell(`H${prodiMapRow}`).value = rangeName;
+      prodiMapRow += 1;
+      nextListColumn += 1;
+    });
+
+    const facultyMapLastRow = Math.max(2, facultyMapRow - 1);
+    const prodiMapLastRow = Math.max(2, prodiMapRow - 1);
+
+    const getDepartmentRangeFormula = (rowNumber) =>
+      `INDIRECT(IFERROR(VLOOKUP($C${rowNumber},Referensi!$D$2:$E$${facultyMapLastRow},2,FALSE),"${DEPT_EMPTY_RANGE}"))`;
+
+    const getStudyProgramRangeFormula = (rowNumber) =>
+      `INDIRECT(IFERROR(VLOOKUP($AA${rowNumber},Referensi!$G$2:$H$${prodiMapLastRow},2,FALSE),"${PRODI_EMPTY_RANGE}"))`;
+
+    referenceSheet.state = "hidden";
+
+    templateSheet.columns = [
+      { header: "nama", key: "nama", width: 30 },
+      { header: "nim", key: "nim", width: 18 },
+      { header: "fakultas", key: "fakultas", width: 25 },
+      { header: "departemen", key: "departemen", width: 25 },
+      { header: "prodi", key: "prodi", width: 25 },
+      { header: "email", key: "email", width: 30 },
+    ];
+
+    applyHeaderStyle(templateSheet.getRow(1));
+
+    const dropdownEndRow = 1000;
+    const facultyEndRow = safeFacultyOptions.length + 1;
+
+    for (let rowNumber = 2; rowNumber <= dropdownEndRow; rowNumber += 1) {
+      templateSheet.getCell(`AA${rowNumber}`).value = {
+        formula: `IF(OR($C${rowNumber}="",$D${rowNumber}=""),"",$C${rowNumber}&"||"&$D${rowNumber})`,
+      };
+
+      templateSheet.getCell(`C${rowNumber}`).dataValidation = {
+        type: "list",
+        allowBlank: true,
+        formulae: [`Referensi!$A$2:$A$${facultyEndRow}`],
+        showErrorMessage: true,
+        errorTitle: "Pilihan tidak valid",
+        error: "Pilih fakultas dari dropdown.",
+      };
+
+      templateSheet.getCell(`D${rowNumber}`).dataValidation = {
+        type: "list",
+        allowBlank: true,
+        formulae: [getDepartmentRangeFormula(rowNumber)],
+        showInputMessage: true,
+        promptTitle: "Penting",
+        prompt:
+          "Jika fakultas diubah, pilih ulang departemen agar sesuai fakultas terpilih.",
+        showErrorMessage: true,
+        errorTitle: "Pilihan tidak valid",
+        error: "Pilih departemen dari dropdown.",
+      };
+
+      templateSheet.getCell(`E${rowNumber}`).dataValidation = {
+        type: "list",
+        allowBlank: true,
+        formulae: [getStudyProgramRangeFormula(rowNumber)],
+        showInputMessage: true,
+        promptTitle: "Penting",
+        prompt:
+          "Jika fakultas/departemen diubah, pilih ulang prodi agar sesuai pilihan terbaru.",
+        showErrorMessage: true,
+        errorTitle: "Pilihan tidak valid",
+        error: "Pilih program studi dari dropdown.",
+      };
+    }
+
+    // Highlight otomatis untuk menandai nilai lama yang tidak cocok setelah parent berubah.
+    templateSheet.addConditionalFormatting({
+      ref: `D2:D${dropdownEndRow}`,
+      rules: [
+        {
+          type: "expression",
+          formulae: [
+            `AND($D2<>"",ISERROR(MATCH($D2,${getDepartmentRangeFormula(2)},0)))`,
+          ],
+          style: {
+            fill: {
+              type: "pattern",
+              pattern: "solid",
+              bgColor: { argb: "FFFDE2E2" },
+              fgColor: { argb: "FFFDE2E2" },
+            },
+            font: {
+              color: { argb: "FFB91C1C" },
+              bold: true,
+            },
+          },
+        },
+      ],
+    });
+
+    templateSheet.addConditionalFormatting({
+      ref: `E2:E${dropdownEndRow}`,
+      rules: [
+        {
+          type: "expression",
+          formulae: [
+            `AND($E2<>"",ISERROR(MATCH($E2,${getStudyProgramRangeFormula(2)},0)))`,
+          ],
+          style: {
+            fill: {
+              type: "pattern",
+              pattern: "solid",
+              bgColor: { argb: "FFFDE2E2" },
+              fgColor: { argb: "FFFDE2E2" },
+            },
+            font: {
+              color: { argb: "FFB91C1C" },
+              bold: true,
+            },
+          },
+        },
+      ],
+    });
+
+    templateSheet.getColumn("AA").hidden = true;
+
+    infoSheet.columns = [{ header: "Petunjuk", key: "petunjuk", width: 120 }];
+    applyHeaderStyle(infoSheet.getRow(1));
+    [
+      "Kolom wajib: nama dan nim.",
+      "Dropdown bertingkat: pilih fakultas terlebih dahulu, lalu departemen terfilter otomatis berdasarkan fakultas.",
+      "Dropdown prodi juga terfilter berdasarkan kombinasi fakultas dan departemen yang dipilih.",
+      "Jika fakultas berubah, kosongkan dan pilih ulang departemen serta prodi.",
+      "Jika departemen berubah, kosongkan dan pilih ulang prodi.",
+      "Sel yang merah menandakan pilihan sudah tidak cocok dengan parent terbaru.",
+      "Nama beasiswa dipilih saat proses import di dalam modal.",
+      "Sistem akan menggunakan skema aktif pertama dari beasiswa yang dipilih.",
+      "Sistem akan mencocokkan user berdasarkan NIM (prioritas) lalu email.",
+      "Jika user tidak ditemukan, sistem akan membuat akun dummy mahasiswa secara otomatis.",
+      "Password akun dummy default: dummy12345 (bisa diubah kemudian oleh admin).",
+    ].forEach((text, index) => {
+      const row = infoSheet.addRow({ petunjuk: text });
+      applyDataRowStyle(row, index);
+    });
+
+    const fileName = "template_import_penerima_beasiswa.xlsx";
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=\"${fileName}\"`,
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error("Error downloading import template:", error);
+    return errorResponse(res, "Gagal mengunduh template import", 500);
+  }
+};
+
+const validateImportPenerimaBeasiswa = async (req, res) => {
+  const filePath = req.file?.path ?? null;
+
+  try {
+    const { scholarshipId } = req.body;
+
+    if (!req.file) {
+      return errorResponse(res, "File Excel wajib diupload", 400);
+    }
+
+    if (!scholarshipId) {
+      return errorResponse(res, "Pilih beasiswa terlebih dahulu", 400);
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(filePath);
+
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) {
+      throw new Error("Worksheet tidak ditemukan");
+    }
+
+    const rows = buildImportRowsFromWorksheet(worksheet);
+
+    if (!rows.length) {
+      throw new Error("Tidak ada data yang dapat diproses");
+    }
+
+    const selectedScholarship = await Scholarship.findByPk(scholarshipId, {
+      attributes: ["id", "name", "year"],
+      include: [
+        {
+          model: ScholarshipSchema,
+          as: "schemas",
+          attributes: ["id", "name", "is_active"],
+          required: false,
+        },
+      ],
+    });
+
+    if (!selectedScholarship) {
+      return errorResponse(res, "Beasiswa tidak ditemukan", 404);
+    }
+
+    const selectedSchema =
+      (selectedScholarship.schemas || []).find((schema) => schema.is_active) ||
+      (selectedScholarship.schemas || [])[0] ||
+      null;
+
+    if (!selectedSchema) {
+      return errorResponse(
+        res,
+        "Beasiswa terpilih belum memiliki skema aktif untuk import",
+        400,
+      );
+    }
+
+    const errors = [];
+    const preview = [];
+
+    for (const row of rows) {
+      if (!row.nama) {
+        errors.push({
+          row: row.excelRow,
+          field: "nama",
+          message: "Nama wajib diisi",
+        });
+        continue;
+      }
+      if (!row.nim) {
+        errors.push({
+          row: row.excelRow,
+          field: "nim",
+          message: "NIM wajib diisi",
+        });
+        continue;
+      }
+
+      const existingUser = await User.findOne({
+        where: {
+          [Op.or]: [
+            { nim: row.nim },
+            ...(row.email ? [{ email: row.email }] : []),
+          ],
+        },
+        attributes: ["id", "full_name", "nim", "email"],
+      });
+
+      preview.push({
+        nim: row.nim,
+        nama: row.nama,
+        fakultas: row.fakultas || "-",
+        departemen: row.departemen || "-",
+        prodi: row.prodi || "-",
+        beasiswa: selectedScholarship.name,
+        skema: selectedSchema.name,
+        tahun: selectedScholarship.year,
+        userStatus: existingUser ? "MATCHED" : "DUMMY_AKAN_DIBUAT",
+      });
+    }
+
+    return successResponse(res, "Validasi import penerima berhasil", {
+      total_rows: rows.length,
+      valid_count: preview.length,
+      error_count: errors.length,
+      errors: errors.slice(0, 30),
+      preview: preview.slice(0, 20),
+    });
+  } catch (error) {
+    console.error("Error validating recipient import:", error);
+    return errorResponse(
+      res,
+      error.message || "Gagal memvalidasi file import",
+      500,
+    );
+  } finally {
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  }
+};
+
+const importPenerimaBeasiswa = async (req, res) => {
+  const transaction = await sequelize.transaction();
+  const filePath = req.file?.path ?? null;
+
+  try {
+    const { scholarshipId } = req.body;
+
+    if (!req.file) {
+      return errorResponse(res, "File Excel wajib diupload", 400);
+    }
+
+    if (!scholarshipId) {
+      return errorResponse(res, "Pilih beasiswa terlebih dahulu", 400);
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(filePath);
+
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) {
+      throw new Error("Worksheet tidak ditemukan");
+    }
+
+    const rows = buildImportRowsFromWorksheet(worksheet);
+    if (!rows.length) {
+      throw new Error("Tidak ada data yang dapat diproses");
+    }
+
+    const selectedScholarship = await Scholarship.findByPk(scholarshipId, {
+      attributes: ["id", "name", "year"],
+      include: [
+        {
+          model: ScholarshipSchema,
+          as: "schemas",
+          attributes: ["id", "name", "is_active"],
+          required: false,
+        },
+      ],
+      transaction,
+    });
+
+    if (!selectedScholarship) {
+      await transaction.rollback();
+      return errorResponse(res, "Beasiswa tidak ditemukan", 404);
+    }
+
+    const selectedSchema =
+      (selectedScholarship.schemas || []).find((schema) => schema.is_active) ||
+      (selectedScholarship.schemas || [])[0] ||
+      null;
+
+    if (!selectedSchema) {
+      await transaction.rollback();
+      return errorResponse(
+        res,
+        "Beasiswa terpilih belum memiliki skema aktif untuk import",
+        400,
+      );
+    }
+
+    const facultyCache = new Map();
+    const departmentCache = new Map();
+    const programCache = new Map();
+    const dummyPasswordHash = await bcrypt.hash("dummy12345", 10);
+
+    let createdApplications = 0;
+    let updatedApplications = 0;
+    let matchedUsers = 0;
+    let createdDummyUsers = 0;
+    const errors = [];
+
+    for (const row of rows) {
+      if (!row.nama || !row.nim) {
+        errors.push(`Baris ${row.excelRow}: kolom nama dan nim wajib diisi`);
+        continue;
+      }
+
+      const { user, isDummyCreated } = await ensureUserForImportedRecipient({
+        row,
+        transaction,
+        passwordHash: dummyPasswordHash,
+        facultyCache,
+        departmentCache,
+        programCache,
+      });
+
+      if (isDummyCreated) createdDummyUsers += 1;
+      else matchedUsers += 1;
+
+      const importYear = selectedScholarship.year || new Date().getFullYear();
+
+      const importDate = new Date(`${importYear}-01-01T00:00:00.000Z`);
+
+      const existingApplication = await Application.findOne({
+        where: {
+          student_id: user.id,
+          schema_id: selectedSchema.id,
+        },
+        transaction,
+      });
+
+      if (existingApplication) {
+        await existingApplication.update(
+          {
+            status: "VALIDATED",
+            submitted_at: existingApplication.submitted_at || importDate,
+            validated_by: req.user?.id || null,
+            validated_at: new Date(),
+          },
+          { transaction },
+        );
+        updatedApplications += 1;
+      } else {
+        await Application.create(
+          {
+            schema_id: selectedSchema.id,
+            student_id: user.id,
+            status: "VALIDATED",
+            submitted_at: importDate,
+            validated_by: req.user?.id || null,
+            validated_at: new Date(),
+            createdAt: importDate,
+            updatedAt: new Date(),
+          },
+          { transaction },
+        );
+        createdApplications += 1;
+      }
+    }
+
+    if (errors.length > 0) {
+      await transaction.rollback();
+      return errorResponse(
+        res,
+        `Ditemukan ${errors.length} error:\n${errors
+          .slice(0, 10)
+          .join(
+            "\n",
+          )}${errors.length > 10 ? `\n... dan ${errors.length - 10} error lainnya` : ""}`,
+        400,
+      );
+    }
+
+    await transaction.commit();
+
+    await ActivityLog.create({
+      user_id: req.user.id,
+      action: "IMPORT_SCHOLARSHIP_RECIPIENTS",
+      entity_type: "Application",
+      entity_id: req.user.id,
+      description: `${req.user.full_name || "User"} mengimpor data penerima untuk ${selectedScholarship.name} (${createdApplications} baru, ${updatedApplications} diperbarui)`,
+      ip_address: req.ip,
+      user_agent: req.headers["user-agent"],
+    });
+
+    try {
+      await Promise.all([
+        invalidateApplicationCaches(),
+        invalidateCacheByPattern("applications_summary:*"),
+      ]);
+    } catch (cacheError) {
+      console.error(
+        "Error invalidating caches after recipient import:",
+        cacheError,
+      );
+    }
+
+    return successResponse(res, "Import data penerima berhasil", {
+      total_processed: rows.length,
+      created_applications: createdApplications,
+      updated_applications: updatedApplications,
+      matched_users: matchedUsers,
+      created_dummy_users: createdDummyUsers,
+      dummy_password_default: "dummy12345",
+    });
+  } catch (error) {
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
+
+    console.error("Error importing scholarship recipients:", error);
+    return errorResponse(
+      res,
+      error.message || "Gagal mengimpor data penerima",
+      500,
+    );
+  } finally {
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  }
+};
+
 module.exports = {
   exportLaporanBeasiswa,
+  exportPendaftarLaporan,
+  downloadTemplateImportPenerima,
+  validateImportPenerimaBeasiswa,
+  importPenerimaBeasiswa,
 };

@@ -4,6 +4,7 @@ const db = require("./models");
 const cors = require("cors");
 const path = require("path");
 const redis = require("./config/redis");
+const responseTimeMiddleware = require("./middlewares/response-time.middleware");
 
 dotenv.config();
 const app = express();
@@ -12,6 +13,8 @@ const routes = require("./routes");
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.use(responseTimeMiddleware);
 
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
