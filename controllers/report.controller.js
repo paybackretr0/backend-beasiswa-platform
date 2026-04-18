@@ -1863,17 +1863,17 @@ const downloadTemplateImportPenerima = async (req, res) => {
     const [faculties, departments, studyPrograms] = await Promise.all([
       Faculty.findAll({
         where: { is_active: true },
-        attributes: ["name"],
+        attributes: ["id", "name"],
         order: [["name", "ASC"]],
       }),
       Department.findAll({
         where: { is_active: true },
-        attributes: ["name"],
+        attributes: ["id", "name", "faculty_id"],
         order: [["name", "ASC"]],
       }),
       StudyProgram.findAll({
         where: { is_active: true },
-        attributes: ["name"],
+        attributes: ["id", "name", "department_id"],
         order: [["name", "ASC"]],
       }),
     ]);
@@ -1883,44 +1883,159 @@ const downloadTemplateImportPenerima = async (req, res) => {
     const infoSheet = workbook.addWorksheet("Petunjuk");
     const referenceSheet = workbook.addWorksheet("Referensi");
 
-    const facultyOptions = faculties.map((item) => item.name).filter(Boolean);
-    const departmentOptions = departments
-      .map((item) => item.name)
-      .filter(Boolean);
-    const studyProgramOptions = studyPrograms
-      .map((item) => item.name)
-      .filter(Boolean);
+    const safeName = (value) =>
+      String(value || "")
+        .trim()
+        .replace(/[^A-Za-z0-9_]/g, "_");
 
-    const safeFacultyOptions =
-      facultyOptions.length > 0 ? facultyOptions : ["Tidak ada data fakultas"];
-    const safeDepartmentOptions =
-      departmentOptions.length > 0
-        ? departmentOptions
-        : ["Tidak ada data departemen"];
-    const safeStudyProgramOptions =
-      studyProgramOptions.length > 0
-        ? studyProgramOptions
-        : ["Tidak ada data prodi"];
+    const toExcelColumn = (columnNumber) => {
+      let n = columnNumber;
+      let col = "";
+
+      while (n > 0) {
+        const remainder = (n - 1) % 26;
+        col = String.fromCharCode(65 + remainder) + col;
+        n = Math.floor((n - 1) / 26);
+      }
+
+      return col;
+    };
+
+    const DEPT_EMPTY_RANGE = "DEPT_EMPTY";
+    const PRODI_EMPTY_RANGE = "PRODI_EMPTY";
+
+    const facultiesById = new Map(
+      faculties.map((faculty) => [faculty.id, faculty.name]),
+    );
+
+    const departmentsByFaculty = new Map();
+    const studyProgramsByDepartment = new Map();
+
+    departments.forEach((department) => {
+      const current = departmentsByFaculty.get(department.faculty_id) || [];
+      current.push(department);
+      departmentsByFaculty.set(department.faculty_id, current);
+    });
+
+    studyPrograms.forEach((studyProgram) => {
+      const current =
+        studyProgramsByDepartment.get(studyProgram.department_id) || [];
+      current.push(studyProgram);
+      studyProgramsByDepartment.set(studyProgram.department_id, current);
+    });
 
     referenceSheet.columns = [
       { header: "fakultas", key: "fakultas", width: 30 },
-      { header: "departemen", key: "departemen", width: 30 },
-      { header: "prodi", key: "prodi", width: 30 },
+      { header: "_unused", key: "_unused", width: 5 },
+      { header: "_unused2", key: "_unused2", width: 5 },
+      { header: "map_fakultas", key: "map_fakultas", width: 30 },
+      { header: "map_fakultas_range", key: "map_fakultas_range", width: 35 },
+      { header: "_unused3", key: "_unused3", width: 5 },
+      {
+        header: "map_fakultas_departemen",
+        key: "map_fakultas_departemen",
+        width: 50,
+      },
+      { header: "map_prodi_range", key: "map_prodi_range", width: 35 },
     ];
 
-    const maxRefRows = Math.max(
-      safeFacultyOptions.length,
-      safeDepartmentOptions.length,
-      safeStudyProgramOptions.length,
-    );
+    const facultyOptions = faculties.map((item) => item.name).filter(Boolean);
+    const safeFacultyOptions =
+      facultyOptions.length > 0 ? facultyOptions : ["Tidak ada data fakultas"];
 
-    for (let i = 0; i < maxRefRows; i += 1) {
-      referenceSheet.addRow({
-        fakultas: safeFacultyOptions[i] || null,
-        departemen: safeDepartmentOptions[i] || null,
-        prodi: safeStudyProgramOptions[i] || null,
+    safeFacultyOptions.forEach((facultyName, idx) => {
+      referenceSheet.getCell(`A${idx + 2}`).value = facultyName;
+    });
+
+    referenceSheet.getCell("J1").value = DEPT_EMPTY_RANGE;
+    referenceSheet.getCell("J2").value = "-";
+    workbook.definedNames.add("Referensi!$J$2:$J$2", DEPT_EMPTY_RANGE);
+
+    referenceSheet.getCell("K1").value = PRODI_EMPTY_RANGE;
+    referenceSheet.getCell("K2").value = "-";
+    workbook.definedNames.add("Referensi!$K$2:$K$2", PRODI_EMPTY_RANGE);
+
+    let nextListColumn = 12;
+    let facultyMapRow = 2;
+
+    faculties.forEach((faculty) => {
+      const rangeName = `DEPT_${safeName(faculty.id)}`;
+      const facultyDepartments = (departmentsByFaculty.get(faculty.id) || [])
+        .map((department) => department.name)
+        .filter(Boolean);
+
+      referenceSheet.getCell(`D${facultyMapRow}`).value = faculty.name;
+
+      if (!facultyDepartments.length) {
+        referenceSheet.getCell(`E${facultyMapRow}`).value = DEPT_EMPTY_RANGE;
+        facultyMapRow += 1;
+        return;
+      }
+
+      const listColumn = toExcelColumn(nextListColumn);
+      referenceSheet.getCell(`${listColumn}1`).value = rangeName;
+
+      facultyDepartments.forEach((departmentName, index) => {
+        referenceSheet.getCell(`${listColumn}${index + 2}`).value =
+          departmentName;
       });
-    }
+
+      workbook.definedNames.add(
+        `Referensi!$${listColumn}$2:$${listColumn}$${facultyDepartments.length + 1}`,
+        rangeName,
+      );
+
+      referenceSheet.getCell(`E${facultyMapRow}`).value = rangeName;
+      facultyMapRow += 1;
+      nextListColumn += 1;
+    });
+
+    let prodiMapRow = 2;
+
+    departments.forEach((department) => {
+      const facultyName = facultiesById.get(department.faculty_id) || "";
+      const comboKey = `${facultyName}||${department.name}`;
+      const rangeName = `PRODI_${safeName(department.id)}`;
+      const departmentPrograms = (
+        studyProgramsByDepartment.get(department.id) || []
+      )
+        .map((studyProgram) => studyProgram.name)
+        .filter(Boolean);
+
+      referenceSheet.getCell(`G${prodiMapRow}`).value = comboKey;
+
+      if (!departmentPrograms.length) {
+        referenceSheet.getCell(`H${prodiMapRow}`).value = PRODI_EMPTY_RANGE;
+        prodiMapRow += 1;
+        return;
+      }
+
+      const listColumn = toExcelColumn(nextListColumn);
+      referenceSheet.getCell(`${listColumn}1`).value = rangeName;
+
+      departmentPrograms.forEach((studyProgramName, index) => {
+        referenceSheet.getCell(`${listColumn}${index + 2}`).value =
+          studyProgramName;
+      });
+
+      workbook.definedNames.add(
+        `Referensi!$${listColumn}$2:$${listColumn}$${departmentPrograms.length + 1}`,
+        rangeName,
+      );
+
+      referenceSheet.getCell(`H${prodiMapRow}`).value = rangeName;
+      prodiMapRow += 1;
+      nextListColumn += 1;
+    });
+
+    const facultyMapLastRow = Math.max(2, facultyMapRow - 1);
+    const prodiMapLastRow = Math.max(2, prodiMapRow - 1);
+
+    const getDepartmentRangeFormula = (rowNumber) =>
+      `INDIRECT(IFERROR(VLOOKUP($C${rowNumber},Referensi!$D$2:$E$${facultyMapLastRow},2,FALSE),"${DEPT_EMPTY_RANGE}"))`;
+
+    const getStudyProgramRangeFormula = (rowNumber) =>
+      `INDIRECT(IFERROR(VLOOKUP($AA${rowNumber},Referensi!$G$2:$H$${prodiMapLastRow},2,FALSE),"${PRODI_EMPTY_RANGE}"))`;
 
     referenceSheet.state = "hidden";
 
@@ -1937,10 +2052,12 @@ const downloadTemplateImportPenerima = async (req, res) => {
 
     const dropdownEndRow = 1000;
     const facultyEndRow = safeFacultyOptions.length + 1;
-    const departmentEndRow = safeDepartmentOptions.length + 1;
-    const studyProgramEndRow = safeStudyProgramOptions.length + 1;
 
     for (let rowNumber = 2; rowNumber <= dropdownEndRow; rowNumber += 1) {
+      templateSheet.getCell(`AA${rowNumber}`).value = {
+        formula: `IF(OR($C${rowNumber}="",$D${rowNumber}=""),"",$C${rowNumber}&"||"&$D${rowNumber})`,
+      };
+
       templateSheet.getCell(`C${rowNumber}`).dataValidation = {
         type: "list",
         allowBlank: true,
@@ -1953,7 +2070,11 @@ const downloadTemplateImportPenerima = async (req, res) => {
       templateSheet.getCell(`D${rowNumber}`).dataValidation = {
         type: "list",
         allowBlank: true,
-        formulae: [`Referensi!$B$2:$B$${departmentEndRow}`],
+        formulae: [getDepartmentRangeFormula(rowNumber)],
+        showInputMessage: true,
+        promptTitle: "Penting",
+        prompt:
+          "Jika fakultas diubah, pilih ulang departemen agar sesuai fakultas terpilih.",
         showErrorMessage: true,
         errorTitle: "Pilihan tidak valid",
         error: "Pilih departemen dari dropdown.",
@@ -1962,18 +2083,77 @@ const downloadTemplateImportPenerima = async (req, res) => {
       templateSheet.getCell(`E${rowNumber}`).dataValidation = {
         type: "list",
         allowBlank: true,
-        formulae: [`Referensi!$C$2:$C$${studyProgramEndRow}`],
+        formulae: [getStudyProgramRangeFormula(rowNumber)],
+        showInputMessage: true,
+        promptTitle: "Penting",
+        prompt:
+          "Jika fakultas/departemen diubah, pilih ulang prodi agar sesuai pilihan terbaru.",
         showErrorMessage: true,
         errorTitle: "Pilihan tidak valid",
         error: "Pilih program studi dari dropdown.",
       };
     }
 
+    // Highlight otomatis untuk menandai nilai lama yang tidak cocok setelah parent berubah.
+    templateSheet.addConditionalFormatting({
+      ref: `D2:D${dropdownEndRow}`,
+      rules: [
+        {
+          type: "expression",
+          formulae: [
+            `AND($D2<>"",ISERROR(MATCH($D2,${getDepartmentRangeFormula(2)},0)))`,
+          ],
+          style: {
+            fill: {
+              type: "pattern",
+              pattern: "solid",
+              bgColor: { argb: "FFFDE2E2" },
+              fgColor: { argb: "FFFDE2E2" },
+            },
+            font: {
+              color: { argb: "FFB91C1C" },
+              bold: true,
+            },
+          },
+        },
+      ],
+    });
+
+    templateSheet.addConditionalFormatting({
+      ref: `E2:E${dropdownEndRow}`,
+      rules: [
+        {
+          type: "expression",
+          formulae: [
+            `AND($E2<>"",ISERROR(MATCH($E2,${getStudyProgramRangeFormula(2)},0)))`,
+          ],
+          style: {
+            fill: {
+              type: "pattern",
+              pattern: "solid",
+              bgColor: { argb: "FFFDE2E2" },
+              fgColor: { argb: "FFFDE2E2" },
+            },
+            font: {
+              color: { argb: "FFB91C1C" },
+              bold: true,
+            },
+          },
+        },
+      ],
+    });
+
+    templateSheet.getColumn("AA").hidden = true;
+
     infoSheet.columns = [{ header: "Petunjuk", key: "petunjuk", width: 120 }];
     applyHeaderStyle(infoSheet.getRow(1));
     [
       "Kolom wajib: nama dan nim.",
-      "Kolom fakultas, departemen, dan prodi memiliki dropdown berdasarkan data aktif di database.",
+      "Dropdown bertingkat: pilih fakultas terlebih dahulu, lalu departemen terfilter otomatis berdasarkan fakultas.",
+      "Dropdown prodi juga terfilter berdasarkan kombinasi fakultas dan departemen yang dipilih.",
+      "Jika fakultas berubah, kosongkan dan pilih ulang departemen serta prodi.",
+      "Jika departemen berubah, kosongkan dan pilih ulang prodi.",
+      "Sel yang merah menandakan pilihan sudah tidak cocok dengan parent terbaru.",
       "Nama beasiswa dipilih saat proses import di dalam modal.",
       "Sistem akan menggunakan skema aktif pertama dari beasiswa yang dipilih.",
       "Sistem akan mencocokkan user berdasarkan NIM (prioritas) lalu email.",
