@@ -39,6 +39,7 @@ module.exports = {
           "REJECTED",
           "REVISION_NEEDED",
           "VALIDATED",
+          "AWARDEE",
         ),
         allowNull: false,
         defaultValue: "DRAFT",

@@ -373,7 +373,12 @@ const getSelectionSummary = async (req, res) => {
     const [validated, menungguVerifikasi, verified, rejected, revisionNeeded] =
       await Promise.all([
         Application.count({
-          where: { ...baseWhere, status: "VALIDATED" },
+          where: {
+            ...baseWhere,
+            status: {
+              [Op.in]: ["VALIDATED", "AWARDEE"],
+            },
+          },
           include: includeUser,
         }),
         Application.count({

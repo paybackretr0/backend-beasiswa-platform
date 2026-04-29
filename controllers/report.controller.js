@@ -32,6 +32,7 @@ const getStatusLabel = (status) => {
     VERIFIED: "Terverifikasi - Menunggu Validasi",
     REJECTED: "Ditolak",
     VALIDATED: "Disetujui",
+    AWARDEE: "Penerima Beasiswa",
     REVISION_NEEDED: "Perlu Revisi",
   };
   return statusMap[status] || status;
@@ -522,7 +523,7 @@ const getOngoingRecipients = async (year) => {
     LEFT JOIN study_programs sp ON u.study_program_id = sp.id
     LEFT JOIN departments d ON sp.department_id = d.id
     LEFT JOIN faculties f ON d.faculty_id = f.id
-    WHERE a.status = 'VALIDATED'
+    WHERE a.status IN ('VALIDATED', 'AWARDEE')
       ${yearCondition}
       AND DATE_ADD(a.createdAt, INTERVAL (s.duration_semesters * 6) MONTH) > NOW()
     ORDER BY a.createdAt DESC
@@ -567,7 +568,7 @@ const getRecipientsByScholarshipDetail = async (year, scholarshipId) => {
     LEFT JOIN study_programs sp ON u.study_program_id = sp.id
     LEFT JOIN departments d ON sp.department_id = d.id
     LEFT JOIN faculties f ON d.faculty_id = f.id
-    WHERE a.status = 'VALIDATED'
+    WHERE a.status IN ('VALIDATED', 'AWARDEE')
       AND s.id = :scholarshipId
       ${yearCondition}
     ORDER BY 
@@ -609,6 +610,7 @@ const getApplicantsByScholarshipDetail = async (year, scholarshipId) => {
       a.createdAt as tanggal_daftar,
       a.status,
       CASE 
+        WHEN a.status = 'AWARDEE' THEN 'Penerima Beasiswa'
         WHEN a.status = 'MENUNGGU_VERIFIKASI' THEN 'Menunggu Verifikasi'
         WHEN a.status = 'VERIFIED' THEN 'Terverifikasi - Menunggu Validasi'
         WHEN a.status = 'VALIDATED' THEN 'Disetujui'
@@ -637,6 +639,7 @@ const getApplicantsByScholarshipDetail = async (year, scholarshipId) => {
       ${yearCondition}
     ORDER BY 
       CASE 
+        WHEN a.status = 'AWARDEE' THEN 1
         WHEN a.status = 'VALIDATED' THEN 1
         WHEN a.status = 'VERIFIED' THEN 2
         WHEN a.status = 'MENUNGGU_VERIFIKASI' THEN 3
@@ -2408,7 +2411,7 @@ const importPenerimaBeasiswa = async (req, res) => {
       if (existingApplication) {
         await existingApplication.update(
           {
-            status: "VALIDATED",
+            status: "AWARDEE",
             submitted_at: existingApplication.submitted_at || importDate,
             validated_by: req.user?.id || null,
             validated_at: new Date(),
@@ -2421,7 +2424,7 @@ const importPenerimaBeasiswa = async (req, res) => {
           {
             schema_id: selectedSchema.id,
             student_id: user.id,
-            status: "VALIDATED",
+            status: "AWARDEE",
             submitted_at: importDate,
             validated_by: req.user?.id || null,
             validated_at: new Date(),

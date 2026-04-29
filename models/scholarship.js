@@ -109,14 +109,6 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(20),
         allowNull: false,
       },
-      gpa_minimum: {
-        type: DataTypes.DECIMAL(3, 2),
-        allowNull: true,
-      },
-      semester_minimum: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-      },
       scholarship_value: {
         type: DataTypes.DECIMAL(15, 2),
         allowNull: false,

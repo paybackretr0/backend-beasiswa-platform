@@ -52,7 +52,7 @@ module.exports = (sequelize, DataTypes) => {
       modelName: "FormAnswer",
       tableName: "form_answers",
       timestamps: true,
-    }
+    },
   );
   return FormAnswer;
 };
