@@ -671,7 +671,7 @@ const getAllScholarshipsWithData = async (year) => {
       s.name,
       s.year,
       s.organizer,
-      COUNT(CASE WHEN a.status = 'VALIDATED' THEN 1 END) as jumlah_penerima,
+      COUNT(CASE WHEN a.status IN ('VALIDATED', 'AWARDEE') THEN 1 END) as jumlah_penerima,
       COUNT(CASE WHEN a.status != 'DRAFT' AND a.status IS NOT NULL THEN 1 END) as jumlah_pendaftar
     FROM scholarships s
     LEFT JOIN scholarship_schemas ss ON s.id = ss.scholarship_id
@@ -688,11 +688,50 @@ const getAllScholarshipsWithData = async (year) => {
   );
 };
 
+const getRecipientsRecapAllYears = async ({ startYear = 2025 } = {}) => {
+  const endYear = new Date().getFullYear();
+
+  const years = [];
+  for (let y = startYear; y <= endYear; y += 1) {
+    years.push(y);
+  }
+
+  if (!years.length) {
+    return { years: [], rows: [] };
+  }
+
+  const rows = await sequelize.query(
+    `
+    SELECT
+      s.name as scholarship_name,
+      s.year as scholarship_year,
+      COUNT(CASE WHEN a.status IN ('VALIDATED', 'AWARDEE') THEN 1 END) as accepted_count
+    FROM scholarships s
+    LEFT JOIN scholarship_schemas ss ON s.id = ss.scholarship_id
+    LEFT JOIN applications a ON ss.id = a.schema_id
+    WHERE s.is_external = false
+      AND s.year IS NOT NULL
+      AND s.year >= :startYear
+      AND s.year <= :endYear
+    GROUP BY s.name, s.year
+    ORDER BY s.name ASC, s.year ASC
+    `,
+    {
+      replacements: { startYear, endYear },
+      type: sequelize.QueryTypes.SELECT,
+    },
+  );
+
+  return { years, rows };
+};
+
 const exportLaporanBeasiswa = async (req, res) => {
   try {
+    const yearQuery = req.query.year;
+    const isAllYears = String(yearQuery || "").toLowerCase() === "all";
     let { year = new Date().getFullYear() } = req.query;
 
-    if (year === "all") {
+    if (String(year).toLowerCase() === "all") {
       year = null;
     }
 
@@ -993,6 +1032,123 @@ const exportLaporanBeasiswa = async (req, res) => {
     }
 
     applyCenterAlignment(genderSheet, ["gender", "jumlah"]);
+
+    if (isAllYears) {
+      const { years: recapYears, rows: recapRows } =
+        await getRecipientsRecapAllYears();
+
+      if (recapYears.length > 0) {
+        const recapAllYearsSheet = workbook.addWorksheet(
+          "Rekap Jumlah Diterima (All Tahun)",
+        );
+
+        const firstYearCol = 3;
+        const lastYearCol = firstYearCol + recapYears.length - 1;
+        const totalCol = lastYearCol + 1;
+
+        recapAllYearsSheet.getColumn(1).width = 8;
+        recapAllYearsSheet.getColumn(2).width = 40;
+        recapYears.forEach((_, idx) => {
+          recapAllYearsSheet.getColumn(firstYearCol + idx).width = 14;
+        });
+        recapAllYearsSheet.getColumn(totalCol).width = 12;
+
+        recapAllYearsSheet.getRow(1).values = [
+          "No",
+          "Nama Beasiswa",
+          "Tahun",
+          ...Array(Math.max(0, recapYears.length - 1)).fill(""),
+          "Total",
+        ];
+        recapAllYearsSheet.getRow(2).values = ["", "", ...recapYears, ""];
+        recapAllYearsSheet.getRow(3).values = [
+          "",
+          "",
+          "Jumlah Diterima",
+          ...Array(Math.max(0, recapYears.length - 1)).fill(""),
+          "",
+        ];
+
+        recapAllYearsSheet.mergeCells(1, 1, 3, 1);
+        recapAllYearsSheet.mergeCells(1, 2, 3, 2);
+        recapAllYearsSheet.mergeCells(1, firstYearCol, 1, lastYearCol);
+        recapAllYearsSheet.mergeCells(3, firstYearCol, 3, lastYearCol);
+        recapAllYearsSheet.mergeCells(1, totalCol, 3, totalCol);
+
+        applyHeaderStyle(recapAllYearsSheet.getRow(1));
+        applyHeaderStyle(recapAllYearsSheet.getRow(2));
+        applyHeaderStyle(recapAllYearsSheet.getRow(3));
+
+        recapAllYearsSheet.getColumn(1).alignment = {
+          vertical: "middle",
+          horizontal: "center",
+        };
+        recapAllYearsSheet.getColumn(2).alignment = {
+          vertical: "middle",
+          horizontal: "left",
+        };
+        recapYears.forEach((_, idx) => {
+          recapAllYearsSheet.getColumn(firstYearCol + idx).alignment = {
+            vertical: "middle",
+            horizontal: "center",
+          };
+        });
+        recapAllYearsSheet.getColumn(totalCol).alignment = {
+          vertical: "middle",
+          horizontal: "center",
+        };
+
+        const byName = new Map();
+        recapRows.forEach((r) => {
+          const name = r.scholarship_name;
+          const y = parseInt(r.scholarship_year);
+          const count = parseInt(r.accepted_count) || 0;
+          if (!byName.has(name)) byName.set(name, new Map());
+          byName.get(name).set(y, count);
+        });
+
+        const scholarshipNames = Array.from(byName.keys()).sort((a, b) =>
+          String(a).localeCompare(String(b), "id-ID"),
+        );
+
+        const totalsPerYear = new Map();
+        recapYears.forEach((y) => totalsPerYear.set(y, 0));
+        let grandTotal = 0;
+
+        scholarshipNames.forEach((name, index) => {
+          const yearMap = byName.get(name) || new Map();
+          const rowData = [index + 1, name];
+          let rowTotal = 0;
+
+          recapYears.forEach((y) => {
+            if (!yearMap.has(y)) {
+              rowData.push("N/A");
+              return;
+            }
+            const value = yearMap.get(y) || 0;
+            rowData.push(value);
+            rowTotal += value;
+            totalsPerYear.set(y, (totalsPerYear.get(y) || 0) + value);
+          });
+
+          rowData.push(rowTotal);
+          grandTotal += rowTotal;
+
+          const row = recapAllYearsSheet.addRow(rowData);
+          applyDataRowStyle(row, index);
+        });
+
+        const totalRowValues = [
+          "Total",
+          "",
+          ...recapYears.map((y) => totalsPerYear.get(y) || 0),
+          grandTotal,
+        ];
+        const totalRow = recapAllYearsSheet.addRow(totalRowValues);
+        recapAllYearsSheet.mergeCells(totalRow.number, 1, totalRow.number, 2);
+        applyTotalRowStyle(totalRow);
+      }
+    }
 
     for (const scholarship of scholarshipsWithData) {
       let baseSheetName = scholarship.name.substring(0, 25);
