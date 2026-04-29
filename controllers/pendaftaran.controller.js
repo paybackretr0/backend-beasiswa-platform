@@ -15,6 +15,19 @@ const {
 const { successResponse, errorResponse } = require("../utils/response");
 const { Op } = require("sequelize");
 
+const normalizeLabel = (label) =>
+  String(label || "")
+    .trim()
+    .toLowerCase();
+
+const parseNumberAnswer = (value) => {
+  if (value === undefined || value === null) return null;
+  const normalized = String(value).trim().replace(",", ".");
+  if (normalized === "") return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 const isUserEligibleForScholarship = (user, scholarship) => {
   const facultyIds = new Set((scholarship.faculties || []).map((f) => f.id));
   const departmentIds = new Set(
@@ -409,6 +422,78 @@ const submitApplication = async (req, res) => {
               400,
             );
           }
+        }
+      }
+
+      const gpaMinimum =
+        schema.gpa_minimum !== null ? Number(schema.gpa_minimum) : null;
+      if (Number.isFinite(gpaMinimum)) {
+        const gpaField = formFields.find(
+          (field) =>
+            field.type === "NUMBER" &&
+            normalizeLabel(field.label).includes("ipk"),
+        );
+
+        if (gpaField) {
+          const gpaAnswerRaw = parsedAnswers[gpaField.id]?.answer_text;
+          const gpaValue = parseNumberAnswer(gpaAnswerRaw);
+          if (gpaValue === null) {
+            return errorResponse(res, 'Field "IPK" harus berupa angka', 400);
+          }
+          if (gpaValue < gpaMinimum) {
+            return errorResponse(
+              res,
+              `IPK tidak mencukupi syarat minimum (min: ${gpaMinimum})`,
+              400,
+            );
+          }
+        } else {
+          console.warn(
+            `Schema ${schema.id} memiliki gpa_minimum=${gpaMinimum}, tetapi field IPK tidak ditemukan di form_fields`,
+          );
+        }
+      }
+
+      const semesterMinimum =
+        schema.semester_minimum !== null
+          ? Number(schema.semester_minimum)
+          : null;
+      if (Number.isFinite(semesterMinimum)) {
+        const semesterField = formFields.find(
+          (field) =>
+            field.type === "NUMBER" &&
+            normalizeLabel(field.label).includes("semester"),
+        );
+
+        if (semesterField) {
+          const semesterAnswerRaw =
+            parsedAnswers[semesterField.id]?.answer_text;
+          const semesterValue = parseNumberAnswer(semesterAnswerRaw);
+          if (semesterValue === null) {
+            return errorResponse(
+              res,
+              'Field "Semester" harus berupa angka',
+              400,
+            );
+          }
+          if (!Number.isInteger(semesterValue)) {
+            return errorResponse(
+              res,
+              'Field "Semester" harus berupa bilangan bulat',
+              400,
+            );
+          }
+          if (semesterValue < semesterMinimum) {
+            return errorResponse(
+              res,
+              `Semester tidak mencukupi syarat minimum (min: ${semesterMinimum})`,
+              400,
+            );
+          }
+        } else {
+          console.warn(
+            `Schema ${schema.id} memiliki semester_minimum=${semesterMinimum}, tetapi field Semester tidak ditemukan di form_fields`,
+          );
         }
       }
     }
