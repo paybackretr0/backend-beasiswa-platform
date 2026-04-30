@@ -67,18 +67,18 @@ router.get("/export-laporan", exportLaporanBeasiswa);
 router.get("/export-pendaftar", exportPendaftarLaporan);
 router.get(
   "/import-penerima/template",
-  authorize(["SUPERADMIN", "PIMPINAN_DITMAWA", "VALIDATOR_DITMAWA"]),
+  authorize(["SUPERADMIN", "PIMPINAN_DITMAWA"]),
   downloadTemplateImportPenerima,
 );
 router.post(
   "/import-penerima/validate",
-  authorize(["SUPERADMIN", "PIMPINAN_DITMAWA", "VALIDATOR_DITMAWA"]),
+  authorize(["SUPERADMIN", "PIMPINAN_DITMAWA"]),
   excelUpload.single("file"),
   validateImportPenerimaBeasiswa,
 );
 router.post(
   "/import-penerima",
-  authorize(["SUPERADMIN", "PIMPINAN_DITMAWA", "VALIDATOR_DITMAWA"]),
+  authorize(["SUPERADMIN", "PIMPINAN_DITMAWA"]),
   excelUpload.single("file"),
   importPenerimaBeasiswa,
 );

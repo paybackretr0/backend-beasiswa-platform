@@ -2371,14 +2371,14 @@ const validateImportPenerimaBeasiswa = async (req, res) => {
   const filePath = req.file?.path ?? null;
 
   try {
-    const { scholarshipId } = req.body;
+    const { scholarshipId, schemaId } = req.body;
 
     if (!req.file) {
       return errorResponse(res, "File Excel wajib diupload", 400);
     }
 
-    if (!scholarshipId) {
-      return errorResponse(res, "Pilih beasiswa terlebih dahulu", 400);
+    if (!schemaId) {
+      return errorResponse(res, "Pilih skema terlebih dahulu", 400);
     }
 
     const workbook = new ExcelJS.Workbook();
@@ -2395,34 +2395,35 @@ const validateImportPenerimaBeasiswa = async (req, res) => {
       throw new Error("Tidak ada data yang dapat diproses");
     }
 
-    const selectedScholarship = await Scholarship.findByPk(scholarshipId, {
-      attributes: ["id", "name", "year"],
+    const selectedSchema = await ScholarshipSchema.findByPk(schemaId, {
+      attributes: ["id", "name", "is_active", "scholarship_id"],
       include: [
         {
-          model: ScholarshipSchema,
-          as: "schemas",
-          attributes: ["id", "name", "is_active"],
-          required: false,
+          model: Scholarship,
+          as: "scholarship",
+          attributes: ["id", "name", "year"],
+          required: true,
         },
       ],
     });
 
-    if (!selectedScholarship) {
-      return errorResponse(res, "Beasiswa tidak ditemukan", 404);
+    if (!selectedSchema) {
+      return errorResponse(res, "Skema tidak ditemukan", 404);
     }
 
-    const selectedSchema =
-      (selectedScholarship.schemas || []).find((schema) => schema.is_active) ||
-      (selectedScholarship.schemas || [])[0] ||
-      null;
-
-    if (!selectedSchema) {
+    if (scholarshipId && selectedSchema.scholarship_id !== scholarshipId) {
       return errorResponse(
         res,
-        "Beasiswa terpilih belum memiliki skema aktif untuk import",
+        "Skema tidak sesuai dengan beasiswa terpilih",
         400,
       );
     }
+
+    if (!selectedSchema.is_active) {
+      return errorResponse(res, "Skema terpilih tidak aktif", 400);
+    }
+
+    const selectedScholarship = selectedSchema.scholarship;
 
     const errors = [];
     const preview = [];
@@ -2497,14 +2498,14 @@ const importPenerimaBeasiswa = async (req, res) => {
   const filePath = req.file?.path ?? null;
 
   try {
-    const { scholarshipId } = req.body;
+    const { scholarshipId, schemaId } = req.body;
 
     if (!req.file) {
       return errorResponse(res, "File Excel wajib diupload", 400);
     }
 
-    if (!scholarshipId) {
-      return errorResponse(res, "Pilih beasiswa terlebih dahulu", 400);
+    if (!schemaId) {
+      return errorResponse(res, "Pilih skema terlebih dahulu", 400);
     }
 
     const workbook = new ExcelJS.Workbook();
@@ -2520,37 +2521,39 @@ const importPenerimaBeasiswa = async (req, res) => {
       throw new Error("Tidak ada data yang dapat diproses");
     }
 
-    const selectedScholarship = await Scholarship.findByPk(scholarshipId, {
-      attributes: ["id", "name", "year"],
+    const selectedSchema = await ScholarshipSchema.findByPk(schemaId, {
+      attributes: ["id", "name", "is_active", "scholarship_id"],
       include: [
         {
-          model: ScholarshipSchema,
-          as: "schemas",
-          attributes: ["id", "name", "is_active"],
-          required: false,
+          model: Scholarship,
+          as: "scholarship",
+          attributes: ["id", "name", "year"],
+          required: true,
         },
       ],
       transaction,
     });
 
-    if (!selectedScholarship) {
+    if (!selectedSchema) {
       await transaction.rollback();
-      return errorResponse(res, "Beasiswa tidak ditemukan", 404);
+      return errorResponse(res, "Skema tidak ditemukan", 404);
     }
 
-    const selectedSchema =
-      (selectedScholarship.schemas || []).find((schema) => schema.is_active) ||
-      (selectedScholarship.schemas || [])[0] ||
-      null;
-
-    if (!selectedSchema) {
+    if (scholarshipId && selectedSchema.scholarship_id !== scholarshipId) {
       await transaction.rollback();
       return errorResponse(
         res,
-        "Beasiswa terpilih belum memiliki skema aktif untuk import",
+        "Skema tidak sesuai dengan beasiswa terpilih",
         400,
       );
     }
+
+    if (!selectedSchema.is_active) {
+      await transaction.rollback();
+      return errorResponse(res, "Skema terpilih tidak aktif", 400);
+    }
+
+    const selectedScholarship = selectedSchema.scholarship;
 
     const facultyCache = new Map();
     const departmentCache = new Map();
@@ -2642,7 +2645,7 @@ const importPenerimaBeasiswa = async (req, res) => {
       action: "IMPORT_SCHOLARSHIP_RECIPIENTS",
       entity_type: "Application",
       entity_id: req.user.id,
-      description: `${req.user.full_name || "User"} mengimpor data penerima untuk ${selectedScholarship.name} (${createdApplications} baru, ${updatedApplications} diperbarui)`,
+      description: `${req.user.full_name || "User"} mengimpor data penerima untuk ${selectedScholarship.name} - ${selectedSchema.name} (${createdApplications} baru, ${updatedApplications} diperbarui)`,
       ip_address: req.ip,
       user_agent: req.headers["user-agent"],
     });
