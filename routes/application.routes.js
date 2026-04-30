@@ -9,7 +9,11 @@ const {
   getApplicationsSummary,
   getApplicationDetail,
   getApplicationComments,
+  assignApplicationsAsAwardeeBulk,
 } = require("../controllers/application.controller");
+const {
+  invalidateApplicationCache,
+} = require("../middlewares/cache.middleware");
 const authorize = require("../middlewares/role.middleware");
 
 router.get("/:id/comments", authenticate, verifiedUser, getApplicationComments);
@@ -20,6 +24,15 @@ router.get(
   verifiedUser,
   authorize(["MAHASISWA"]),
   getApplicationDetail,
+);
+
+router.put(
+  "/awardees/assign",
+  authenticate,
+  verifiedUser,
+  authorize(["SUPERADMIN"]),
+  invalidateApplicationCache,
+  assignApplicationsAsAwardeeBulk,
 );
 
 router.use(

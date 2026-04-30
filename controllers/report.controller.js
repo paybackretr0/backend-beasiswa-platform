@@ -1728,6 +1728,12 @@ const normalizeText = (value) =>
     .trim()
     .toLowerCase();
 
+const normalizeEmail = (value) => {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  return text.toLowerCase();
+};
+
 const readCellValue = (cellValue) => {
   if (cellValue === null || cellValue === undefined) return "";
 
@@ -1962,12 +1968,8 @@ const ensureUserForImportedRecipient = async ({
     transaction,
   });
 
-  if (!user && row.email) {
-    user = await User.findOne({ where: { email: row.email }, transaction });
-  }
-
   if (user) {
-    return { user, isDummyCreated: false };
+    return { user, isDummyCreated: false, email_source: "EXISTING" };
   }
 
   const faculty = await getOrCreateFaculty(
@@ -1988,14 +1990,34 @@ const ensureUserForImportedRecipient = async ({
     transaction,
   );
 
-  const nimSafe = String(row.nim || "mahasiswa").replace(/[^a-zA-Z0-9]/g, "");
-  const emailBase = `dummy.${nimSafe || Date.now()}@dummy.local`;
+  const requestedEmail = normalizeEmail(row.email);
 
-  let emailToUse = emailBase;
-  let emailCounter = 1;
-  while (await User.findOne({ where: { email: emailToUse }, transaction })) {
-    emailToUse = `dummy.${nimSafe || Date.now()}.${emailCounter}@dummy.local`;
-    emailCounter += 1;
+  const nimSafe = String(row.nim || "mahasiswa").replace(/[^a-zA-Z0-9]/g, "");
+  const dummyBase = `dummy.${nimSafe || Date.now()}@example.com`;
+
+  let emailToUse = "";
+  let emailSource = "DUMMY";
+
+  if (requestedEmail) {
+    const emailTaken = await User.findOne({
+      where: { email: requestedEmail },
+      attributes: ["id", "nim"],
+      transaction,
+    });
+
+    if (!emailTaken) {
+      emailToUse = requestedEmail;
+      emailSource = "EXCEL";
+    }
+  }
+
+  if (!emailToUse) {
+    emailToUse = dummyBase;
+    let emailCounter = 1;
+    while (await User.findOne({ where: { email: emailToUse }, transaction })) {
+      emailToUse = `dummy.${nimSafe || Date.now()}.${emailCounter}@example.com`;
+      emailCounter += 1;
+    }
   }
 
   user = await User.create(
@@ -2014,7 +2036,11 @@ const ensureUserForImportedRecipient = async ({
     { transaction },
   );
 
-  return { user, isDummyCreated: true };
+  return {
+    user,
+    isDummyCreated: emailSource === "DUMMY",
+    email_source: emailSource,
+  };
 };
 
 const downloadTemplateImportPenerima = async (req, res) => {
@@ -2315,7 +2341,7 @@ const downloadTemplateImportPenerima = async (req, res) => {
       "Sel yang merah menandakan pilihan sudah tidak cocok dengan parent terbaru.",
       "Nama beasiswa dipilih saat proses import di dalam modal.",
       "Sistem akan menggunakan skema aktif pertama dari beasiswa yang dipilih.",
-      "Sistem akan mencocokkan user berdasarkan NIM (prioritas) lalu email.",
+      "Sistem akan mencocokkan user berdasarkan NIM.",
       "Jika user tidak ditemukan, sistem akan membuat akun dummy mahasiswa secara otomatis.",
       "Password akun dummy default: dummy12345 (bisa diubah kemudian oleh admin).",
     ].forEach((text, index) => {
@@ -2420,14 +2446,13 @@ const validateImportPenerimaBeasiswa = async (req, res) => {
       }
 
       const existingUser = await User.findOne({
-        where: {
-          [Op.or]: [
-            { nim: row.nim },
-            ...(row.email ? [{ email: row.email }] : []),
-          ],
-        },
+        where: { nim: row.nim },
         attributes: ["id", "full_name", "nim", "email"],
       });
+
+      console.log(`Email yang diminta untuk NIM ${row.nim}:`, row.email);
+
+      const requestedEmail = normalizeEmail(row.email);
 
       preview.push({
         nim: row.nim,
@@ -2438,7 +2463,11 @@ const validateImportPenerimaBeasiswa = async (req, res) => {
         beasiswa: selectedScholarship.name,
         skema: selectedSchema.name,
         tahun: selectedScholarship.year,
-        userStatus: existingUser ? "MATCHED" : "DUMMY_AKAN_DIBUAT",
+        userStatus: existingUser
+          ? "MATCHED"
+          : requestedEmail
+            ? "USER_BARU_AKAN_DIBUAT"
+            : "DUMMY_AKAN_DIBUAT",
       });
     }
 
