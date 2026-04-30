@@ -32,6 +32,7 @@ const getStatusLabel = (status) => {
     VERIFIED: "Terverifikasi - Menunggu Validasi",
     REJECTED: "Ditolak",
     VALIDATED: "Disetujui",
+    AWARDEE: "Penerima Beasiswa",
     REVISION_NEEDED: "Perlu Revisi",
   };
   return statusMap[status] || status;
@@ -112,7 +113,7 @@ const getSelectionSummaryData = async (year) => {
   ] = await Promise.all([
     Application.count({
       where: {
-        status: "VALIDATED",
+        status: "AWARDEE",
         ...whereCondition,
       },
     }),
@@ -460,7 +461,7 @@ const getOverallRecapitulation = async (year) => {
       ROW_NUMBER() OVER (ORDER BY s.name) as no,
       s.name as beasiswa,
       COUNT(DISTINCT a.id) as jumlah_pendaftar,
-      COUNT(DISTINCT CASE WHEN a.status = 'VALIDATED' THEN a.id END) as jumlah_penerima
+      COUNT(DISTINCT CASE WHEN a.status = 'AWARDEE' THEN a.id END) as jumlah_penerima
     FROM scholarships s
     LEFT JOIN scholarship_schemas ss ON s.id = ss.scholarship_id
     LEFT JOIN applications a ON ss.id = a.schema_id 
@@ -522,7 +523,7 @@ const getOngoingRecipients = async (year) => {
     LEFT JOIN study_programs sp ON u.study_program_id = sp.id
     LEFT JOIN departments d ON sp.department_id = d.id
     LEFT JOIN faculties f ON d.faculty_id = f.id
-    WHERE a.status = 'VALIDATED'
+    WHERE a.status = 'AWARDEE'
       ${yearCondition}
       AND DATE_ADD(a.createdAt, INTERVAL (s.duration_semesters * 6) MONTH) > NOW()
     ORDER BY a.createdAt DESC
@@ -567,12 +568,12 @@ const getRecipientsByScholarshipDetail = async (year, scholarshipId) => {
     LEFT JOIN study_programs sp ON u.study_program_id = sp.id
     LEFT JOIN departments d ON sp.department_id = d.id
     LEFT JOIN faculties f ON d.faculty_id = f.id
-    WHERE a.status = 'VALIDATED'
+    WHERE a.status = 'AWARDEE'
       AND s.id = :scholarshipId
       ${yearCondition}
     ORDER BY 
       CASE 
-        WHEN a.status = 'VALIDATED' THEN 1
+        WHEN a.status = 'AWARDEE' THEN 1
         WHEN a.status = 'VERIFIED' THEN 2
         WHEN a.status = 'MENUNGGU_VERIFIKASI' THEN 3
         WHEN a.status = 'REJECTED' THEN 4
@@ -609,6 +610,7 @@ const getApplicantsByScholarshipDetail = async (year, scholarshipId) => {
       a.createdAt as tanggal_daftar,
       a.status,
       CASE 
+        WHEN a.status = 'AWARDEE' THEN 'Penerima Beasiswa'
         WHEN a.status = 'MENUNGGU_VERIFIKASI' THEN 'Menunggu Verifikasi'
         WHEN a.status = 'VERIFIED' THEN 'Terverifikasi - Menunggu Validasi'
         WHEN a.status = 'VALIDATED' THEN 'Disetujui'
@@ -637,6 +639,7 @@ const getApplicantsByScholarshipDetail = async (year, scholarshipId) => {
       ${yearCondition}
     ORDER BY 
       CASE 
+        WHEN a.status = 'AWARDEE' THEN 1
         WHEN a.status = 'VALIDATED' THEN 1
         WHEN a.status = 'VERIFIED' THEN 2
         WHEN a.status = 'MENUNGGU_VERIFIKASI' THEN 3
@@ -668,7 +671,7 @@ const getAllScholarshipsWithData = async (year) => {
       s.name,
       s.year,
       s.organizer,
-      COUNT(CASE WHEN a.status = 'VALIDATED' THEN 1 END) as jumlah_penerima,
+      COUNT(CASE WHEN a.status = 'AWARDEE' THEN 1 END) as jumlah_penerima,
       COUNT(CASE WHEN a.status != 'DRAFT' AND a.status IS NOT NULL THEN 1 END) as jumlah_pendaftar
     FROM scholarships s
     LEFT JOIN scholarship_schemas ss ON s.id = ss.scholarship_id
@@ -685,11 +688,50 @@ const getAllScholarshipsWithData = async (year) => {
   );
 };
 
+const getRecipientsRecapAllYears = async ({ startYear = 2025 } = {}) => {
+  const endYear = new Date().getFullYear();
+
+  const years = [];
+  for (let y = startYear; y <= endYear; y += 1) {
+    years.push(y);
+  }
+
+  if (!years.length) {
+    return { years: [], rows: [] };
+  }
+
+  const rows = await sequelize.query(
+    `
+    SELECT
+      s.name as scholarship_name,
+      s.year as scholarship_year,
+      COUNT(CASE WHEN a.status = 'AWARDEE' THEN 1 END) as accepted_count
+    FROM scholarships s
+    LEFT JOIN scholarship_schemas ss ON s.id = ss.scholarship_id
+    LEFT JOIN applications a ON ss.id = a.schema_id
+    WHERE s.is_external = false
+      AND s.year IS NOT NULL
+      AND s.year >= :startYear
+      AND s.year <= :endYear
+    GROUP BY s.name, s.year
+    ORDER BY s.name ASC, s.year ASC
+    `,
+    {
+      replacements: { startYear, endYear },
+      type: sequelize.QueryTypes.SELECT,
+    },
+  );
+
+  return { years, rows };
+};
+
 const exportLaporanBeasiswa = async (req, res) => {
   try {
+    const yearQuery = req.query.year;
+    const isAllYears = String(yearQuery || "").toLowerCase() === "all";
     let { year = new Date().getFullYear() } = req.query;
 
-    if (year === "all") {
+    if (String(year).toLowerCase() === "all") {
       year = null;
     }
 
@@ -990,6 +1032,123 @@ const exportLaporanBeasiswa = async (req, res) => {
     }
 
     applyCenterAlignment(genderSheet, ["gender", "jumlah"]);
+
+    if (isAllYears) {
+      const { years: recapYears, rows: recapRows } =
+        await getRecipientsRecapAllYears();
+
+      if (recapYears.length > 0) {
+        const recapAllYearsSheet = workbook.addWorksheet(
+          "Rekap Jumlah Diterima (All Tahun)",
+        );
+
+        const firstYearCol = 3;
+        const lastYearCol = firstYearCol + recapYears.length - 1;
+        const totalCol = lastYearCol + 1;
+
+        recapAllYearsSheet.getColumn(1).width = 8;
+        recapAllYearsSheet.getColumn(2).width = 40;
+        recapYears.forEach((_, idx) => {
+          recapAllYearsSheet.getColumn(firstYearCol + idx).width = 14;
+        });
+        recapAllYearsSheet.getColumn(totalCol).width = 12;
+
+        recapAllYearsSheet.getRow(1).values = [
+          "No",
+          "Nama Beasiswa",
+          "Tahun",
+          ...Array(Math.max(0, recapYears.length - 1)).fill(""),
+          "Total",
+        ];
+        recapAllYearsSheet.getRow(2).values = ["", "", ...recapYears, ""];
+        recapAllYearsSheet.getRow(3).values = [
+          "",
+          "",
+          "Jumlah Diterima",
+          ...Array(Math.max(0, recapYears.length - 1)).fill(""),
+          "",
+        ];
+
+        recapAllYearsSheet.mergeCells(1, 1, 3, 1);
+        recapAllYearsSheet.mergeCells(1, 2, 3, 2);
+        recapAllYearsSheet.mergeCells(1, firstYearCol, 1, lastYearCol);
+        recapAllYearsSheet.mergeCells(3, firstYearCol, 3, lastYearCol);
+        recapAllYearsSheet.mergeCells(1, totalCol, 3, totalCol);
+
+        applyHeaderStyle(recapAllYearsSheet.getRow(1));
+        applyHeaderStyle(recapAllYearsSheet.getRow(2));
+        applyHeaderStyle(recapAllYearsSheet.getRow(3));
+
+        recapAllYearsSheet.getColumn(1).alignment = {
+          vertical: "middle",
+          horizontal: "center",
+        };
+        recapAllYearsSheet.getColumn(2).alignment = {
+          vertical: "middle",
+          horizontal: "left",
+        };
+        recapYears.forEach((_, idx) => {
+          recapAllYearsSheet.getColumn(firstYearCol + idx).alignment = {
+            vertical: "middle",
+            horizontal: "center",
+          };
+        });
+        recapAllYearsSheet.getColumn(totalCol).alignment = {
+          vertical: "middle",
+          horizontal: "center",
+        };
+
+        const byName = new Map();
+        recapRows.forEach((r) => {
+          const name = r.scholarship_name;
+          const y = parseInt(r.scholarship_year);
+          const count = parseInt(r.accepted_count) || 0;
+          if (!byName.has(name)) byName.set(name, new Map());
+          byName.get(name).set(y, count);
+        });
+
+        const scholarshipNames = Array.from(byName.keys()).sort((a, b) =>
+          String(a).localeCompare(String(b), "id-ID"),
+        );
+
+        const totalsPerYear = new Map();
+        recapYears.forEach((y) => totalsPerYear.set(y, 0));
+        let grandTotal = 0;
+
+        scholarshipNames.forEach((name, index) => {
+          const yearMap = byName.get(name) || new Map();
+          const rowData = [index + 1, name];
+          let rowTotal = 0;
+
+          recapYears.forEach((y) => {
+            if (!yearMap.has(y)) {
+              rowData.push("N/A");
+              return;
+            }
+            const value = yearMap.get(y) || 0;
+            rowData.push(value);
+            rowTotal += value;
+            totalsPerYear.set(y, (totalsPerYear.get(y) || 0) + value);
+          });
+
+          rowData.push(rowTotal);
+          grandTotal += rowTotal;
+
+          const row = recapAllYearsSheet.addRow(rowData);
+          applyDataRowStyle(row, index);
+        });
+
+        const totalRowValues = [
+          "Total",
+          "",
+          ...recapYears.map((y) => totalsPerYear.get(y) || 0),
+          grandTotal,
+        ];
+        const totalRow = recapAllYearsSheet.addRow(totalRowValues);
+        recapAllYearsSheet.mergeCells(totalRow.number, 1, totalRow.number, 2);
+        applyTotalRowStyle(totalRow);
+      }
+    }
 
     for (const scholarship of scholarshipsWithData) {
       let baseSheetName = scholarship.name.substring(0, 25);
@@ -1569,6 +1728,12 @@ const normalizeText = (value) =>
     .trim()
     .toLowerCase();
 
+const normalizeEmail = (value) => {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  return text.toLowerCase();
+};
+
 const readCellValue = (cellValue) => {
   if (cellValue === null || cellValue === undefined) return "";
 
@@ -1803,12 +1968,8 @@ const ensureUserForImportedRecipient = async ({
     transaction,
   });
 
-  if (!user && row.email) {
-    user = await User.findOne({ where: { email: row.email }, transaction });
-  }
-
   if (user) {
-    return { user, isDummyCreated: false };
+    return { user, isDummyCreated: false, email_source: "EXISTING" };
   }
 
   const faculty = await getOrCreateFaculty(
@@ -1829,14 +1990,34 @@ const ensureUserForImportedRecipient = async ({
     transaction,
   );
 
-  const nimSafe = String(row.nim || "mahasiswa").replace(/[^a-zA-Z0-9]/g, "");
-  const emailBase = `dummy.${nimSafe || Date.now()}@dummy.local`;
+  const requestedEmail = normalizeEmail(row.email);
 
-  let emailToUse = emailBase;
-  let emailCounter = 1;
-  while (await User.findOne({ where: { email: emailToUse }, transaction })) {
-    emailToUse = `dummy.${nimSafe || Date.now()}.${emailCounter}@dummy.local`;
-    emailCounter += 1;
+  const nimSafe = String(row.nim || "mahasiswa").replace(/[^a-zA-Z0-9]/g, "");
+  const dummyBase = `dummy.${nimSafe || Date.now()}@example.com`;
+
+  let emailToUse = "";
+  let emailSource = "DUMMY";
+
+  if (requestedEmail) {
+    const emailTaken = await User.findOne({
+      where: { email: requestedEmail },
+      attributes: ["id", "nim"],
+      transaction,
+    });
+
+    if (!emailTaken) {
+      emailToUse = requestedEmail;
+      emailSource = "EXCEL";
+    }
+  }
+
+  if (!emailToUse) {
+    emailToUse = dummyBase;
+    let emailCounter = 1;
+    while (await User.findOne({ where: { email: emailToUse }, transaction })) {
+      emailToUse = `dummy.${nimSafe || Date.now()}.${emailCounter}@example.com`;
+      emailCounter += 1;
+    }
   }
 
   user = await User.create(
@@ -1855,7 +2036,11 @@ const ensureUserForImportedRecipient = async ({
     { transaction },
   );
 
-  return { user, isDummyCreated: true };
+  return {
+    user,
+    isDummyCreated: emailSource === "DUMMY",
+    email_source: emailSource,
+  };
 };
 
 const downloadTemplateImportPenerima = async (req, res) => {
@@ -2156,7 +2341,7 @@ const downloadTemplateImportPenerima = async (req, res) => {
       "Sel yang merah menandakan pilihan sudah tidak cocok dengan parent terbaru.",
       "Nama beasiswa dipilih saat proses import di dalam modal.",
       "Sistem akan menggunakan skema aktif pertama dari beasiswa yang dipilih.",
-      "Sistem akan mencocokkan user berdasarkan NIM (prioritas) lalu email.",
+      "Sistem akan mencocokkan user berdasarkan NIM.",
       "Jika user tidak ditemukan, sistem akan membuat akun dummy mahasiswa secara otomatis.",
       "Password akun dummy default: dummy12345 (bisa diubah kemudian oleh admin).",
     ].forEach((text, index) => {
@@ -2186,14 +2371,14 @@ const validateImportPenerimaBeasiswa = async (req, res) => {
   const filePath = req.file?.path ?? null;
 
   try {
-    const { scholarshipId } = req.body;
+    const { scholarshipId, schemaId } = req.body;
 
     if (!req.file) {
       return errorResponse(res, "File Excel wajib diupload", 400);
     }
 
-    if (!scholarshipId) {
-      return errorResponse(res, "Pilih beasiswa terlebih dahulu", 400);
+    if (!schemaId) {
+      return errorResponse(res, "Pilih skema terlebih dahulu", 400);
     }
 
     const workbook = new ExcelJS.Workbook();
@@ -2210,34 +2395,35 @@ const validateImportPenerimaBeasiswa = async (req, res) => {
       throw new Error("Tidak ada data yang dapat diproses");
     }
 
-    const selectedScholarship = await Scholarship.findByPk(scholarshipId, {
-      attributes: ["id", "name", "year"],
+    const selectedSchema = await ScholarshipSchema.findByPk(schemaId, {
+      attributes: ["id", "name", "is_active", "scholarship_id"],
       include: [
         {
-          model: ScholarshipSchema,
-          as: "schemas",
-          attributes: ["id", "name", "is_active"],
-          required: false,
+          model: Scholarship,
+          as: "scholarship",
+          attributes: ["id", "name", "year"],
+          required: true,
         },
       ],
     });
 
-    if (!selectedScholarship) {
-      return errorResponse(res, "Beasiswa tidak ditemukan", 404);
+    if (!selectedSchema) {
+      return errorResponse(res, "Skema tidak ditemukan", 404);
     }
 
-    const selectedSchema =
-      (selectedScholarship.schemas || []).find((schema) => schema.is_active) ||
-      (selectedScholarship.schemas || [])[0] ||
-      null;
-
-    if (!selectedSchema) {
+    if (scholarshipId && selectedSchema.scholarship_id !== scholarshipId) {
       return errorResponse(
         res,
-        "Beasiswa terpilih belum memiliki skema aktif untuk import",
+        "Skema tidak sesuai dengan beasiswa terpilih",
         400,
       );
     }
+
+    if (!selectedSchema.is_active) {
+      return errorResponse(res, "Skema terpilih tidak aktif", 400);
+    }
+
+    const selectedScholarship = selectedSchema.scholarship;
 
     const errors = [];
     const preview = [];
@@ -2261,14 +2447,13 @@ const validateImportPenerimaBeasiswa = async (req, res) => {
       }
 
       const existingUser = await User.findOne({
-        where: {
-          [Op.or]: [
-            { nim: row.nim },
-            ...(row.email ? [{ email: row.email }] : []),
-          ],
-        },
+        where: { nim: row.nim },
         attributes: ["id", "full_name", "nim", "email"],
       });
+
+      console.log(`Email yang diminta untuk NIM ${row.nim}:`, row.email);
+
+      const requestedEmail = normalizeEmail(row.email);
 
       preview.push({
         nim: row.nim,
@@ -2279,7 +2464,11 @@ const validateImportPenerimaBeasiswa = async (req, res) => {
         beasiswa: selectedScholarship.name,
         skema: selectedSchema.name,
         tahun: selectedScholarship.year,
-        userStatus: existingUser ? "MATCHED" : "DUMMY_AKAN_DIBUAT",
+        userStatus: existingUser
+          ? "MATCHED"
+          : requestedEmail
+            ? "USER_BARU_AKAN_DIBUAT"
+            : "DUMMY_AKAN_DIBUAT",
       });
     }
 
@@ -2309,14 +2498,14 @@ const importPenerimaBeasiswa = async (req, res) => {
   const filePath = req.file?.path ?? null;
 
   try {
-    const { scholarshipId } = req.body;
+    const { scholarshipId, schemaId } = req.body;
 
     if (!req.file) {
       return errorResponse(res, "File Excel wajib diupload", 400);
     }
 
-    if (!scholarshipId) {
-      return errorResponse(res, "Pilih beasiswa terlebih dahulu", 400);
+    if (!schemaId) {
+      return errorResponse(res, "Pilih skema terlebih dahulu", 400);
     }
 
     const workbook = new ExcelJS.Workbook();
@@ -2332,37 +2521,39 @@ const importPenerimaBeasiswa = async (req, res) => {
       throw new Error("Tidak ada data yang dapat diproses");
     }
 
-    const selectedScholarship = await Scholarship.findByPk(scholarshipId, {
-      attributes: ["id", "name", "year"],
+    const selectedSchema = await ScholarshipSchema.findByPk(schemaId, {
+      attributes: ["id", "name", "is_active", "scholarship_id"],
       include: [
         {
-          model: ScholarshipSchema,
-          as: "schemas",
-          attributes: ["id", "name", "is_active"],
-          required: false,
+          model: Scholarship,
+          as: "scholarship",
+          attributes: ["id", "name", "year"],
+          required: true,
         },
       ],
       transaction,
     });
 
-    if (!selectedScholarship) {
+    if (!selectedSchema) {
       await transaction.rollback();
-      return errorResponse(res, "Beasiswa tidak ditemukan", 404);
+      return errorResponse(res, "Skema tidak ditemukan", 404);
     }
 
-    const selectedSchema =
-      (selectedScholarship.schemas || []).find((schema) => schema.is_active) ||
-      (selectedScholarship.schemas || [])[0] ||
-      null;
-
-    if (!selectedSchema) {
+    if (scholarshipId && selectedSchema.scholarship_id !== scholarshipId) {
       await transaction.rollback();
       return errorResponse(
         res,
-        "Beasiswa terpilih belum memiliki skema aktif untuk import",
+        "Skema tidak sesuai dengan beasiswa terpilih",
         400,
       );
     }
+
+    if (!selectedSchema.is_active) {
+      await transaction.rollback();
+      return errorResponse(res, "Skema terpilih tidak aktif", 400);
+    }
+
+    const selectedScholarship = selectedSchema.scholarship;
 
     const facultyCache = new Map();
     const departmentCache = new Map();
@@ -2408,7 +2599,7 @@ const importPenerimaBeasiswa = async (req, res) => {
       if (existingApplication) {
         await existingApplication.update(
           {
-            status: "VALIDATED",
+            status: "AWARDEE",
             submitted_at: existingApplication.submitted_at || importDate,
             validated_by: req.user?.id || null,
             validated_at: new Date(),
@@ -2421,7 +2612,7 @@ const importPenerimaBeasiswa = async (req, res) => {
           {
             schema_id: selectedSchema.id,
             student_id: user.id,
-            status: "VALIDATED",
+            status: "AWARDEE",
             submitted_at: importDate,
             validated_by: req.user?.id || null,
             validated_at: new Date(),
@@ -2454,7 +2645,7 @@ const importPenerimaBeasiswa = async (req, res) => {
       action: "IMPORT_SCHOLARSHIP_RECIPIENTS",
       entity_type: "Application",
       entity_id: req.user.id,
-      description: `${req.user.full_name || "User"} mengimpor data penerima untuk ${selectedScholarship.name} (${createdApplications} baru, ${updatedApplications} diperbarui)`,
+      description: `${req.user.full_name || "User"} mengimpor data penerima untuk ${selectedScholarship.name} - ${selectedSchema.name} (${createdApplications} baru, ${updatedApplications} diperbarui)`,
       ip_address: req.ip,
       user_agent: req.headers["user-agent"],
     });

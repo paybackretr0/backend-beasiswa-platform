@@ -35,7 +35,7 @@ module.exports = (sequelize, DataTypes) => {
           "DATE",
           "FILE",
           "SELECT",
-          "TEXTAREA"
+          "TEXTAREA",
         ),
         allowNull: false,
         defaultValue: "TEXT",
@@ -60,7 +60,7 @@ module.exports = (sequelize, DataTypes) => {
       modelName: "FormField",
       tableName: "form_fields",
       timestamps: true,
-    }
+    },
   );
   return FormField;
 };

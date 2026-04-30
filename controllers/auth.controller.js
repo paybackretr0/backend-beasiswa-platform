@@ -381,7 +381,6 @@ const sendResetEmail = async (user, code) => {
 
 const forgotPassword = async (req, res) => {
   const { email } = req.body;
-  console.log(email);
   try {
     const user = await User.findOne({ where: { email } });
     if (!user) {

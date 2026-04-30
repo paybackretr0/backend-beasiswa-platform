@@ -564,9 +564,118 @@ const getApplicationComments = async (req, res) => {
   }
 };
 
+const assignApplicationsAsAwardeeBulk = async (req, res) => {
+  try {
+    const user = req.user;
+
+    if (!user || String(user.role).toUpperCase() !== "SUPERADMIN") {
+      console.log("[assign-awardee] forbidden", { role: user?.role });
+      return errorResponse(res, "Anda tidak memiliki akses", 403);
+    }
+
+    const applicationIds = Array.isArray(req.body?.application_ids)
+      ? req.body.application_ids
+      : [];
+
+    const normalizedIds = applicationIds
+      .map((id) => String(id || "").trim())
+      .filter(Boolean);
+
+    if (normalizedIds.length === 0) {
+      return errorResponse(res, "application_ids wajib diisi", 400);
+    }
+
+    const applications = await Application.findAll({
+      where: {
+        id: { [Op.in]: normalizedIds },
+      },
+      attributes: ["id", "status"],
+    });
+
+    const foundById = new Map(applications.map((app) => [app.id, app]));
+    const notFoundIds = normalizedIds.filter((id) => !foundById.has(id));
+
+    const validIds = [];
+    const skipped = [];
+
+    for (const app of applications) {
+      if (app.status === "VALIDATED") {
+        validIds.push(app.id);
+      } else {
+        skipped.push({
+          id: app.id,
+          status: app.status,
+          reason: "NOT_VALIDATED",
+        });
+      }
+    }
+
+    const transaction = await Application.sequelize.transaction();
+    try {
+      let updatedCount = 0;
+      if (validIds.length > 0) {
+        const [affected] = await Application.update(
+          { status: "AWARDEE" },
+          {
+            where: {
+              id: { [Op.in]: validIds },
+              status: "VALIDATED",
+            },
+            transaction,
+          },
+        );
+        updatedCount = affected;
+      }
+
+      const updatedApps = await Application.findAll({
+        where: { id: { [Op.in]: validIds } },
+        attributes: ["id", "status"],
+        transaction,
+      });
+      const updatedIds = updatedApps
+        .filter((a) => a.status === "AWARDEE")
+        .map((a) => a.id);
+
+      await Application.sequelize.models.ActivityLog?.create?.(
+        {
+          user_id: user.id,
+          action: "ASSIGN_AWARDEE_BULK",
+          entity_type: "Application",
+          entity_id: null,
+          description: `Assign AWARDEE bulk: ${updatedCount} pendaftaran diubah menjadi Penerima Beasiswa`,
+          ip_address: req.ip,
+          user_agent: req.get("User-Agent"),
+        },
+        { transaction },
+      );
+
+      await transaction.commit();
+
+      return successResponse(res, "Berhasil assign awardee", {
+        requested_count: normalizedIds.length,
+        updated_count: updatedCount,
+        updated_ids: updatedIds,
+        final_statuses: updatedApps.map((a) => ({
+          id: a.id,
+          status: a.status,
+        })),
+        skipped,
+        not_found_ids: notFoundIds,
+      });
+    } catch (innerError) {
+      await transaction.rollback();
+      throw innerError;
+    }
+  } catch (error) {
+    console.error("Error bulk assign awardee:", error);
+    return errorResponse(res, "Gagal assign awardee", 500);
+  }
+};
+
 module.exports = {
   getAllApplications,
   getApplicationsSummary,
   getApplicationDetail,
   getApplicationComments,
+  assignApplicationsAsAwardeeBulk,
 };

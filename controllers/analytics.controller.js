@@ -219,9 +219,9 @@ const getScholarshipPerformance = async (req, res) => {
         SELECT 
           s.name as label,
           COUNT(a.id) as pendaftar,
-          COUNT(CASE WHEN a.status = 'VALIDATED' THEN 1 END) as diterima,
+          COUNT(CASE WHEN a.status = 'AWARDEE' THEN 1 END) as diterima,
           ROUND(
-            (COUNT(CASE WHEN a.status = 'VALIDATED' THEN 1 END) * 100.0 / NULLIF(COUNT(a.id), 0)),
+            (COUNT(CASE WHEN a.status = 'AWARDEE' THEN 1 END) * 100.0 / NULLIF(COUNT(a.id), 0)),
             1
           ) as tingkat_penerimaan
         FROM scholarships s
@@ -302,9 +302,9 @@ const getTopPerformingFaculties = async (req, res) => {
         SELECT 
           f.name as label,
           COUNT(a.id) as total_pendaftar,
-          COUNT(CASE WHEN a.status = 'VALIDATED' THEN 1 END) as diterima,
+          COUNT(CASE WHEN a.status = 'AWARDEE' THEN 1 END) as diterima,
           ROUND(
-            (COUNT(CASE WHEN a.status = 'VALIDATED' THEN 1 END) * 100.0 / NULLIF(COUNT(a.id), 0)),
+            (COUNT(CASE WHEN a.status = 'AWARDEE' THEN 1 END) * 100.0 / NULLIF(COUNT(a.id), 0)),
             1
           ) as tingkat_keberhasilan,
           '#2D60FF' as color
@@ -370,31 +370,48 @@ const getSelectionSummary = async (req, res) => {
         ]
       : [];
 
-    const [validated, menungguVerifikasi, verified, rejected, revisionNeeded] =
-      await Promise.all([
-        Application.count({
-          where: { ...baseWhere, status: "VALIDATED" },
-          include: includeUser,
-        }),
-        Application.count({
-          where: { ...baseWhere, status: "MENUNGGU_VERIFIKASI" },
-          include: includeUser,
-        }),
-        Application.count({
-          where: { ...baseWhere, status: "VERIFIED" },
-          include: includeUser,
-        }),
-        Application.count({
-          where: { ...baseWhere, status: "REJECTED" },
-          include: includeUser,
-        }),
-        Application.count({
-          where: { ...baseWhere, status: "REVISION_NEEDED" },
-          include: includeUser,
-        }),
-      ]);
+    const [
+      awardee,
+      validated,
+      menungguVerifikasi,
+      verified,
+      rejected,
+      revisionNeeded,
+    ] = await Promise.all([
+      Application.count({
+        where: {
+          ...baseWhere,
+          status: "AWARDEE",
+        },
+        include: includeUser,
+      }),
+      Application.count({
+        where: {
+          ...baseWhere,
+          status: "VALIDATED",
+        },
+        include: includeUser,
+      }),
+      Application.count({
+        where: { ...baseWhere, status: "MENUNGGU_VERIFIKASI" },
+        include: includeUser,
+      }),
+      Application.count({
+        where: { ...baseWhere, status: "VERIFIED" },
+        include: includeUser,
+      }),
+      Application.count({
+        where: { ...baseWhere, status: "REJECTED" },
+        include: includeUser,
+      }),
+      Application.count({
+        where: { ...baseWhere, status: "REVISION_NEEDED" },
+        include: includeUser,
+      }),
+    ]);
 
     const summary = {
+      awardee,
       validated,
       menungguVerifikasi,
       verified,

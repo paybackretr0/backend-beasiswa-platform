@@ -62,14 +62,6 @@ module.exports = {
         type: Sequelize.STRING(20),
         allowNull: false,
       },
-      gpa_minimum: {
-        type: Sequelize.DECIMAL(3, 2),
-        allowNull: true,
-      },
-      semester_minimum: {
-        type: Sequelize.INTEGER,
-        allowNull: true,
-      },
       scholarship_value: {
         type: Sequelize.DECIMAL(15, 2),
         allowNull: false,

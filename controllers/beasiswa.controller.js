@@ -22,6 +22,9 @@ const { getOrSetCache } = require("../utils/cacheHelper");
 const { sendWhatsAppMessage } = require("../utils/fonnte");
 const { buildNewScholarshipMessage } = require("../utils/whatsappTemplate");
 
+const hasNonEmptyValue = (value) =>
+  value !== undefined && value !== null && String(value).trim() !== "";
+
 const normalizeWhatsAppTarget = (phoneNumber) => {
   if (!phoneNumber) return null;
 
@@ -421,9 +424,6 @@ const createScholarship = async (req, res) => {
         is_active: is_active !== undefined ? is_active : true,
         logo_path: logoPath,
         created_by: req.user.id,
-        semester_minimum: null,
-        gpa_minimum: null,
-        quota: null,
       },
       { transaction },
     );
@@ -461,14 +461,17 @@ const createScholarship = async (req, res) => {
         study_programs,
       } = schemaData;
 
-      if (!schemaName || !semester_minimum) {
+      if (!schemaName) {
         await transaction.rollback();
-        return errorResponse(
-          res,
-          "Nama schema dan semester minimum wajib diisi",
-          400,
-        );
+        return errorResponse(res, "Nama schema wajib diisi", 400);
       }
+
+      const parsedGpaMinimum = hasNonEmptyValue(gpa_minimum)
+        ? parseFloat(gpa_minimum)
+        : null;
+      const parsedSemesterMinimum = hasNonEmptyValue(semester_minimum)
+        ? parseInt(semester_minimum)
+        : null;
 
       const schema = await ScholarshipSchema.create(
         {
@@ -476,10 +479,8 @@ const createScholarship = async (req, res) => {
           name: schemaName,
           description: schemaDescription || null,
           quota: quota ? parseInt(quota) : null,
-          gpa_minimum: gpa_minimum ? parseFloat(gpa_minimum) : null,
-          semester_minimum: semester_minimum
-            ? parseInt(semester_minimum)
-            : null,
+          gpa_minimum: parsedGpaMinimum,
+          semester_minimum: parsedSemesterMinimum,
           is_active: true,
         },
         { transaction },
@@ -532,6 +533,35 @@ const createScholarship = async (req, res) => {
             order_no: index + 1,
           }));
           await FormField.bulkCreate(formFields, { transaction });
+        }
+      }
+
+      if (!isExternalBeasiswa) {
+        const autoEligibilityFields = [];
+        let nextOrderNo = (documents?.length || 0) + 1;
+
+        if (parsedGpaMinimum !== null) {
+          autoEligibilityFields.push({
+            schema_id: schema.id,
+            label: "IPK",
+            type: "NUMBER",
+            is_required: true,
+            order_no: nextOrderNo++,
+          });
+        }
+
+        if (parsedSemesterMinimum !== null) {
+          autoEligibilityFields.push({
+            schema_id: schema.id,
+            label: "Semester",
+            type: "NUMBER",
+            is_required: true,
+            order_no: nextOrderNo++,
+          });
+        }
+
+        if (autoEligibilityFields.length > 0) {
+          await FormField.bulkCreate(autoEligibilityFields, { transaction });
         }
       }
 
@@ -914,9 +944,6 @@ const updateScholarship = async (req, res) => {
         website_url: website_url || null,
         is_active: is_active !== undefined ? is_active : true,
         logo_path: logoPath,
-        semester_minimum: null,
-        gpa_minimum: null,
-        quota: null,
       },
       { transaction },
     );
@@ -951,14 +978,17 @@ const updateScholarship = async (req, res) => {
         is_active: schemaIsActive,
       } = schemaData;
 
-      if (!schemaName || !semester_minimum) {
+      if (!schemaName) {
         await transaction.rollback();
-        return errorResponse(
-          res,
-          "Nama schema dan semester minimum wajib diisi",
-          400,
-        );
+        return errorResponse(res, "Nama schema wajib diisi", 400);
       }
+
+      const parsedGpaMinimum = hasNonEmptyValue(gpa_minimum)
+        ? parseFloat(gpa_minimum)
+        : null;
+      const parsedSemesterMinimum = hasNonEmptyValue(semester_minimum)
+        ? parseInt(semester_minimum)
+        : null;
 
       let schema;
 
@@ -970,8 +1000,8 @@ const updateScholarship = async (req, res) => {
               name: schemaName,
               description: schemaDescription || null,
               quota: quota ? parseInt(quota) : null,
-              gpa_minimum: gpa_minimum ? parseFloat(gpa_minimum) : null,
-              semester_minimum: parseInt(semester_minimum),
+              gpa_minimum: parsedGpaMinimum,
+              semester_minimum: parsedSemesterMinimum,
               is_active: schemaIsActive !== undefined ? schemaIsActive : true,
             },
             { transaction },
@@ -985,8 +1015,8 @@ const updateScholarship = async (req, res) => {
             name: schemaName,
             description: schemaDescription || null,
             quota: quota ? parseInt(quota) : null,
-            gpa_minimum: gpa_minimum ? parseFloat(gpa_minimum) : null,
-            semester_minimum: parseInt(semester_minimum),
+            gpa_minimum: parsedGpaMinimum,
+            semester_minimum: parsedSemesterMinimum,
             is_active: schemaIsActive !== undefined ? schemaIsActive : true,
           },
           { transaction },
@@ -1058,6 +1088,35 @@ const updateScholarship = async (req, res) => {
             order_no: index + 1,
           }));
           await FormField.bulkCreate(formFields, { transaction });
+        }
+      }
+
+      if (!isExternalBeasiswa) {
+        const autoEligibilityFields = [];
+        let nextOrderNo = (documents?.length || 0) + 1;
+
+        if (parsedGpaMinimum !== null) {
+          autoEligibilityFields.push({
+            schema_id: schema.id,
+            label: "IPK",
+            type: "NUMBER",
+            is_required: true,
+            order_no: nextOrderNo++,
+          });
+        }
+
+        if (parsedSemesterMinimum !== null) {
+          autoEligibilityFields.push({
+            schema_id: schema.id,
+            label: "Semester",
+            type: "NUMBER",
+            is_required: true,
+            order_no: nextOrderNo++,
+          });
+        }
+
+        if (autoEligibilityFields.length > 0) {
+          await FormField.bulkCreate(autoEligibilityFields, { transaction });
         }
       }
 

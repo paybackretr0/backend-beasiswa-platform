@@ -68,6 +68,7 @@ module.exports = (sequelize, DataTypes) => {
           "REJECTED",
           "REVISION_NEEDED",
           "VALIDATED",
+          "AWARDEE",
         ),
         allowNull: false,
         defaultValue: "DRAFT",
