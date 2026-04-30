@@ -113,7 +113,7 @@ const getSelectionSummaryData = async (year) => {
   ] = await Promise.all([
     Application.count({
       where: {
-        status: "VALIDATED",
+        status: "AWARDEE",
         ...whereCondition,
       },
     }),
@@ -461,7 +461,7 @@ const getOverallRecapitulation = async (year) => {
       ROW_NUMBER() OVER (ORDER BY s.name) as no,
       s.name as beasiswa,
       COUNT(DISTINCT a.id) as jumlah_pendaftar,
-      COUNT(DISTINCT CASE WHEN a.status = 'VALIDATED' THEN a.id END) as jumlah_penerima
+      COUNT(DISTINCT CASE WHEN a.status = 'AWARDEE' THEN a.id END) as jumlah_penerima
     FROM scholarships s
     LEFT JOIN scholarship_schemas ss ON s.id = ss.scholarship_id
     LEFT JOIN applications a ON ss.id = a.schema_id 
@@ -523,7 +523,7 @@ const getOngoingRecipients = async (year) => {
     LEFT JOIN study_programs sp ON u.study_program_id = sp.id
     LEFT JOIN departments d ON sp.department_id = d.id
     LEFT JOIN faculties f ON d.faculty_id = f.id
-    WHERE a.status IN ('VALIDATED', 'AWARDEE')
+    WHERE a.status = 'AWARDEE'
       ${yearCondition}
       AND DATE_ADD(a.createdAt, INTERVAL (s.duration_semesters * 6) MONTH) > NOW()
     ORDER BY a.createdAt DESC
@@ -568,12 +568,12 @@ const getRecipientsByScholarshipDetail = async (year, scholarshipId) => {
     LEFT JOIN study_programs sp ON u.study_program_id = sp.id
     LEFT JOIN departments d ON sp.department_id = d.id
     LEFT JOIN faculties f ON d.faculty_id = f.id
-    WHERE a.status IN ('VALIDATED', 'AWARDEE')
+    WHERE a.status = 'AWARDEE'
       AND s.id = :scholarshipId
       ${yearCondition}
     ORDER BY 
       CASE 
-        WHEN a.status = 'VALIDATED' THEN 1
+        WHEN a.status = 'AWARDEE' THEN 1
         WHEN a.status = 'VERIFIED' THEN 2
         WHEN a.status = 'MENUNGGU_VERIFIKASI' THEN 3
         WHEN a.status = 'REJECTED' THEN 4
@@ -671,7 +671,7 @@ const getAllScholarshipsWithData = async (year) => {
       s.name,
       s.year,
       s.organizer,
-      COUNT(CASE WHEN a.status IN ('VALIDATED', 'AWARDEE') THEN 1 END) as jumlah_penerima,
+      COUNT(CASE WHEN a.status = 'AWARDEE' THEN 1 END) as jumlah_penerima,
       COUNT(CASE WHEN a.status != 'DRAFT' AND a.status IS NOT NULL THEN 1 END) as jumlah_pendaftar
     FROM scholarships s
     LEFT JOIN scholarship_schemas ss ON s.id = ss.scholarship_id
@@ -705,7 +705,7 @@ const getRecipientsRecapAllYears = async ({ startYear = 2025 } = {}) => {
     SELECT
       s.name as scholarship_name,
       s.year as scholarship_year,
-      COUNT(CASE WHEN a.status IN ('VALIDATED', 'AWARDEE') THEN 1 END) as accepted_count
+      COUNT(CASE WHEN a.status = 'AWARDEE' THEN 1 END) as accepted_count
     FROM scholarships s
     LEFT JOIN scholarship_schemas ss ON s.id = ss.scholarship_id
     LEFT JOIN applications a ON ss.id = a.schema_id
