@@ -19,10 +19,6 @@ module.exports = {
         published_at: now,
         createdAt: now,
         updatedAt: now,
-        meta: JSON.stringify({
-          category: "beasiswa",
-          tags: ["pembukaan", "unggulan"],
-        }),
       },
       {
         id: Sequelize.literal("UUID()"),
@@ -37,10 +33,6 @@ module.exports = {
         published_at: now,
         createdAt: now,
         updatedAt: now,
-        meta: JSON.stringify({
-          category: "jadwal",
-          tags: ["verifikasi", "tahap-1"],
-        }),
       },
       {
         id: Sequelize.literal("UUID()"),
@@ -55,10 +47,6 @@ module.exports = {
         published_at: now,
         createdAt: now,
         updatedAt: now,
-        meta: JSON.stringify({
-          category: "pengumuman",
-          tags: ["kuota", "fakultas"],
-        }),
       },
       {
         id: Sequelize.literal("UUID()"),
@@ -73,7 +61,6 @@ module.exports = {
         published_at: now,
         createdAt: now,
         updatedAt: now,
-        meta: JSON.stringify({ category: "sistem", tags: ["maintenance"] }),
       },
       {
         id: Sequelize.literal("UUID()"),
@@ -88,10 +75,6 @@ module.exports = {
         published_at: now,
         createdAt: now,
         updatedAt: now,
-        meta: JSON.stringify({
-          category: "informasi",
-          tags: ["dokumen", "persyaratan"],
-        }),
       },
       {
         id: Sequelize.literal("UUID()"),
@@ -106,7 +89,6 @@ module.exports = {
         published_at: now,
         createdAt: now,
         updatedAt: now,
-        meta: JSON.stringify({ category: "panduan", tags: ["tips", "berkas"] }),
       },
       {
         id: Sequelize.literal("UUID()"),
@@ -121,10 +103,6 @@ module.exports = {
         published_at: now,
         createdAt: now,
         updatedAt: now,
-        meta: JSON.stringify({
-          category: "panduan",
-          tags: ["status", "pendaftaran"],
-        }),
       },
       {
         id: Sequelize.literal("UUID()"),
@@ -139,10 +117,6 @@ module.exports = {
         published_at: now,
         createdAt: now,
         updatedAt: now,
-        meta: JSON.stringify({
-          category: "edukasi",
-          tags: ["skema", "beasiswa"],
-        }),
       },
       {
         id: Sequelize.literal("UUID()"),
@@ -157,10 +131,6 @@ module.exports = {
         published_at: now,
         createdAt: now,
         updatedAt: now,
-        meta: JSON.stringify({
-          category: "tips",
-          tags: ["administrasi", "seleksi"],
-        }),
       },
       {
         id: Sequelize.literal("UUID()"),
@@ -175,10 +145,6 @@ module.exports = {
         published_at: now,
         createdAt: now,
         updatedAt: now,
-        meta: JSON.stringify({
-          category: "panduan",
-          tags: ["esai", "beasiswa"],
-        }),
       },
     ];
 
