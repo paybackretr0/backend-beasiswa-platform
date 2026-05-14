@@ -29,13 +29,11 @@ const parseNumberAnswer = (value) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-const isUserEligibleForScholarship = (user, scholarship) => {
-  const facultyIds = new Set((scholarship.faculties || []).map((f) => f.id));
-  const departmentIds = new Set(
-    (scholarship.departments || []).map((d) => d.id),
-  );
+const isUserEligibleForSchema = (user, schema) => {
+  const facultyIds = new Set((schema.faculties || []).map((f) => f.id));
+  const departmentIds = new Set((schema.departments || []).map((d) => d.id));
   const studyProgramIds = new Set(
-    (scholarship.studyPrograms || []).map((sp) => sp.id),
+    (schema.studyPrograms || []).map((sp) => sp.id),
   );
 
   const hasRestriction =
@@ -71,24 +69,6 @@ const getScholarshipForm = async (req, res) => {
       ],
       include: [
         {
-          model: Faculty,
-          as: "faculties",
-          through: { attributes: [] },
-          attributes: ["id"],
-        },
-        {
-          model: Department,
-          as: "departments",
-          through: { attributes: [] },
-          attributes: ["id"],
-        },
-        {
-          model: StudyProgram,
-          as: "studyPrograms",
-          through: { attributes: [] },
-          attributes: ["id"],
-        },
-        {
           model: ScholarshipSchema,
           as: "schemas",
           where: { is_active: true },
@@ -100,6 +80,26 @@ const getScholarshipForm = async (req, res) => {
             "quota",
             "gpa_minimum",
             "semester_minimum",
+          ],
+          include: [
+            {
+              model: Faculty,
+              as: "faculties",
+              through: { attributes: [] },
+              attributes: ["id"],
+            },
+            {
+              model: Department,
+              as: "departments",
+              through: { attributes: [] },
+              attributes: ["id"],
+            },
+            {
+              model: StudyProgram,
+              as: "studyPrograms",
+              through: { attributes: [] },
+              attributes: ["id"],
+            },
           ],
         },
       ],
@@ -125,14 +125,6 @@ const getScholarshipForm = async (req, res) => {
 
     if (!user) {
       return errorResponse(res, "User tidak ditemukan", 404);
-    }
-
-    if (!isUserEligibleForScholarship(user, scholarship)) {
-      return errorResponse(
-        res,
-        "Anda tidak memenuhi cakupan fakultas/departemen/program studi untuk beasiswa ini",
-        403,
-      );
     }
 
     if (scholarship.is_external) {
@@ -168,6 +160,14 @@ const getScholarshipForm = async (req, res) => {
       }
     } else {
       selectedSchema = scholarship.schemas[0];
+    }
+
+    if (!isUserEligibleForSchema(user, selectedSchema)) {
+      return errorResponse(
+        res,
+        "Anda tidak memenuhi cakupan fakultas/departemen/program studi untuk skema ini",
+        403,
+      );
     }
 
     if (scholarship.end_date) {
@@ -304,14 +304,6 @@ const submitApplication = async (req, res) => {
         scholarship_id: scholarshipId,
         is_active: true,
       },
-    });
-
-    if (!schema) {
-      return errorResponse(res, "Skema tidak ditemukan atau tidak aktif", 404);
-    }
-
-    const scholarship = await Scholarship.findOne({
-      where: { id: scholarshipId, is_active: true },
       include: [
         {
           model: Faculty,
@@ -332,6 +324,14 @@ const submitApplication = async (req, res) => {
           attributes: ["id"],
         },
       ],
+    });
+
+    if (!schema) {
+      return errorResponse(res, "Skema tidak ditemukan atau tidak aktif", 404);
+    }
+
+    const scholarship = await Scholarship.findOne({
+      where: { id: scholarshipId, is_active: true },
     });
 
     if (!scholarship) {
@@ -362,10 +362,10 @@ const submitApplication = async (req, res) => {
       return errorResponse(res, "User tidak ditemukan", 404);
     }
 
-    if (!isUserEligibleForScholarship(user, scholarship)) {
+    if (!isUserEligibleForSchema(user, schema)) {
       return errorResponse(
         res,
-        "Anda tidak memenuhi cakupan fakultas/departemen/program studi untuk beasiswa ini",
+        "Anda tidak memenuhi cakupan fakultas/departemen/program studi untuk skema ini",
         403,
       );
     }

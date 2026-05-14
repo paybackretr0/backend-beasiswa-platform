@@ -5,7 +5,7 @@ const {
   ApplicationDocument,
   Scholarship,
   ScholarshipBenefit,
-  ScholarshipFaculty,
+  ScholarshipSchemaFaculty,
   ScholarshipSchema,
   ScholarshipSchemaRequirement,
   ScholarshipSchemaDocument,
@@ -31,6 +31,7 @@ const getAllApplications = async (req, res) => {
       attributes: ["id", "name", "is_active", "verification_level"],
       required: true,
     };
+    let schemaEligibilityInclude = null;
 
     if (user.role === "VERIFIKATOR_FAKULTAS") {
       if (!user.faculty_id) {
@@ -42,15 +43,13 @@ const getAllApplications = async (req, res) => {
       }
 
       scholarshipInclude.where = { verification_level: "FACULTY" };
-      scholarshipInclude.include = [
-        {
-          model: ScholarshipFaculty,
-          as: "scholarshipFaculties",
-          where: { faculty_id: user.faculty_id },
-          attributes: [],
-          required: true,
-        },
-      ];
+      schemaEligibilityInclude = {
+        model: ScholarshipSchemaFaculty,
+        as: "scholarshipSchemaFaculties",
+        where: { faculty_id: user.faculty_id },
+        attributes: [],
+        required: true,
+      };
     } else if (user.role === "VERIFIKATOR_DITMAWA") {
       scholarshipInclude.where = { verification_level: "DITMAWA" };
     }
@@ -82,7 +81,9 @@ const getAllApplications = async (req, res) => {
           as: "schema",
           attributes: ["id", "name", "is_active"],
           required: true,
-          include: [scholarshipInclude],
+          include: schemaEligibilityInclude
+            ? [scholarshipInclude, schemaEligibilityInclude]
+            : [scholarshipInclude],
         },
         studentInclude,
       ],
@@ -147,15 +148,13 @@ const getApplicationsSummary = async (req, res) => {
                 attributes: [],
                 where: { verification_level: "FACULTY" },
                 required: true,
-                include: [
-                  {
-                    model: ScholarshipFaculty,
-                    as: "scholarshipFaculties",
-                    where: { faculty_id: user.faculty_id },
-                    attributes: [],
-                    required: true,
-                  },
-                ],
+              },
+              {
+                model: ScholarshipSchemaFaculty,
+                as: "scholarshipSchemaFaculties",
+                where: { faculty_id: user.faculty_id },
+                attributes: [],
+                required: true,
               },
             ],
           },

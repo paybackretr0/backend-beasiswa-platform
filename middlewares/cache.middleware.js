@@ -15,6 +15,7 @@ const invalidateScholarshipCache = async (req, res, next) => {
     await Promise.all([
       invalidateCacheByPattern("all_scholarships"),
       invalidateCacheByPattern("active_scholarships_info"),
+      invalidateCacheByPattern("scholarship_detail:*"),
       invalidateCacheByPattern("applications_summary:*"),
     ]);
   } catch (err) {
