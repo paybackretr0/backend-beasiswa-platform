@@ -2,32 +2,31 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.createTable("scholarship_study_programs", {
+    await queryInterface.createTable("form_field_options", {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
         primaryKey: true,
         allowNull: false,
       },
-      scholarship_id: {
+      field_id: {
         type: Sequelize.UUID,
         allowNull: false,
         references: {
-          model: "scholarships",
+          model: "form_fields",
           key: "id",
         },
         onUpdate: "CASCADE",
         onDelete: "CASCADE",
       },
-      study_program_id: {
-        type: Sequelize.UUID,
+      value: {
+        type: Sequelize.STRING(255),
         allowNull: false,
-        references: {
-          model: "study_programs",
-          key: "id",
-        },
-        onUpdate: "CASCADE",
-        onDelete: "CASCADE",
+      },
+      order_no: {
+        type: Sequelize.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
       },
       createdAt: {
         allowNull: false,
@@ -40,8 +39,12 @@ module.exports = {
         defaultValue: Sequelize.literal("CURRENT_TIMESTAMP"),
       },
     });
+
+    await queryInterface.addIndex("form_field_options", ["field_id"], {
+      name: "form_field_options_idx_field",
+    });
   },
   async down(queryInterface, Sequelize) {
-    await queryInterface.dropTable("scholarship_study_programs");
+    await queryInterface.dropTable("form_field_options");
   },
 };

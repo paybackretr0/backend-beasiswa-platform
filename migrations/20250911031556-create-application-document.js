@@ -20,9 +20,15 @@ module.exports = {
         onUpdate: "CASCADE",
         onDelete: "CASCADE",
       },
-      document_type: {
-        type: Sequelize.STRING(100),
+      schema_document_id: {
+        type: Sequelize.UUID,
         allowNull: false,
+        references: {
+          model: "scholarship_schema_documents",
+          key: "id",
+        },
+        onUpdate: "CASCADE",
+        onDelete: "RESTRICT",
       },
       file_path: {
         type: Sequelize.STRING(512),
@@ -36,25 +42,6 @@ module.exports = {
         type: Sequelize.BIGINT,
         allowNull: true,
       },
-      is_valid: {
-        type: Sequelize.BOOLEAN,
-        allowNull: false,
-        defaultValue: false,
-      },
-      checked_by: {
-        type: Sequelize.UUID,
-        allowNull: true,
-        references: {
-          model: "users",
-          key: "id",
-        },
-        onUpdate: "CASCADE",
-        onDelete: "SET NULL",
-      },
-      checked_at: {
-        type: Sequelize.DATE,
-        allowNull: true,
-      },
       createdAt: {
         type: Sequelize.DATE,
         allowNull: false,
@@ -65,6 +52,23 @@ module.exports = {
     await queryInterface.addIndex("application_documents", ["application_id"], {
       name: "application_documents_index_8",
     });
+
+    await queryInterface.addIndex(
+      "application_documents",
+      ["schema_document_id"],
+      {
+        name: "application_documents_idx_schema_document",
+      },
+    );
+
+    await queryInterface.addIndex(
+      "application_documents",
+      ["application_id", "schema_document_id"],
+      {
+        name: "application_documents_unique_app_schema_doc",
+        unique: true,
+      },
+    );
   },
 
   async down(queryInterface, Sequelize) {

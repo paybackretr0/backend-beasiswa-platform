@@ -62,10 +62,6 @@ module.exports = {
         allowNull: false,
         defaultValue: Sequelize.literal("CURRENT_TIMESTAMP"),
       },
-      meta: {
-        type: Sequelize.JSON,
-        allowNull: true,
-      },
     });
 
     await queryInterface.addIndex("informations", ["status"], {

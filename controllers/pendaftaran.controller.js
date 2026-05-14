@@ -1,7 +1,9 @@
 const {
   FormField,
+  FormFieldOption,
   Scholarship,
   ScholarshipSchema,
+  ScholarshipSchemaDocument,
   Faculty,
   Department,
   StudyProgram,
@@ -20,6 +22,11 @@ const normalizeLabel = (label) =>
     .trim()
     .toLowerCase();
 
+const normalizeDocumentName = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase();
+
 const parseNumberAnswer = (value) => {
   if (value === undefined || value === null) return null;
   const normalized = String(value).trim().replace(",", ".");
@@ -28,18 +35,16 @@ const parseNumberAnswer = (value) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-const isUserEligibleForScholarship = (user, scholarship) => {
-  const facultyIds = new Set((scholarship.faculties || []).map((f) => f.id));
-  const departmentIds = new Set(
-    (scholarship.departments || []).map((d) => d.id),
-  );
+const isUserEligibleForSchema = (user, schema) => {
+  const facultyIds = new Set((schema.faculties || []).map((f) => f.id));
+  const departmentIds = new Set((schema.departments || []).map((d) => d.id));
   const studyProgramIds = new Set(
-    (scholarship.studyPrograms || []).map((sp) => sp.id),
+    (schema.studyPrograms || []).map((sp) => sp.id),
   );
 
   const hasRestriction =
     facultyIds.size > 0 || departmentIds.size > 0 || studyProgramIds.size > 0;
-  if (!hasRestriction) return true;
+  if (!hasRestriction) return false;
 
   const isStudyProgramEligible =
     studyProgramIds.size > 0 && studyProgramIds.has(user.study_program_id);
@@ -70,24 +75,6 @@ const getScholarshipForm = async (req, res) => {
       ],
       include: [
         {
-          model: Faculty,
-          as: "faculties",
-          through: { attributes: [] },
-          attributes: ["id"],
-        },
-        {
-          model: Department,
-          as: "departments",
-          through: { attributes: [] },
-          attributes: ["id"],
-        },
-        {
-          model: StudyProgram,
-          as: "studyPrograms",
-          through: { attributes: [] },
-          attributes: ["id"],
-        },
-        {
           model: ScholarshipSchema,
           as: "schemas",
           where: { is_active: true },
@@ -99,6 +86,26 @@ const getScholarshipForm = async (req, res) => {
             "quota",
             "gpa_minimum",
             "semester_minimum",
+          ],
+          include: [
+            {
+              model: Faculty,
+              as: "faculties",
+              through: { attributes: [] },
+              attributes: ["id"],
+            },
+            {
+              model: Department,
+              as: "departments",
+              through: { attributes: [] },
+              attributes: ["id"],
+            },
+            {
+              model: StudyProgram,
+              as: "studyPrograms",
+              through: { attributes: [] },
+              attributes: ["id"],
+            },
           ],
         },
       ],
@@ -124,14 +131,6 @@ const getScholarshipForm = async (req, res) => {
 
     if (!user) {
       return errorResponse(res, "User tidak ditemukan", 404);
-    }
-
-    if (!isUserEligibleForScholarship(user, scholarship)) {
-      return errorResponse(
-        res,
-        "Anda tidak memenuhi cakupan fakultas/departemen/program studi untuk beasiswa ini",
-        403,
-      );
     }
 
     if (scholarship.is_external) {
@@ -169,6 +168,14 @@ const getScholarshipForm = async (req, res) => {
       selectedSchema = scholarship.schemas[0];
     }
 
+    if (!isUserEligibleForSchema(user, selectedSchema)) {
+      return errorResponse(
+        res,
+        "Anda tidak memenuhi cakupan fakultas/departemen/program studi untuk skema ini",
+        403,
+      );
+    }
+
     if (scholarship.end_date) {
       const today = new Date();
       const endDate = new Date(scholarship.end_date);
@@ -204,13 +211,13 @@ const getScholarshipForm = async (req, res) => {
     const formFields = await FormField.findAll({
       where: { schema_id: selectedSchema.id },
       order: [["order_no", "ASC"]],
-      attributes: [
-        "id",
-        "label",
-        "type",
-        "is_required",
-        "options_json",
-        "order_no",
+      attributes: ["id", "label", "type", "is_required", "order_no"],
+      include: [
+        {
+          model: FormFieldOption,
+          as: "options",
+          attributes: ["id", "value", "order_no"],
+        },
       ],
     });
 
@@ -227,7 +234,9 @@ const getScholarshipForm = async (req, res) => {
       label: field.label,
       type: field.type,
       is_required: field.is_required,
-      options: field.options_json || [],
+      options: (field.options || [])
+        .sort((a, b) => a.order_no - b.order_no)
+        .map((option) => option.value),
       order_no: field.order_no,
     }));
 
@@ -301,14 +310,6 @@ const submitApplication = async (req, res) => {
         scholarship_id: scholarshipId,
         is_active: true,
       },
-    });
-
-    if (!schema) {
-      return errorResponse(res, "Skema tidak ditemukan atau tidak aktif", 404);
-    }
-
-    const scholarship = await Scholarship.findOne({
-      where: { id: scholarshipId, is_active: true },
       include: [
         {
           model: Faculty,
@@ -329,6 +330,14 @@ const submitApplication = async (req, res) => {
           attributes: ["id"],
         },
       ],
+    });
+
+    if (!schema) {
+      return errorResponse(res, "Skema tidak ditemukan atau tidak aktif", 404);
+    }
+
+    const scholarship = await Scholarship.findOne({
+      where: { id: scholarshipId, is_active: true },
     });
 
     if (!scholarship) {
@@ -359,10 +368,10 @@ const submitApplication = async (req, res) => {
       return errorResponse(res, "User tidak ditemukan", 404);
     }
 
-    if (!isUserEligibleForScholarship(user, scholarship)) {
+    if (!isUserEligibleForSchema(user, schema)) {
       return errorResponse(
         res,
-        "Anda tidak memenuhi cakupan fakultas/departemen/program studi untuk beasiswa ini",
+        "Anda tidak memenuhi cakupan fakultas/departemen/program studi untuk skema ini",
         403,
       );
     }
@@ -382,6 +391,18 @@ const submitApplication = async (req, res) => {
     const formFields = await FormField.findAll({
       where: { schema_id: schemaId },
     });
+
+    const schemaDocuments = await ScholarshipSchemaDocument.findAll({
+      where: { schema_id: schemaId },
+      attributes: ["id", "document_name"],
+    });
+
+    const schemaDocumentMap = new Map(
+      schemaDocuments.map((doc) => [
+        normalizeDocumentName(doc.document_name),
+        doc.id,
+      ]),
+    );
 
     if (formFields.length === 0) {
       return errorResponse(
@@ -594,9 +615,19 @@ const submitApplication = async (req, res) => {
           return null;
         }
 
+        const schemaDocumentId = schemaDocumentMap.get(
+          normalizeDocumentName(field.label),
+        );
+
+        if (!schemaDocumentId) {
+          throw new Error(
+            `Schema document tidak ditemukan untuk field: ${field.label}`,
+          );
+        }
+
         let documentData = {
           application_id: application.id,
-          document_type: field.label,
+          schema_document_id: schemaDocumentId,
           file_path: uploadedFile ? uploadedFile.path : fieldAnswer.file_path,
           mime_type: uploadedFile
             ? uploadedFile.mimetype
@@ -604,9 +635,6 @@ const submitApplication = async (req, res) => {
           size_bytes: uploadedFile
             ? uploadedFile.size
             : fieldAnswer.size_bytes || null,
-          is_valid: false,
-          checked_by: null,
-          checked_at: null,
         };
 
         return ApplicationDocument.create(documentData);
@@ -727,6 +755,19 @@ const submitRevision = async (req, res) => {
       transaction,
     });
 
+    const schemaDocuments = await ScholarshipSchemaDocument.findAll({
+      where: { schema_id: application.schema_id },
+      attributes: ["id", "document_name"],
+      transaction,
+    });
+
+    const schemaDocumentMap = new Map(
+      schemaDocuments.map((doc) => [
+        normalizeDocumentName(doc.document_name),
+        doc.id,
+      ]),
+    );
+
     const requiredFields = formFields.filter((field) => field.is_required);
 
     for (const field of requiredFields) {
@@ -827,9 +868,19 @@ const submitRevision = async (req, res) => {
           return null;
         }
 
+        const schemaDocumentId = schemaDocumentMap.get(
+          normalizeDocumentName(field.label),
+        );
+
+        if (!schemaDocumentId) {
+          throw new Error(
+            `Schema document tidak ditemukan untuk field: ${field.label}`,
+          );
+        }
+
         let documentData = {
           application_id: applicationId,
-          document_type: field.label,
+          schema_document_id: schemaDocumentId,
           file_path: uploadedFile ? uploadedFile.path : fieldAnswer.file_path,
           mime_type: uploadedFile
             ? uploadedFile.mimetype
@@ -837,9 +888,6 @@ const submitRevision = async (req, res) => {
           size_bytes: uploadedFile
             ? uploadedFile.size
             : fieldAnswer.size_bytes || null,
-          is_valid: false,
-          checked_by: null,
-          checked_at: null,
         };
 
         return ApplicationDocument.create(documentData, { transaction });

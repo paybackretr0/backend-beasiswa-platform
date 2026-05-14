@@ -39,7 +39,7 @@ module.exports = {
           "VALIDATOR_DITMAWA",
           "PIMPINAN_DITMAWA",
           "PIMPINAN_FAKULTAS",
-          "SUPERADMIN"
+          "SUPERADMIN",
         ),
         allowNull: false,
         defaultValue: "MAHASISWA",

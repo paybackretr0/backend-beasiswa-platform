@@ -5,6 +5,11 @@ const {
   verifiedUser,
 } = require("../middlewares/auth.middleware");
 const authorize = require("../middlewares/role.middleware");
+const {
+  invalidateApplicationCache,
+  invalidateScholarshipCache,
+  invalidateUserCache,
+} = require("../middlewares/cache.middleware");
 const { applicationUpload } = require("../middlewares/upload.middleware");
 const {
   getScholarshipForm,
@@ -24,6 +29,9 @@ router.post(
   "/scholarship/:scholarshipId/submit",
   authorize(["MAHASISWA"]),
   applicationUpload.any(),
+  invalidateApplicationCache,
+  invalidateScholarshipCache,
+  invalidateUserCache,
   submitApplication,
 );
 
@@ -31,6 +39,9 @@ router.put(
   "/application/:applicationId/revision",
   authorize(["MAHASISWA"]),
   applicationUpload.any(),
+  invalidateApplicationCache,
+  invalidateScholarshipCache,
+  invalidateUserCache,
   submitRevision,
 );
 

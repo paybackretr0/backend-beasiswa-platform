@@ -41,7 +41,7 @@ module.exports = (sequelize, DataTypes) => {
       tableName: "backup_histories",
       timestamps: true, // hanya ada createdAt
       updatedAt: false,
-    }
+    },
   );
   return BackupHistory;
 };

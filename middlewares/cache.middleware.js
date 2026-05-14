@@ -15,12 +15,13 @@ const invalidateScholarshipCache = async (req, res, next) => {
     await Promise.all([
       invalidateCacheByPattern("all_scholarships"),
       invalidateCacheByPattern("active_scholarships_info"),
+      invalidateCacheByPattern("scholarship_detail:*"),
       invalidateCacheByPattern("applications_summary:*"),
     ]);
   } catch (err) {
     console.error("Scholarship cache invalidate error:", err);
   }
-  next(); // WAJIB
+  next();
 };
 
 /**
@@ -56,7 +57,7 @@ const invalidateUserCache = async (req, res, next) => {
   } catch (err) {
     console.error("User cache invalidate error:", err);
   }
-  next(); // WAJIB
+  next();
 };
 
 /**
@@ -68,7 +69,7 @@ const invalidateInformationCache = async (req, res, next) => {
   } catch (err) {
     console.error("Information cache invalidate error:", err);
   }
-  next(); // WAJIB
+  next();
 };
 
 /**
@@ -80,7 +81,7 @@ const invalidateCommentTemplateCache = async (req, res, next) => {
   } catch (err) {
     console.error("Comment template cache invalidate error:", err);
   }
-  next(); // WAJIB
+  next();
 };
 
 module.exports = {

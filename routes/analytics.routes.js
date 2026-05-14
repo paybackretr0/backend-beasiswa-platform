@@ -41,25 +41,20 @@ router.use(
   ]),
 );
 
-// Summary endpoints
 router.get("/summary", getSummary);
 router.get("/selection-summary", getSelectionSummary);
 router.get("/status-summary", getStatusSummary);
 
-// Distribution endpoints
 router.get("/faculty-distribution", getFacultyDistribution);
 router.get("/department-distribution", getDepartmentDistribution);
 router.get("/gender-distribution", getGenderDistribution);
 
-// Trend endpoints
 router.get("/yearly-trend", getYearlyTrend);
 router.get("/monthly-trend", getMonthlyTrend);
 
-// Performance endpoints
 router.get("/scholarship-performance", getScholarshipPerformance);
 router.get("/top-performing-faculties", getTopPerformingFaculties);
 
-// List endpoints
 router.get("/applications-list", getApplicationsList);
 router.get("/activities", getActivities);
 

@@ -32,7 +32,7 @@ module.exports = {
           "DATE",
           "FILE",
           "SELECT",
-          "TEXTAREA"
+          "TEXTAREA",
         ),
         allowNull: false,
         defaultValue: "TEXT",
@@ -41,11 +41,6 @@ module.exports = {
         type: Sequelize.BOOLEAN,
         allowNull: false,
         defaultValue: true,
-      },
-      options_json: {
-        type: Sequelize.JSON,
-        allowNull: true,
-        comment: "Pilihan untuk SELECT/opsi lain",
       },
       order_no: {
         type: Sequelize.INTEGER,

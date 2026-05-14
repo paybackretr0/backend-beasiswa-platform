@@ -38,7 +38,7 @@ const getAllArticles = async (req, res) => {
 
 const createInformation = async (req, res) => {
   try {
-    const { type, title, content, status, meta } = req.body;
+    const { type, title, content, status } = req.body;
 
     if (!type || !title || !content) {
       return errorResponse(res, "Type, title, dan content wajib diisi", 400);
@@ -58,16 +58,6 @@ const createInformation = async (req, res) => {
 
     const slug = await generateUniqueSlug(Information, baseSlug);
 
-    let parsedMeta = {};
-    if (meta) {
-      try {
-        parsedMeta = typeof meta === "string" ? JSON.parse(meta) : meta;
-      } catch (error) {
-        console.error("Error parsing meta:", error);
-        parsedMeta = {};
-      }
-    }
-
     const newInformation = await Information.create({
       type,
       title,
@@ -76,7 +66,6 @@ const createInformation = async (req, res) => {
       cover_url,
       status,
       author_id: req.user ? req.user.id : null,
-      meta: parsedMeta,
       published_at: status === "PUBLISHED" ? new Date() : null,
     });
 
@@ -106,7 +95,7 @@ const createInformation = async (req, res) => {
 const editInformation = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, content, status, meta } = req.body;
+    const { title, content, status } = req.body;
 
     const information = await Information.findByPk(id);
     if (!information) {
@@ -140,14 +129,6 @@ const editInformation = async (req, res) => {
     if (req.file) {
       const fileInfo = getFileInfo(req.file);
       updateData.cover_url = fileInfo.url;
-    }
-
-    if (meta !== undefined && meta !== null) {
-      try {
-        updateData.meta = typeof meta === "string" ? JSON.parse(meta) : meta;
-      } catch (error) {
-        console.error("Error parsing meta:", error);
-      }
     }
 
     await information.update(updateData);

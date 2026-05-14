@@ -13,6 +13,40 @@ module.exports = (sequelize, DataTypes) => {
         as: "formFields",
       });
 
+      ScholarshipSchema.hasMany(models.ScholarshipSchemaFaculty, {
+        foreignKey: "schema_id",
+        as: "scholarshipSchemaFaculties",
+      });
+      ScholarshipSchema.hasMany(models.ScholarshipSchemaDepartment, {
+        foreignKey: "schema_id",
+        as: "scholarshipSchemaDepartments",
+      });
+      ScholarshipSchema.hasMany(models.ScholarshipSchemaStudyProgram, {
+        foreignKey: "schema_id",
+        as: "scholarshipSchemaStudyPrograms",
+      });
+
+      ScholarshipSchema.belongsToMany(models.Faculty, {
+        through: models.ScholarshipSchemaFaculty,
+        foreignKey: "schema_id",
+        otherKey: "faculty_id",
+        as: "faculties",
+      });
+
+      ScholarshipSchema.belongsToMany(models.Department, {
+        through: models.ScholarshipSchemaDepartment,
+        foreignKey: "schema_id",
+        otherKey: "department_id",
+        as: "departments",
+      });
+
+      ScholarshipSchema.belongsToMany(models.StudyProgram, {
+        through: models.ScholarshipSchemaStudyProgram,
+        foreignKey: "schema_id",
+        otherKey: "study_program_id",
+        as: "studyPrograms",
+      });
+
       ScholarshipSchema.hasMany(models.ScholarshipSchemaRequirement, {
         foreignKey: "schema_id",
         as: "requirements",
@@ -77,7 +111,7 @@ module.exports = (sequelize, DataTypes) => {
       modelName: "ScholarshipSchema",
       tableName: "scholarship_schemas",
       timestamps: true,
-    }
+    },
   );
   return ScholarshipSchema;
 };

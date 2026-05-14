@@ -52,17 +52,13 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.DATE,
         allowNull: true,
       },
-      meta: {
-        type: DataTypes.JSON,
-        allowNull: true,
-      },
     },
     {
       sequelize,
       modelName: "Information",
       tableName: "informations",
-      timestamps: true, // createdAt & updatedAt otomatis
-    }
+      timestamps: true,
+    },
   );
   return Information;
 };
