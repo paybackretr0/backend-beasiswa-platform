@@ -2,27 +2,27 @@
 const { Model } = require("sequelize");
 
 module.exports = (sequelize, DataTypes) => {
-  class ScholarshipDepartment extends Model {
+  class ScholarshipSchemaDepartment extends Model {
     static associate(models) {
-      ScholarshipDepartment.belongsTo(models.Scholarship, {
-        foreignKey: "scholarship_id",
-        as: "scholarship",
+      ScholarshipSchemaDepartment.belongsTo(models.ScholarshipSchema, {
+        foreignKey: "schema_id",
+        as: "schema",
       });
-      ScholarshipDepartment.belongsTo(models.Department, {
+      ScholarshipSchemaDepartment.belongsTo(models.Department, {
         foreignKey: "department_id",
         as: "department",
       });
     }
   }
 
-  ScholarshipDepartment.init(
+  ScholarshipSchemaDepartment.init(
     {
       id: {
         type: DataTypes.UUID,
         primaryKey: true,
         defaultValue: DataTypes.UUIDV4,
       },
-      scholarship_id: {
+      schema_id: {
         type: DataTypes.UUID,
         allowNull: false,
       },
@@ -33,11 +33,11 @@ module.exports = (sequelize, DataTypes) => {
     },
     {
       sequelize,
-      modelName: "ScholarshipDepartment",
-      tableName: "scholarship_departments",
+      modelName: "ScholarshipSchemaDepartment",
+      tableName: "scholarship_schema_departments",
       timestamps: true,
-    }
+    },
   );
 
-  return ScholarshipDepartment;
+  return ScholarshipSchemaDepartment;
 };

@@ -2,28 +2,28 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.createTable("scholarship_departments", {
+    await queryInterface.createTable("scholarship_schema_study_programs", {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
         primaryKey: true,
         allowNull: false,
       },
-      scholarship_id: {
+      schema_id: {
         type: Sequelize.UUID,
         allowNull: false,
         references: {
-          model: "scholarships",
+          model: "scholarship_schemas",
           key: "id",
         },
         onUpdate: "CASCADE",
         onDelete: "CASCADE",
       },
-      department_id: {
+      study_program_id: {
         type: Sequelize.UUID,
         allowNull: false,
         references: {
-          model: "departments",
+          model: "study_programs",
           key: "id",
         },
         onUpdate: "CASCADE",
@@ -42,6 +42,6 @@ module.exports = {
     });
   },
   async down(queryInterface, Sequelize) {
-    await queryInterface.dropTable("scholarship_departments");
+    await queryInterface.dropTable("scholarship_schema_study_programs");
   },
 };
