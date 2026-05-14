@@ -3,15 +3,13 @@ const { Model } = require("sequelize");
 module.exports = (sequelize, DataTypes) => {
   class ApplicationDocument extends Model {
     static associate(models) {
-      // ApplicationDocument belongs to Application
       ApplicationDocument.belongsTo(models.Application, {
         foreignKey: "application_id",
         as: "application",
       });
-      // ApplicationDocument checked by User
-      ApplicationDocument.belongsTo(models.User, {
-        foreignKey: "checked_by",
-        as: "checker",
+      ApplicationDocument.belongsTo(models.ScholarshipSchemaDocument, {
+        foreignKey: "schema_document_id",
+        as: "schemaDocument",
       });
     }
   }
@@ -26,8 +24,8 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.UUID,
         allowNull: false,
       },
-      document_type: {
-        type: DataTypes.STRING(100),
+      schema_document_id: {
+        type: DataTypes.UUID,
         allowNull: false,
       },
       file_path: {
@@ -39,20 +37,7 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
       },
       size_bytes: {
-        type: DataTypes.UUID,
-        allowNull: true,
-      },
-      is_valid: {
-        type: DataTypes.BOOLEAN,
-        allowNull: false,
-        defaultValue: false,
-      },
-      checked_by: {
-        type: DataTypes.UUID,
-        allowNull: true,
-      },
-      checked_at: {
-        type: DataTypes.DATE,
+        type: DataTypes.BIGINT,
         allowNull: true,
       },
     },
@@ -60,9 +45,9 @@ module.exports = (sequelize, DataTypes) => {
       sequelize,
       modelName: "ApplicationDocument",
       tableName: "application_documents",
-      timestamps: true, // createdAt otomatis, updatedAt tidak ada di migration
-      updatedAt: false, // karena migration tidak punya updatedAt
-    }
+      timestamps: true,
+      updatedAt: false,
+    },
   );
   return ApplicationDocument;
 };

@@ -36,16 +36,25 @@ const normalizeWhatsAppTarget = (phoneNumber) => {
   return digitsOnly;
 };
 
-const isUserEligibleForScholarship = (user, eligibilitySets) => {
-  const { facultyIds, departmentIds, studyProgramIds } = eligibilitySets;
+const isUserEligibleForSchema = (user, schema) => {
+  const facultyIds = new Set(schema.faculties || []);
+  const departmentIds = new Set(schema.departments || []);
+  const studyProgramIds = new Set(schema.study_programs || []);
 
-  if (facultyIds.size > 0 && !facultyIds.has(user.faculty_id)) return false;
-  if (departmentIds.size > 0 && !departmentIds.has(user.department_id))
-    return false;
-  if (studyProgramIds.size > 0 && !studyProgramIds.has(user.study_program_id))
-    return false;
+  const hasEligibilityTarget =
+    facultyIds.size > 0 || departmentIds.size > 0 || studyProgramIds.size > 0;
 
-  return true;
+  if (!hasEligibilityTarget) return false;
+
+  return (
+    facultyIds.has(user.faculty_id) ||
+    departmentIds.has(user.department_id) ||
+    studyProgramIds.has(user.study_program_id)
+  );
+};
+
+const isUserEligibleForAnySchema = (user, schemas = []) => {
+  return schemas.some((schema) => isUserEligibleForSchema(user, schema));
 };
 
 const notifyEligibleStudentsForNewScholarship = async (
@@ -55,24 +64,6 @@ const notifyEligibleStudentsForNewScholarship = async (
   if (!process.env.FONNTE_TOKEN) {
     return;
   }
-
-  const eligibilitySets = {
-    facultyIds: new Set(),
-    departmentIds: new Set(),
-    studyProgramIds: new Set(),
-  };
-
-  parsedSchemas.forEach((schema) => {
-    (schema.faculties || []).forEach((id) =>
-      eligibilitySets.facultyIds.add(id),
-    );
-    (schema.departments || []).forEach((id) =>
-      eligibilitySets.departmentIds.add(id),
-    );
-    (schema.study_programs || []).forEach((id) =>
-      eligibilitySets.studyProgramIds.add(id),
-    );
-  });
 
   const mahasiswaUsers = await User.findAll({
     where: {
@@ -92,7 +83,7 @@ const notifyEligibleStudentsForNewScholarship = async (
 
   const eligibleRecipients = new Map();
   mahasiswaUsers.forEach((user) => {
-    if (!isUserEligibleForScholarship(user, eligibilitySets)) return;
+    if (!isUserEligibleForAnySchema(user, parsedSchemas)) return;
 
     const normalizedTarget = normalizeWhatsAppTarget(user.phone_number);
     if (!normalizedTarget) return;

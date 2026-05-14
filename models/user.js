@@ -41,10 +41,6 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "revision_requested_by",
         as: "revision_requester",
       });
-      User.hasMany(models.ApplicationDocument, {
-        foreignKey: "checked_by",
-        as: "checker",
-      });
       User.hasMany(models.Scholarship, { foreignKey: "created_by" });
       User.hasMany(models.GovernmentScholarship, { foreignKey: "imported_by" });
       User.hasMany(models.RefreshToken, { foreignKey: "user_id" });
@@ -89,7 +85,7 @@ module.exports = (sequelize, DataTypes) => {
           "VALIDATOR_DITMAWA",
           "PIMPINAN_DITMAWA",
           "PIMPINAN_FAKULTAS",
-          "SUPERADMIN"
+          "SUPERADMIN",
         ),
         allowNull: false,
         defaultValue: "MAHASISWA",
@@ -150,7 +146,7 @@ module.exports = (sequelize, DataTypes) => {
       modelName: "User",
       tableName: "users",
       timestamps: true,
-    }
+    },
   );
   return User;
 };

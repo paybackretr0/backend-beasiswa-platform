@@ -385,7 +385,14 @@ const getApplicationDetail = async (req, res) => {
         {
           model: ApplicationDocument,
           as: "documents",
-          attributes: ["id", "document_type", "file_path", "createdAt"],
+          attributes: ["id", "file_path", "createdAt"],
+          include: [
+            {
+              model: ScholarshipSchemaDocument,
+              as: "schemaDocument",
+              attributes: ["id", "document_name", "template_file"],
+            },
+          ],
         },
       ],
     });

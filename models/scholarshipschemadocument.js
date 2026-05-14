@@ -7,6 +7,10 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "schema_id",
         as: "schema",
       });
+      ScholarshipSchemaDocument.hasMany(models.ApplicationDocument, {
+        foreignKey: "schema_document_id",
+        as: "applicationDocuments",
+      });
     }
   }
   ScholarshipSchemaDocument.init(
@@ -35,7 +39,7 @@ module.exports = (sequelize, DataTypes) => {
       modelName: "ScholarshipSchemaDocument",
       tableName: "scholarship_schema_documents",
       timestamps: true,
-    }
+    },
   );
   return ScholarshipSchemaDocument;
 };

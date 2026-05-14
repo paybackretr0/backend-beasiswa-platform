@@ -3,6 +3,7 @@ const {
   FormFieldOption,
   Scholarship,
   ScholarshipSchema,
+  ScholarshipSchemaDocument,
   Faculty,
   Department,
   StudyProgram,
@@ -18,6 +19,11 @@ const { Op } = require("sequelize");
 
 const normalizeLabel = (label) =>
   String(label || "")
+    .trim()
+    .toLowerCase();
+
+const normalizeDocumentName = (value) =>
+  String(value || "")
     .trim()
     .toLowerCase();
 
@@ -38,7 +44,7 @@ const isUserEligibleForSchema = (user, schema) => {
 
   const hasRestriction =
     facultyIds.size > 0 || departmentIds.size > 0 || studyProgramIds.size > 0;
-  if (!hasRestriction) return true;
+  if (!hasRestriction) return false;
 
   const isStudyProgramEligible =
     studyProgramIds.size > 0 && studyProgramIds.has(user.study_program_id);
@@ -386,6 +392,18 @@ const submitApplication = async (req, res) => {
       where: { schema_id: schemaId },
     });
 
+    const schemaDocuments = await ScholarshipSchemaDocument.findAll({
+      where: { schema_id: schemaId },
+      attributes: ["id", "document_name"],
+    });
+
+    const schemaDocumentMap = new Map(
+      schemaDocuments.map((doc) => [
+        normalizeDocumentName(doc.document_name),
+        doc.id,
+      ]),
+    );
+
     if (formFields.length === 0) {
       return errorResponse(
         res,
@@ -597,9 +615,19 @@ const submitApplication = async (req, res) => {
           return null;
         }
 
+        const schemaDocumentId = schemaDocumentMap.get(
+          normalizeDocumentName(field.label),
+        );
+
+        if (!schemaDocumentId) {
+          throw new Error(
+            `Schema document tidak ditemukan untuk field: ${field.label}`,
+          );
+        }
+
         let documentData = {
           application_id: application.id,
-          document_type: field.label,
+          schema_document_id: schemaDocumentId,
           file_path: uploadedFile ? uploadedFile.path : fieldAnswer.file_path,
           mime_type: uploadedFile
             ? uploadedFile.mimetype
@@ -607,9 +635,6 @@ const submitApplication = async (req, res) => {
           size_bytes: uploadedFile
             ? uploadedFile.size
             : fieldAnswer.size_bytes || null,
-          is_valid: false,
-          checked_by: null,
-          checked_at: null,
         };
 
         return ApplicationDocument.create(documentData);
@@ -730,6 +755,19 @@ const submitRevision = async (req, res) => {
       transaction,
     });
 
+    const schemaDocuments = await ScholarshipSchemaDocument.findAll({
+      where: { schema_id: application.schema_id },
+      attributes: ["id", "document_name"],
+      transaction,
+    });
+
+    const schemaDocumentMap = new Map(
+      schemaDocuments.map((doc) => [
+        normalizeDocumentName(doc.document_name),
+        doc.id,
+      ]),
+    );
+
     const requiredFields = formFields.filter((field) => field.is_required);
 
     for (const field of requiredFields) {
@@ -830,9 +868,19 @@ const submitRevision = async (req, res) => {
           return null;
         }
 
+        const schemaDocumentId = schemaDocumentMap.get(
+          normalizeDocumentName(field.label),
+        );
+
+        if (!schemaDocumentId) {
+          throw new Error(
+            `Schema document tidak ditemukan untuk field: ${field.label}`,
+          );
+        }
+
         let documentData = {
           application_id: applicationId,
-          document_type: field.label,
+          schema_document_id: schemaDocumentId,
           file_path: uploadedFile ? uploadedFile.path : fieldAnswer.file_path,
           mime_type: uploadedFile
             ? uploadedFile.mimetype
@@ -840,9 +888,6 @@ const submitRevision = async (req, res) => {
           size_bytes: uploadedFile
             ? uploadedFile.size
             : fieldAnswer.size_bytes || null,
-          is_valid: false,
-          checked_by: null,
-          checked_at: null,
         };
 
         return ApplicationDocument.create(documentData, { transaction });

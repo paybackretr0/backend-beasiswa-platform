@@ -47,7 +47,7 @@ module.exports = {
       ["schema_id"],
       {
         name: "schema_documents_idx_schema",
-      }
+      },
     );
   },
 
