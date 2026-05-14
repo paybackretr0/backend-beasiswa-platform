@@ -62,7 +62,7 @@ module.exports = (sequelize, DataTypes) => {
       modelName: "Information",
       tableName: "informations",
       timestamps: true, // createdAt & updatedAt otomatis
-    }
+    },
   );
   return Information;
 };

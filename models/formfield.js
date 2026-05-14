@@ -11,6 +11,10 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "field_id",
         as: "answers",
       });
+      FormField.hasMany(models.FormFieldOption, {
+        foreignKey: "field_id",
+        as: "options",
+      });
     }
   }
   FormField.init(
@@ -44,10 +48,6 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.BOOLEAN,
         allowNull: false,
         defaultValue: true,
-      },
-      options_json: {
-        type: DataTypes.JSON,
-        allowNull: true,
       },
       order_no: {
         type: DataTypes.INTEGER,

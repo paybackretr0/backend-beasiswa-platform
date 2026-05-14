@@ -1,5 +1,6 @@
 const {
   FormField,
+  FormFieldOption,
   ActivityLog,
   Scholarship,
   ScholarshipSchema,
@@ -40,13 +41,13 @@ const getScholarshipForm = async (req, res) => {
         {
           model: FormField,
           as: "formFields",
-          attributes: [
-            "id",
-            "label",
-            "type",
-            "is_required",
-            "options_json",
-            "order_no",
+          attributes: ["id", "label", "type", "is_required", "order_no"],
+          include: [
+            {
+              model: FormFieldOption,
+              as: "options",
+              attributes: ["id", "value", "order_no"],
+            },
           ],
         },
       ],
@@ -56,7 +57,14 @@ const getScholarshipForm = async (req, res) => {
       return errorResponse(res, "Schema tidak ditemukan", 404);
     }
 
-    const fields = schema.formFields.sort((a, b) => a.order_no - b.order_no);
+    const fields = schema.formFields
+      .sort((a, b) => a.order_no - b.order_no)
+      .map((field) => ({
+        ...field.toJSON(),
+        options: (field.options || [])
+          .sort((a, b) => a.order_no - b.order_no)
+          .map((option) => option.value),
+      }));
 
     return successResponse(res, "Form fields retrieved successfully", fields);
   } catch (error) {
@@ -89,16 +97,29 @@ const createScholarshipForm = async (req, res) => {
 
     await FormField.destroy({ where: { schema_id: schemaId } });
 
-    const formFields = fields.map((field, index) => ({
-      schema_id: schemaId,
-      label: field.label,
-      type: field.type,
-      is_required: field.is_required,
-      options_json: field.type === "SELECT" ? field.options : null,
-      order_no: index + 1,
-    }));
+    for (const [index, field] of fields.entries()) {
+      const createdField = await FormField.create({
+        schema_id: schemaId,
+        label: field.label,
+        type: field.type,
+        is_required: field.is_required,
+        order_no: index + 1,
+      });
 
-    await FormField.bulkCreate(formFields);
+      if (field.type === "SELECT" && Array.isArray(field.options)) {
+        const optionRows = field.options
+          .filter((option) => String(option).trim() !== "")
+          .map((option, optionIndex) => ({
+            field_id: createdField.id,
+            value: option,
+            order_no: optionIndex + 1,
+          }));
+
+        if (optionRows.length) {
+          await FormFieldOption.bulkCreate(optionRows);
+        }
+      }
+    }
 
     const userName = req.user.full_name || "User";
     await ActivityLog.create({
@@ -142,16 +163,29 @@ const updateScholarshipForm = async (req, res) => {
 
     await FormField.destroy({ where: { schema_id: schemaId } });
 
-    const formFields = fields.map((field, index) => ({
-      schema_id: schemaId,
-      label: field.label,
-      type: field.type,
-      is_required: field.is_required,
-      options_json: field.type === "SELECT" ? field.options : null,
-      order_no: index + 1,
-    }));
+    for (const [index, field] of fields.entries()) {
+      const createdField = await FormField.create({
+        schema_id: schemaId,
+        label: field.label,
+        type: field.type,
+        is_required: field.is_required,
+        order_no: index + 1,
+      });
 
-    await FormField.bulkCreate(formFields);
+      if (field.type === "SELECT" && Array.isArray(field.options)) {
+        const optionRows = field.options
+          .filter((option) => String(option).trim() !== "")
+          .map((option, optionIndex) => ({
+            field_id: createdField.id,
+            value: option,
+            order_no: optionIndex + 1,
+          }));
+
+        if (optionRows.length) {
+          await FormFieldOption.bulkCreate(optionRows);
+        }
+      }
+    }
 
     const userName = req.user.full_name || "User";
     await ActivityLog.create({

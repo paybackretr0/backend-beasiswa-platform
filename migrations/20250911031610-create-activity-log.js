@@ -57,7 +57,7 @@ module.exports = {
     await queryInterface.addIndex(
       "activity_logs",
       ["entity_type", "entity_id"],
-      { name: "activity_logs_index_10" }
+      { name: "activity_logs_index_10" },
     );
   },
 

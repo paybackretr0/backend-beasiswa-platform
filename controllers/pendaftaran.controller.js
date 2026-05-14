@@ -1,5 +1,6 @@
 const {
   FormField,
+  FormFieldOption,
   Scholarship,
   ScholarshipSchema,
   Faculty,
@@ -204,13 +205,13 @@ const getScholarshipForm = async (req, res) => {
     const formFields = await FormField.findAll({
       where: { schema_id: selectedSchema.id },
       order: [["order_no", "ASC"]],
-      attributes: [
-        "id",
-        "label",
-        "type",
-        "is_required",
-        "options_json",
-        "order_no",
+      attributes: ["id", "label", "type", "is_required", "order_no"],
+      include: [
+        {
+          model: FormFieldOption,
+          as: "options",
+          attributes: ["id", "value", "order_no"],
+        },
       ],
     });
 
@@ -227,7 +228,9 @@ const getScholarshipForm = async (req, res) => {
       label: field.label,
       type: field.type,
       is_required: field.is_required,
-      options: field.options_json || [],
+      options: (field.options || [])
+        .sort((a, b) => a.order_no - b.order_no)
+        .map((option) => option.value),
       order_no: field.order_no,
     }));
 

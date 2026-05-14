@@ -94,6 +94,7 @@ const invalidateGovernmentScholarshipCaches = async () => {
 const invalidateUserCaches = async () => {
   try {
     await Promise.all([invalidateCacheByPattern("users:*")]);
+    await Promise.all([invalidateCacheByPattern("user_applications:*")]);
   } catch (err) {
     console.error("User cache invalidate error:", err);
   }

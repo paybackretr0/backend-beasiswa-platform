@@ -1,71 +1,50 @@
 "use strict";
-
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.createTable("form_fields", {
+    await queryInterface.createTable("form_field_options", {
       id: {
         type: Sequelize.UUID,
         defaultValue: Sequelize.UUIDV4,
         primaryKey: true,
         allowNull: false,
       },
-      schema_id: {
+      field_id: {
         type: Sequelize.UUID,
         allowNull: false,
         references: {
-          model: "scholarship_schemas",
+          model: "form_fields",
           key: "id",
         },
         onUpdate: "CASCADE",
         onDelete: "CASCADE",
       },
-      label: {
-        type: Sequelize.STRING(191),
+      value: {
+        type: Sequelize.STRING(255),
         allowNull: false,
-        comment: "Judul pertanyaan / nama input",
-      },
-      type: {
-        type: Sequelize.ENUM(
-          "TEXT",
-          "NUMBER",
-          "DATE",
-          "FILE",
-          "SELECT",
-          "TEXTAREA",
-        ),
-        allowNull: false,
-        defaultValue: "TEXT",
-      },
-      is_required: {
-        type: Sequelize.BOOLEAN,
-        allowNull: false,
-        defaultValue: true,
       },
       order_no: {
         type: Sequelize.INTEGER,
         allowNull: false,
         defaultValue: 0,
-        comment: "Urutan field di form",
       },
       createdAt: {
-        type: Sequelize.DATE,
         allowNull: false,
+        type: Sequelize.DATE,
         defaultValue: Sequelize.literal("CURRENT_TIMESTAMP"),
       },
       updatedAt: {
-        type: Sequelize.DATE,
         allowNull: false,
+        type: Sequelize.DATE,
         defaultValue: Sequelize.literal("CURRENT_TIMESTAMP"),
       },
     });
 
-    await queryInterface.addIndex("form_fields", ["schema_id"], {
-      name: "form_fields_idx_schema",
+    await queryInterface.addIndex("form_field_options", ["field_id"], {
+      name: "form_field_options_idx_field",
     });
   },
-
   async down(queryInterface, Sequelize) {
-    await queryInterface.dropTable("form_fields");
+    await queryInterface.dropTable("form_field_options");
   },
 };
