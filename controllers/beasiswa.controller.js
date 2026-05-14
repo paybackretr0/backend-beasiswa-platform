@@ -869,10 +869,118 @@ const getBeasiswaById = async (req, res) => {
         ],
       });
 
-      const schemasFormatted = schemas.map((schema) => ({
-        ...schema.toJSON(),
-        stages: (schema.stages || []).sort((a, b) => a.order_no - b.order_no),
-      }));
+      const schemasFormatted = await Promise.all(
+        schemas.map(async (schema) => {
+          const schemaJson = schema.toJSON();
+
+          const directFacultyIds = (schemaJson.faculties || []).map(
+            (f) => f.id,
+          );
+          const directDepartmentIds = (schemaJson.departments || []).map(
+            (d) => d.id,
+          );
+          const directStudyProgramIds = (schemaJson.studyPrograms || []).map(
+            (sp) => sp.id,
+          );
+
+          const departmentsFromFaculties =
+            directFacultyIds.length > 0
+              ? await Department.findAll({
+                  where: {
+                    faculty_id: directFacultyIds,
+                    is_active: true,
+                  },
+                  attributes: ["id", "name", "faculty_id"],
+                  include: [
+                    {
+                      model: Faculty,
+                      as: "faculty",
+                      attributes: ["id", "name"],
+                    },
+                  ],
+                  order: [["name", "ASC"]],
+                })
+              : [];
+
+          const effectiveDepartmentMap = new Map();
+
+          (schemaJson.departments || []).forEach((department) => {
+            effectiveDepartmentMap.set(department.id, department);
+          });
+
+          departmentsFromFaculties.forEach((department) => {
+            effectiveDepartmentMap.set(department.id, department.toJSON());
+          });
+
+          const effectiveDepartments = Array.from(
+            effectiveDepartmentMap.values(),
+          );
+
+          const effectiveDepartmentIds = effectiveDepartments.map((d) => d.id);
+
+          const studyProgramsFromDepartments =
+            effectiveDepartmentIds.length > 0
+              ? await StudyProgram.findAll({
+                  where: {
+                    department_id: effectiveDepartmentIds,
+                    is_active: true,
+                  },
+                  attributes: ["id", "name", "degree", "department_id"],
+                  include: [
+                    {
+                      model: Department,
+                      as: "department",
+                      attributes: ["id", "name", "faculty_id"],
+                      include: [
+                        {
+                          model: Faculty,
+                          as: "faculty",
+                          attributes: ["id", "name"],
+                        },
+                      ],
+                    },
+                  ],
+                  order: [
+                    ["name", "ASC"],
+                    ["degree", "ASC"],
+                  ],
+                })
+              : [];
+
+          const effectiveStudyProgramMap = new Map();
+
+          (schemaJson.studyPrograms || []).forEach((studyProgram) => {
+            effectiveStudyProgramMap.set(studyProgram.id, studyProgram);
+          });
+
+          studyProgramsFromDepartments.forEach((studyProgram) => {
+            effectiveStudyProgramMap.set(
+              studyProgram.id,
+              studyProgram.toJSON(),
+            );
+          });
+
+          const effectiveStudyPrograms = Array.from(
+            effectiveStudyProgramMap.values(),
+          );
+
+          return {
+            ...schemaJson,
+
+            directFaculties: schemaJson.faculties || [],
+            directDepartments: schemaJson.departments || [],
+            directStudyPrograms: schemaJson.studyPrograms || [],
+
+            effectiveFaculties: schemaJson.faculties || [],
+            effectiveDepartments,
+            effectiveStudyPrograms,
+
+            stages: (schemaJson.stages || []).sort(
+              (a, b) => a.order_no - b.order_no,
+            ),
+          };
+        }),
+      );
 
       return {
         ...scholarship.toJSON(),
