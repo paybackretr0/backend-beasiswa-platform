@@ -8,7 +8,7 @@ const authorize = require("../middlewares/role.middleware");
 const {
   invalidateApplicationCache,
   invalidateScholarshipCache,
-  invalidateUserCache,
+  invalidateHistoryCache,
 } = require("../middlewares/cache.middleware");
 const { applicationUpload } = require("../middlewares/upload.middleware");
 const {
@@ -31,7 +31,7 @@ router.post(
   applicationUpload.any(),
   invalidateApplicationCache,
   invalidateScholarshipCache,
-  invalidateUserCache,
+  invalidateHistoryCache,
   submitApplication,
 );
 
@@ -41,7 +41,7 @@ router.put(
   applicationUpload.any(),
   invalidateApplicationCache,
   invalidateScholarshipCache,
-  invalidateUserCache,
+  invalidateHistoryCache,
   submitRevision,
 );
 

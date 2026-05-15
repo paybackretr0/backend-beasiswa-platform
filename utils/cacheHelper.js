@@ -94,9 +94,29 @@ const invalidateGovernmentScholarshipCaches = async () => {
 const invalidateUserCaches = async () => {
   try {
     await Promise.all([invalidateCacheByPattern("users:*")]);
-    await Promise.all([invalidateCacheByPattern("user_applications:*")]);
   } catch (err) {
     console.error("User cache invalidate error:", err);
+  }
+};
+
+/* Invalidate for History / Riwayat Aplikasi */
+const invalidateHistoryCaches = async () => {
+  try {
+    await Promise.all([invalidateCacheByPattern("user_applications:*")]);
+  } catch (err) {
+    console.error("History cache invalidate error:", err);
+  }
+};
+
+/**
+ * Hapus cache history untuk user tertentu
+ */
+const invalidateHistoryCacheByUserId = async (userId) => {
+  try {
+    if (!userId) return;
+    await redis.del(`user_applications:${userId}`);
+  } catch (err) {
+    console.error("History cache invalidate by user error:", err);
   }
 };
 
@@ -126,6 +146,8 @@ module.exports = {
   invalidateApplicationCaches,
   invalidateGovernmentScholarshipCaches,
   invalidateUserCaches,
+  invalidateHistoryCaches,
+  invalidateHistoryCacheByUserId,
   invalidateInformationCaches,
   invalidateCommentTemplateCaches,
 };
