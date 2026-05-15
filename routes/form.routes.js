@@ -15,7 +15,7 @@ const {
 router.use(
   authenticate,
   verifiedUser,
-  authorize(["SUPERADMIN", "VERIFIKATOR"])
+  authorize(["SUPERADMIN", "VERIFIKATOR"]),
 );
 
 router.get("/check/:schemaId", checkScholarshipForm);
