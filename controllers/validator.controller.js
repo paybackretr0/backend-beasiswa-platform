@@ -66,7 +66,7 @@ const validateApplication = async (req, res) => {
             {
               model: Scholarship,
               as: "scholarship",
-              attributes: ["id", "name"],
+              attributes: ["id", "name", "end_date"],
             },
           ],
         },
@@ -268,8 +268,6 @@ const requestRevision = async (req, res) => {
     const { notes, template_ids, revision_deadline } = req.body;
     const validatorId = req.user.id;
 
-    console.log("Received revision deadline:", revision_deadline);
-
     if (
       (!notes || notes.trim() === "") &&
       (!template_ids || template_ids.length === 0)
@@ -306,7 +304,7 @@ const requestRevision = async (req, res) => {
             {
               model: Scholarship,
               as: "scholarship",
-              attributes: ["id", "name"],
+              attributes: ["id", "name", "end_date"],
             },
           ],
         },
@@ -323,6 +321,22 @@ const requestRevision = async (req, res) => {
         "Application cannot be sent for revision. Current status is not VERIFIED",
         400,
       );
+    }
+
+    const scholarshipEndDate = application.schema?.scholarship?.end_date;
+
+    if (scholarshipEndDate) {
+      const endOfScholarship = moment
+        .tz(scholarshipEndDate, "Asia/Jakarta")
+        .endOf("day");
+
+      if (deadlineWIB.isAfter(endOfScholarship)) {
+        return errorResponse(
+          res,
+          "Deadline revisi tidak boleh melewati batas akhir beasiswa",
+          400,
+        );
+      }
     }
 
     const createdComments = [];

@@ -67,7 +67,7 @@ const verifyApplication = async (req, res) => {
             {
               model: Scholarship,
               as: "scholarship",
-              attributes: ["id", "name", "verification_level"],
+              attributes: ["id", "name", "verification_level", "end_date"],
             },
           ],
         },
@@ -381,7 +381,7 @@ const requestRevision = async (req, res) => {
             {
               model: Scholarship,
               as: "scholarship",
-              attributes: ["id", "name", "verification_level"],
+              attributes: ["id", "name", "verification_level", "end_date"],
             },
           ],
         },
@@ -433,6 +433,21 @@ const requestRevision = async (req, res) => {
           res,
           "Anda tidak memiliki akses untuk meminta revisi pendaftaran ini.",
           403,
+        );
+      }
+    }
+
+    const scholarshipEndDate = application.schema?.scholarship?.end_date;
+    if (scholarshipEndDate) {
+      const endOfScholarship = moment
+        .tz(scholarshipEndDate, "Asia/Jakarta")
+        .endOf("day");
+
+      if (deadlineWIB.isAfter(endOfScholarship)) {
+        return errorResponse(
+          res,
+          "Deadline revisi tidak boleh melewati batas akhir beasiswa",
+          400,
         );
       }
     }
