@@ -3,6 +3,8 @@ const {
   invalidateGovernmentScholarshipCaches,
   invalidateCacheByPattern,
   invalidateUserCaches,
+  invalidateHistoryCaches,
+  invalidateHistoryCacheByUserId,
   invalidateInformationCaches,
   invalidateCommentTemplateCaches,
 } = require("../utils/cacheHelper");
@@ -61,6 +63,26 @@ const invalidateUserCache = async (req, res, next) => {
 };
 
 /**
+ * Invalidate cache history (riwayat aplikasi)
+ */
+const invalidateHistoryCache = async (req, res, next) => {
+  try {
+    const role = req.user?.role;
+    if (role === "MAHASISWA") {
+      const userId = req.user?.id;
+      if (userId) {
+        await invalidateHistoryCacheByUserId(userId);
+      }
+    } else {
+      await invalidateHistoryCaches();
+    }
+  } catch (err) {
+    console.error("History cache invalidate error:", err);
+  }
+  next();
+};
+
+/**
  * Invalidate cache informasi (berita, artikel, dsb)
  */
 const invalidateInformationCache = async (req, res, next) => {
@@ -89,6 +111,7 @@ module.exports = {
   invalidateApplicationCache,
   invalidateGovScholarshipCache,
   invalidateUserCache,
+  invalidateHistoryCache,
   invalidateInformationCache,
   invalidateCommentTemplateCache,
 };

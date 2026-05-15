@@ -12,6 +12,7 @@ const {
 } = require("../controllers/verifikator.controller");
 const {
   invalidateApplicationCache,
+  invalidateHistoryCache,
 } = require("../middlewares/cache.middleware");
 
 router.use(
@@ -23,16 +24,19 @@ router.use(
 router.put(
   "/applications/:id/verify",
   invalidateApplicationCache,
+  invalidateHistoryCache,
   verifyApplication,
 );
 router.put(
   "/applications/:id/reject",
   invalidateApplicationCache,
+  invalidateHistoryCache,
   rejectApplication,
 );
 router.put(
   "/applications/:id/request-revision",
   invalidateApplicationCache,
+  invalidateHistoryCache,
   requestRevision,
 );
 

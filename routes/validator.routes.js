@@ -12,6 +12,7 @@ const {
 } = require("../controllers/validator.controller");
 const {
   invalidateApplicationCache,
+  invalidateHistoryCache,
 } = require("../middlewares/cache.middleware");
 
 router.use(authenticate, verifiedUser, authorize(["VALIDATOR_DITMAWA"]));
@@ -19,18 +20,21 @@ router.use(authenticate, verifiedUser, authorize(["VALIDATOR_DITMAWA"]));
 router.put(
   "/applications/:id/validate",
   invalidateApplicationCache,
+  invalidateHistoryCache,
   validateApplication,
 );
 
 router.put(
   "/applications/:id/reject",
   invalidateApplicationCache,
+  invalidateHistoryCache,
   rejectApplication,
 );
 
 router.put(
   "/applications/:id/request-revision",
   invalidateApplicationCache,
+  invalidateHistoryCache,
   requestRevision,
 );
 

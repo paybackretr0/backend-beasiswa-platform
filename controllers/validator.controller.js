@@ -268,8 +268,6 @@ const requestRevision = async (req, res) => {
     const { notes, template_ids, revision_deadline } = req.body;
     const validatorId = req.user.id;
 
-    console.log("Received revision deadline:", revision_deadline);
-
     if (
       (!notes || notes.trim() === "") &&
       (!template_ids || template_ids.length === 0)

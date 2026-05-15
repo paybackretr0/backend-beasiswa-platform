@@ -9,9 +9,15 @@ const {
   authenticate: auth,
   verifiedUser,
 } = require("../middlewares/auth.middleware");
+const { invalidateUserCache } = require("../middlewares/cache.middleware");
 
-router.post("/register", validateRegister, authController.register);
-router.post("/login", validateLogin, authController.login);
+router.post(
+  "/register",
+  validateRegister,
+  invalidateUserCache,
+  authController.register,
+);
+router.post("/login", validateLogin, invalidateUserCache, authController.login);
 router.post("/verify-email", authController.verifyEmail);
 router.post("/resend-verification-code", authController.resendVerificationCode);
 
@@ -23,7 +29,13 @@ router.post("/token", authController.getToken);
 router.get("/basic-profile", auth, authController.getBasicProfile);
 
 router.put("/profile", auth, verifiedUser, authController.updateProfile);
-router.put("/password", auth, verifiedUser, authController.updatePassword);
+router.put(
+  "/password",
+  auth,
+  verifiedUser,
+  invalidateUserCache,
+  authController.updatePassword,
+);
 router.post("/logout", auth, authController.logout);
 router.get("/profile", auth, verifiedUser, authController.getProfile);
 
