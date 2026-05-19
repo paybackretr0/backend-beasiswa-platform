@@ -21,6 +21,7 @@ const {
 const {
   invalidateScholarshipCache,
   invalidateApplicationCache,
+  invalidateHistoryCache,
 } = require("../middlewares/cache.middleware");
 const authorize = require("../middlewares/role.middleware");
 
@@ -56,6 +57,7 @@ router.put(
   "/:id",
   invalidateApplicationCache,
   invalidateScholarshipCache,
+  invalidateHistoryCache,
   scholarshipUpload.fields([
     { name: "requirement_file", maxCount: 1 },
     { name: "logo_file", maxCount: 1 },
@@ -67,24 +69,28 @@ router.patch(
   "/:id/deactivate",
   invalidateApplicationCache,
   invalidateScholarshipCache,
+  invalidateHistoryCache,
   deactivateScholarship,
 );
 router.patch(
   "/:id/activate",
   invalidateApplicationCache,
   invalidateScholarshipCache,
+  invalidateHistoryCache,
   activateScholarship,
 );
 router.patch(
   "/schema/:schemaId/deactivate",
   invalidateApplicationCache,
   invalidateScholarshipCache,
+  invalidateHistoryCache,
   deactivateSchema,
 );
 router.patch(
   "/schema/:schemaId/activate",
   invalidateApplicationCache,
   invalidateScholarshipCache,
+  invalidateHistoryCache,
   activateSchema,
 );
 
