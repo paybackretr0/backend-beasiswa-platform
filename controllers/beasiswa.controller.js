@@ -14,6 +14,8 @@ const {
   StudyProgram,
   User,
   ActivityLog,
+  Application,
+  ApplicationDocument,
   sequelize,
 } = require("../models");
 const { Op, or } = require("sequelize");
@@ -1178,18 +1180,137 @@ const updateScholarship = async (req, res) => {
         where: { schema_id: schema.id },
         transaction,
       });
-      await ScholarshipSchemaDocument.destroy({
-        where: { schema_id: schema.id },
-        transaction,
-      });
+
       await ScholarshipSchemaStage.destroy({
         where: { schema_id: schema.id },
         transaction,
       });
+
       await FormField.destroy({
+        where: {
+          schema_id: schema.id,
+          type: {
+            [Op.ne]: "FILE",
+          },
+        },
+        transaction,
+      });
+
+      const existingDocuments = await ScholarshipSchemaDocument.findAll({
         where: { schema_id: schema.id },
         transaction,
       });
+
+      const oldDocumentNames = existingDocuments
+        .map((doc) => String(doc.document_name).trim())
+        .filter(Boolean)
+        .sort();
+
+      const incomingDocumentNames = Array.isArray(documents)
+        ? documents.map((doc) => String(doc).trim()).filter(Boolean)
+        : [];
+
+      const newDocumentNames = [...incomingDocumentNames].sort();
+
+      const isDocumentChanged =
+        JSON.stringify(oldDocumentNames) !== JSON.stringify(newDocumentNames);
+
+      const existingDocumentNames = existingDocuments.map((doc) =>
+        String(doc.document_name).trim(),
+      );
+
+      const documentsToDelete = existingDocuments.filter(
+        (doc) =>
+          !incomingDocumentNames.includes(String(doc.document_name).trim()),
+      );
+
+      for (const doc of documentsToDelete) {
+        const usedCount = await ApplicationDocument.count({
+          where: {
+            schema_document_id: doc.id,
+          },
+          transaction,
+        });
+
+        if (usedCount > 0) {
+          await transaction.rollback();
+          return errorResponse(
+            res,
+            `Dokumen "${doc.document_name}" tidak dapat dihapus karena sudah digunakan oleh pendaftar.`,
+            400,
+          );
+        }
+
+        await ScholarshipSchemaDocument.destroy({
+          where: { id: doc.id },
+          transaction,
+        });
+      }
+
+      const addedDocumentNames = incomingDocumentNames.filter(
+        (docName) => !existingDocumentNames.includes(docName),
+      );
+
+      if (addedDocumentNames.length > 0) {
+        const documentData = addedDocumentNames.map((docName) => ({
+          schema_id: schema.id,
+          document_name: docName,
+        }));
+
+        await ScholarshipSchemaDocument.bulkCreate(documentData, {
+          transaction,
+        });
+      }
+
+      if (!isExternalBeasiswa) {
+        const existingFileFields = await FormField.findAll({
+          where: {
+            schema_id: schema.id,
+            type: "FILE",
+          },
+          attributes: ["label"],
+          transaction,
+        });
+
+        const existingFileLabels = existingFileFields.map((field) =>
+          String(field.label).trim(),
+        );
+
+        const addedFileFields = addedDocumentNames
+          .filter((docName) => !existingFileLabels.includes(docName))
+          .map((docName, index) => ({
+            schema_id: schema.id,
+            label: docName,
+            type: "FILE",
+            is_required: true,
+            order_no: existingFileLabels.length + index + 1,
+          }));
+
+        if (addedFileFields.length > 0) {
+          await FormField.bulkCreate(addedFileFields, { transaction });
+        }
+      }
+
+      if (isDocumentChanged) {
+        await Application.update(
+          {
+            status: "REVISION_NEEDED",
+            verified_by: null,
+            verified_at: null,
+            validated_by: null,
+            validated_at: null,
+          },
+          {
+            where: {
+              schema_id: schema.id,
+              status: {
+                [Op.in]: ["MENUNGGU_VERIFIKASI", "VERIFIED"],
+              },
+            },
+            transaction,
+          },
+        );
+      }
 
       if (requirements && requirements.length > 0) {
         const requirementData = requirements.map((req) => {
@@ -1218,27 +1339,6 @@ const updateScholarship = async (req, res) => {
         await ScholarshipSchemaRequirement.bulkCreate(requirementData, {
           transaction,
         });
-      }
-
-      if (documents && documents.length > 0) {
-        const documentData = documents.map((doc) => ({
-          schema_id: schema.id,
-          document_name: doc,
-        }));
-        await ScholarshipSchemaDocument.bulkCreate(documentData, {
-          transaction,
-        });
-
-        if (!isExternalBeasiswa) {
-          const formFields = documents.map((doc, index) => ({
-            schema_id: schema.id,
-            label: doc,
-            type: "FILE",
-            is_required: true,
-            order_no: index + 1,
-          }));
-          await FormField.bulkCreate(formFields, { transaction });
-        }
       }
 
       if (!isExternalBeasiswa) {
@@ -1326,31 +1426,54 @@ const updateScholarship = async (req, res) => {
     const schemasToDelete = existingSchemaIds.filter(
       (id) => !schemasToKeep.includes(id),
     );
+
     if (schemasToDelete.length > 0) {
+      const usedSchemaCount = await Application.count({
+        where: {
+          schema_id: schemasToDelete,
+        },
+        transaction,
+      });
+
+      if (usedSchemaCount > 0) {
+        await transaction.rollback();
+        return errorResponse(
+          res,
+          "Schema tidak dapat dihapus karena sudah memiliki pendaftar.",
+          400,
+        );
+      }
+
       await ScholarshipSchemaRequirement.destroy({
         where: { schema_id: schemasToDelete },
         transaction,
       });
+
       await ScholarshipSchemaDocument.destroy({
         where: { schema_id: schemasToDelete },
         transaction,
       });
+
       await ScholarshipSchemaStage.destroy({
         where: { schema_id: schemasToDelete },
         transaction,
       });
+
       await FormField.destroy({
         where: { schema_id: schemasToDelete },
         transaction,
       });
+
       await ScholarshipSchemaFaculty.destroy({
         where: { schema_id: schemasToDelete },
         transaction,
       });
+
       await ScholarshipSchemaDepartment.destroy({
         where: { schema_id: schemasToDelete },
         transaction,
       });
+
       await ScholarshipSchemaStudyProgram.destroy({
         where: { schema_id: schemasToDelete },
         transaction,
