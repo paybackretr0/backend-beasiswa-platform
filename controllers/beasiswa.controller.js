@@ -475,7 +475,7 @@ const createScholarship = async (req, res) => {
 
     if (!parsedSchemas || parsedSchemas.length === 0) {
       await transaction.rollback();
-      return errorResponse(res, "Minimal satu schema harus dibuat", 400);
+      return errorResponse(res, "Minimal satu skema harus dibuat", 400);
     }
 
     for (const schemaData of parsedSchemas) {
@@ -495,7 +495,7 @@ const createScholarship = async (req, res) => {
 
       if (!schemaName) {
         await transaction.rollback();
-        return errorResponse(res, "Nama schema wajib diisi", 400);
+        return errorResponse(res, "Nama skema wajib diisi", 400);
       }
 
       const parsedGpaMinimum = hasNonEmptyValue(gpa_minimum)
@@ -740,7 +740,7 @@ const createScholarship = async (req, res) => {
       action: "CREATE_SCHOLARSHIP",
       entity_type: "Scholarship",
       entity_id: scholarship.id,
-      description: `Beasiswa "${scholarship.name}" dengan ${parsedSchemas.length} schema telah dibuat oleh ${userName}.`,
+      description: `Beasiswa "${scholarship.name}" dengan ${parsedSchemas.length} skema telah dibuat oleh ${userName}.`,
       ip_address: req.ip,
       user_agent: req.headers["user-agent"],
     });
@@ -1102,7 +1102,7 @@ const updateScholarship = async (req, res) => {
 
     if (!parsedSchemas || parsedSchemas.length === 0) {
       await transaction.rollback();
-      return errorResponse(res, "Minimal satu schema harus ada", 400);
+      return errorResponse(res, "Minimal satu skema harus ada", 400);
     }
 
     const existingSchemas = await ScholarshipSchema.findAll({
@@ -1132,7 +1132,7 @@ const updateScholarship = async (req, res) => {
 
       if (!schemaName) {
         await transaction.rollback();
-        return errorResponse(res, "Nama schema wajib diisi", 400);
+        return errorResponse(res, "Nama skema wajib diisi", 400);
       }
 
       const parsedGpaMinimum = hasNonEmptyValue(gpa_minimum)
@@ -1439,7 +1439,7 @@ const updateScholarship = async (req, res) => {
         await transaction.rollback();
         return errorResponse(
           res,
-          "Schema tidak dapat dihapus karena sudah memiliki pendaftar.",
+          "Skema tidak dapat dihapus karena sudah memiliki pendaftar.",
           400,
         );
       }
@@ -1607,7 +1607,7 @@ const updateScholarship = async (req, res) => {
       action: "UPDATE_SCHOLARSHIP",
       entity_type: "Scholarship",
       entity_id: scholarship.id,
-      description: `Beasiswa "${scholarship.name}" dengan ${parsedSchemas.length} schema telah diperbarui oleh ${userName}.`,
+      description: `Beasiswa "${scholarship.name}" dengan ${parsedSchemas.length} skema telah diperbarui oleh ${userName}.`,
       ip_address: req.ip,
       user_agent: req.headers["user-agent"],
     });
@@ -1642,7 +1642,7 @@ const deactivateScholarship = async (req, res) => {
       action: "DEACTIVATE_SCHOLARSHIP",
       entity_type: "Scholarship",
       entity_id: scholarship.id,
-      description: `Beasiswa "${scholarship.name}" dan semua schema-nya telah dinonaktifkan oleh ${userName}.`,
+      description: `Beasiswa "${scholarship.name}" dan semua skema-nya telah dinonaktifkan oleh ${userName}.`,
       ip_address: req.ip,
       user_agent: req.headers["user-agent"],
     });
@@ -1676,7 +1676,7 @@ const activateScholarship = async (req, res) => {
       action: "ACTIVATE_SCHOLARSHIP",
       entity_type: "Scholarship",
       entity_id: scholarship.id,
-      description: `Beasiswa "${scholarship.name}" dan semua schema-nya telah diaktifkan oleh ${userName}.`,
+      description: `Beasiswa "${scholarship.name}" dan semua skema-nya telah diaktifkan oleh ${userName}.`,
       ip_address: req.ip,
       user_agent: req.headers["user-agent"],
     });
@@ -1874,19 +1874,19 @@ const activateSchema = async (req, res) => {
     });
 
     if (!schema) {
-      return errorResponse(res, "Schema tidak ditemukan", 404);
+      return errorResponse(res, "Skema tidak ditemukan", 404);
     }
 
     if (!schema.scholarship.is_active) {
       return errorResponse(
         res,
-        "Tidak dapat mengaktifkan schema karena beasiswa induk tidak aktif",
+        "Tidak dapat mengaktifkan skema karena beasiswa induk tidak aktif",
         400,
       );
     }
 
     if (schema.is_active) {
-      return errorResponse(res, "Schema sudah aktif", 400);
+      return errorResponse(res, "Skema sudah aktif", 400);
     }
 
     await schema.update({ is_active: true });
@@ -1897,22 +1897,21 @@ const activateSchema = async (req, res) => {
       action: "ACTIVATE_SCHEMA",
       entity_type: "ScholarshipSchema",
       entity_id: schema.id,
-      description: `Schema "${schema.name}" dari beasiswa "${schema.scholarship.name}" telah diaktifkan oleh ${userName}.`,
+      description: `Skema "${schema.name}" dari beasiswa "${schema.scholarship.name}" telah diaktifkan oleh ${userName}.`,
       ip_address: req.ip,
       user_agent: req.headers["user-agent"],
     });
 
-    successResponse(res, "Schema berhasil diaktifkan", schema);
+    successResponse(res, "Skema berhasil diaktifkan", schema);
   } catch (error) {
-    console.error("Error activating schema:", error);
-    errorResponse(res, "Gagal mengaktifkan schema", 500);
+    console.error("Error activating skema:", error);
+    errorResponse(res, "Gagal mengaktifkan skema", 500);
   }
 };
 
 const deactivateSchema = async (req, res) => {
   try {
     const { schemaId } = req.params;
-    console.log("Deactivating schema with ID:", schemaId);
 
     const schema = await ScholarshipSchema.findByPk(schemaId, {
       include: [
@@ -1925,11 +1924,11 @@ const deactivateSchema = async (req, res) => {
     });
 
     if (!schema) {
-      return errorResponse(res, "Schema tidak ditemukan", 404);
+      return errorResponse(res, "Skema tidak ditemukan", 404);
     }
 
     if (!schema.is_active) {
-      return errorResponse(res, "Schema sudah nonaktif", 400);
+      return errorResponse(res, "Skema sudah nonaktif", 400);
     }
 
     await schema.update({ is_active: false });
@@ -1940,15 +1939,15 @@ const deactivateSchema = async (req, res) => {
       action: "DEACTIVATE_SCHEMA",
       entity_type: "ScholarshipSchema",
       entity_id: schema.id,
-      description: `Schema "${schema.name}" dari beasiswa "${schema.scholarship.name}" telah dinonaktifkan oleh ${userName}.`,
+      description: `Skema "${schema.name}" dari beasiswa "${schema.scholarship.name}" telah dinonaktifkan oleh ${userName}.`,
       ip_address: req.ip,
       user_agent: req.headers["user-agent"],
     });
 
-    successResponse(res, "Schema berhasil dinonaktifkan", schema);
+    successResponse(res, "Skema berhasil dinonaktifkan", schema);
   } catch (error) {
-    console.error("Error deactivating schema:", error);
-    errorResponse(res, "Gagal menonaktifkan schema", 500);
+    console.error("Error deactivating skema:", error);
+    errorResponse(res, "Gagal menonaktifkan skema", 500);
   }
 };
 
