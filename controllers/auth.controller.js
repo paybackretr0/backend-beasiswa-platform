@@ -2,6 +2,8 @@ const { hashPassword, comparePassword } = require("../utils/password");
 const jwt = require("../utils/jwt");
 const {
   User,
+  Student,
+  Staff,
   RefreshToken,
   Faculty,
   Department,
@@ -64,18 +66,12 @@ const register = async (req, res) => {
       birth_place,
       gender,
       phone_number,
-      faculty_id,
-      department_id,
       study_program_id,
     } = req.body;
 
-    if (!faculty_id || !department_id || !study_program_id) {
+    if (!study_program_id) {
       await t.rollback();
-      return errorResponse(
-        res,
-        "Fakultas, Departemen, dan Program Studi harus dipilih",
-        400,
-      );
+      return errorResponse(res, "Program Studi harus dipilih", 400);
     }
 
     const existingUser = await User.findOne({
@@ -108,40 +104,25 @@ const register = async (req, res) => {
       );
     }
 
-    const faculty = await Faculty.findOne({
-      where: { id: faculty_id, is_active: true },
-      transaction: t,
-    });
-
-    if (!faculty) {
-      await t.rollback();
-      return errorResponse(res, "Fakultas tidak valid atau tidak aktif", 400);
-    }
-
-    const department = await Department.findOne({
-      where: {
-        id: department_id,
-        faculty_id: faculty_id,
-        is_active: true,
-      },
-      transaction: t,
-    });
-
-    if (!department) {
-      await t.rollback();
-      return errorResponse(
-        res,
-        "Departemen tidak valid atau tidak sesuai dengan fakultas",
-        400,
-      );
-    }
-
     const studyProgram = await StudyProgram.findOne({
       where: {
         id: study_program_id,
-        department_id: department_id,
         is_active: true,
       },
+      include: [
+        {
+          model: Department,
+          as: "department",
+          attributes: ["id", "faculty_id"],
+          include: [
+            {
+              model: Faculty,
+              as: "faculty",
+              attributes: ["id"],
+            },
+          ],
+        },
+      ],
       transaction: t,
     });
 
@@ -161,18 +142,23 @@ const register = async (req, res) => {
       {
         full_name,
         email,
-        nim,
         password: hashedPassword,
-        birth_date,
-        birth_place,
         role: "MAHASISWA",
-        gender,
         phone_number,
-        faculty_id,
-        department_id,
-        study_program_id,
         emailVerificationCode: verificationCode,
         emailVerified: false,
+      },
+      { transaction: t },
+    );
+
+    await Student.create(
+      {
+        id: newUser.id,
+        nim,
+        birth_date,
+        birth_place,
+        gender,
+        study_program_id,
       },
       { transaction: t },
     );
@@ -193,7 +179,7 @@ const register = async (req, res) => {
     await t.commit();
 
     try {
-      await sendVerificationEmail(email, verificationCode, full_name);
+      await sendVerificationEmail(newUser, verificationCode);
     } catch (emailError) {
       console.error("Failed to send verification email:", emailError);
     }
@@ -273,19 +259,40 @@ const login = async (req, res) => {
       where: { email },
       include: [
         {
-          model: Faculty,
-          as: "faculty",
-          attributes: ["id", "code", "name"],
+          model: Student,
+          as: "student",
+          include: [
+            {
+              model: StudyProgram,
+              as: "study_program",
+              attributes: ["id", "code", "degree", "name"],
+              include: [
+                {
+                  model: Department,
+                  as: "department",
+                  attributes: ["id", "code", "name"],
+                  include: [
+                    {
+                      model: Faculty,
+                      as: "faculty",
+                      attributes: ["id", "code", "name"],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
         },
         {
-          model: Department,
-          as: "department",
-          attributes: ["id", "code", "name"],
-        },
-        {
-          model: StudyProgram,
-          as: "study_program",
-          attributes: ["id", "code", "degree"],
+          model: Staff,
+          as: "staff",
+          include: [
+            {
+              model: Faculty,
+              as: "faculty",
+              attributes: ["id", "code", "name"],
+            },
+          ],
         },
       ],
     });
@@ -327,34 +334,53 @@ const login = async (req, res) => {
         full_name: user.full_name,
         email: user.email,
         role: user.role,
-        nim: user.nim,
         phone_number: user.phone_number,
-        gender: user.gender,
-        birth_date: user.birth_date,
-        birth_place: user.birth_place,
         emailVerified: user.emailVerified,
-        faculty_id: user.faculty_id,
-        faculty: user.faculty
+        student: user.student
           ? {
-              id: user.faculty.id,
-              code: user.faculty.code,
-              name: user.faculty.name,
+              id: user.student.id,
+              nim: user.student.nim,
+              gender: user.student.gender,
+              birth_date: user.student.birth_date,
+              birth_place: user.student.birth_place,
+              study_program_id: user.student.study_program_id,
+              study_program: user.student.study_program
+                ? {
+                    id: user.student.study_program.id,
+                    code: user.student.study_program.code,
+                    name: user.student.study_program.name,
+                    degree: user.student.study_program.degree,
+                  }
+                : null,
+              department: user.student.study_program?.department
+                ? {
+                    id: user.student.study_program.department.id,
+                    code: user.student.study_program.department.code,
+                    name: user.student.study_program.department.name,
+                  }
+                : null,
+              faculty: user.student.study_program?.department?.faculty
+                ? {
+                    id: user.student.study_program.department.faculty.id,
+                    code: user.student.study_program.department.faculty.code,
+                    name: user.student.study_program.department.faculty.name,
+                  }
+                : null,
             }
           : null,
-        department_id: user.department_id,
-        department: user.department
+        staff: user.staff
           ? {
-              id: user.department.id,
-              code: user.department.code,
-              name: user.department.name,
-            }
-          : null,
-        study_program_id: user.study_program_id,
-        study_program: user.study_program
-          ? {
-              id: user.study_program.id,
-              code: user.study_program.code,
-              degree: user.study_program.degree,
+              id: user.staff.id,
+              gender: user.staff.gender,
+              staff_number: user.staff.staff_number,
+              faculty_id: user.staff.faculty_id,
+              faculty: user.staff.faculty
+                ? {
+                    id: user.staff.faculty.id,
+                    code: user.staff.faculty.code,
+                    name: user.staff.faculty.name,
+                  }
+                : null,
             }
           : null,
       },
@@ -485,10 +511,21 @@ const resetPassword = async (req, res) => {
 };
 
 const updateProfile = async (req, res) => {
-  const { phone_number, gender } = req.body;
+  const { phone_number, gender, birth_date, birth_place } = req.body;
 
   try {
-    const user = await User.findByPk(req.user.id);
+    const user = await User.findByPk(req.user.id, {
+      include: [
+        {
+          model: Student,
+          as: "student",
+        },
+        {
+          model: Staff,
+          as: "staff",
+        },
+      ],
+    });
     if (!user) {
       return errorResponse(res, "User not found", 404);
     }
@@ -499,8 +536,19 @@ const updateProfile = async (req, res) => {
 
     await user.update({
       phone_number: phone_number ?? user.phone_number,
-      gender: gender ?? user.gender,
     });
+
+    if (user.role === "MAHASISWA" && user.student) {
+      await user.student.update({
+        gender: gender ?? user.student.gender,
+        birth_date: birth_date ?? user.student.birth_date,
+        birth_place: birth_place ?? user.student.birth_place,
+      });
+    } else if (user.staff) {
+      await user.staff.update({
+        gender: gender ?? user.staff.gender,
+      });
+    }
 
     await ActivityLog.create({
       user_id: user.id,
@@ -516,7 +564,8 @@ const updateProfile = async (req, res) => {
       id: user.id,
       full_name: user.full_name,
       phone_number: user.phone_number,
-      gender: user.gender,
+      gender:
+        user.role === "MAHASISWA" ? user.student?.gender : user.staff?.gender,
       email: user.email,
       role: user.role,
     });
@@ -605,19 +654,40 @@ const getProfile = async (req, res) => {
     const user = await User.findByPk(req.user.id, {
       include: [
         {
-          model: Faculty,
-          as: "faculty",
-          attributes: ["name"],
+          model: Student,
+          as: "student",
+          include: [
+            {
+              model: StudyProgram,
+              as: "study_program",
+              attributes: ["code", "name", "degree"],
+              include: [
+                {
+                  model: Department,
+                  as: "department",
+                  attributes: ["name"],
+                  include: [
+                    {
+                      model: Faculty,
+                      as: "faculty",
+                      attributes: ["name"],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
         },
         {
-          model: Department,
-          as: "department",
-          attributes: ["name"],
-        },
-        {
-          model: StudyProgram,
-          as: "study_program",
-          attributes: ["code", "name", "degree"],
+          model: Staff,
+          as: "staff",
+          include: [
+            {
+              model: Faculty,
+              as: "faculty",
+              attributes: ["name"],
+            },
+          ],
         },
       ],
       attributes: {
