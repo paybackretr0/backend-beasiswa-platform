@@ -35,7 +35,7 @@ module.exports = {
           "BELUM_DIMULAI",
           "SEDANG_BERLANGSUNG",
           "SELESAI",
-          "GAGAL"
+          "GAGAL",
         ),
         allowNull: false,
         defaultValue: "BELUM_DIMULAI",
@@ -67,19 +67,23 @@ module.exports = {
     await queryInterface.addConstraint("application_stage_progress", {
       fields: ["application_id", "stage_id"],
       type: "unique",
-      name: "application_stage_unique",
+      name: "uq_application_stage_progress_application_stage",
     });
 
     await queryInterface.addIndex(
       "application_stage_progress",
       ["application_id"],
       {
-        name: "application_stage_progress_idx_application",
-      }
+        name: "idx_application_stage_progress_application_id",
+      },
     );
 
     await queryInterface.addIndex("application_stage_progress", ["stage_id"], {
-      name: "application_stage_progress_idx_stage",
+      name: "idx_application_stage_progress_stage_id",
+    });
+
+    await queryInterface.addIndex("application_stage_progress", ["status"], {
+      name: "idx_application_stage_progress_status",
     });
   },
 

@@ -1,5 +1,7 @@
 "use strict";
+
 const { Model } = require("sequelize");
+
 module.exports = (sequelize, DataTypes) => {
   class ApplicationDocument extends Model {
     static associate(models) {
@@ -7,26 +9,51 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "application_id",
         as: "application",
       });
+
+      ApplicationDocument.belongsTo(models.ScholarshipSchema, {
+        foreignKey: "schema_id",
+        as: "schema",
+      });
+
       ApplicationDocument.belongsTo(models.ScholarshipSchemaDocument, {
         foreignKey: "schema_document_id",
         as: "schemaDocument",
       });
     }
   }
+
   ApplicationDocument.init(
     {
       id: {
         type: DataTypes.UUID,
         primaryKey: true,
         defaultValue: DataTypes.UUIDV4,
+        allowNull: false,
       },
       application_id: {
         type: DataTypes.UUID,
         allowNull: false,
+        references: {
+          model: "applications",
+          key: "id",
+        },
+      },
+      schema_id: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        references: {
+          model: "scholarship_schemas",
+          key: "id",
+        },
+        comment: "Skema dari pendaftaran untuk menjaga integritas dokumen",
       },
       schema_document_id: {
         type: DataTypes.UUID,
         allowNull: false,
+        references: {
+          model: "scholarship_schema_documents",
+          key: "id",
+        },
       },
       file_path: {
         type: DataTypes.STRING(512),
@@ -49,5 +76,6 @@ module.exports = (sequelize, DataTypes) => {
       updatedAt: false,
     },
   );
+
   return ApplicationDocument;
 };

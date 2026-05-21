@@ -1,5 +1,7 @@
 "use strict";
+
 const { Model } = require("sequelize");
+
 module.exports = (sequelize, DataTypes) => {
   class ScholarshipSchemaStage extends Model {
     static associate(models) {
@@ -10,10 +12,11 @@ module.exports = (sequelize, DataTypes) => {
 
       ScholarshipSchemaStage.hasMany(models.ApplicationStageProgress, {
         foreignKey: "stage_id",
-        as: "stageProgress",
+        as: "stage_progress",
       });
     }
   }
+
   ScholarshipSchemaStage.init(
     {
       id: {
@@ -25,6 +28,10 @@ module.exports = (sequelize, DataTypes) => {
       schema_id: {
         type: DataTypes.UUID,
         allowNull: false,
+        references: {
+          model: "scholarship_schemas",
+          key: "id",
+        },
       },
       stage_name: {
         type: DataTypes.STRING(191),
@@ -33,6 +40,7 @@ module.exports = (sequelize, DataTypes) => {
       order_no: {
         type: DataTypes.INTEGER,
         allowNull: false,
+        defaultValue: 0,
       },
     },
     {
@@ -40,7 +48,8 @@ module.exports = (sequelize, DataTypes) => {
       modelName: "ScholarshipSchemaStage",
       tableName: "scholarship_schema_stages",
       timestamps: true,
-    }
+    },
   );
+
   return ScholarshipSchemaStage;
 };

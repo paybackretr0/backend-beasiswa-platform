@@ -1,5 +1,7 @@
 "use strict";
+
 const { Model } = require("sequelize");
+
 module.exports = (sequelize, DataTypes) => {
   class ApplicationComment extends Model {
     static associate(models) {
@@ -7,16 +9,19 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "application_id",
         as: "application",
       });
+
       ApplicationComment.belongsTo(models.ApplicationCommentTemplate, {
         foreignKey: "template_id",
         as: "template",
       });
-      ApplicationComment.belongsTo(models.User, {
+
+      ApplicationComment.belongsTo(models.Staff, {
         foreignKey: "commented_by",
         as: "commenter",
       });
     }
   }
+
   ApplicationComment.init(
     {
       id: {
@@ -28,6 +33,10 @@ module.exports = (sequelize, DataTypes) => {
       application_id: {
         type: DataTypes.UUID,
         allowNull: false,
+        references: {
+          model: "applications",
+          key: "id",
+        },
       },
       comment_text: {
         type: DataTypes.TEXT,
@@ -39,7 +48,7 @@ module.exports = (sequelize, DataTypes) => {
           "REVISION",
           "VERIFICATION",
           "VALIDATION",
-          "GENERAL"
+          "GENERAL",
         ),
         allowNull: false,
         defaultValue: "GENERAL",
@@ -47,10 +56,18 @@ module.exports = (sequelize, DataTypes) => {
       template_id: {
         type: DataTypes.UUID,
         allowNull: true,
+        references: {
+          model: "application_comment_templates",
+          key: "id",
+        },
       },
       commented_by: {
         type: DataTypes.UUID,
         allowNull: false,
+        references: {
+          model: "staffs",
+          key: "id",
+        },
       },
       is_visible_to_student: {
         type: DataTypes.BOOLEAN,
@@ -63,7 +80,8 @@ module.exports = (sequelize, DataTypes) => {
       modelName: "ApplicationComment",
       tableName: "application_comments",
       timestamps: true,
-    }
+    },
   );
+
   return ApplicationComment;
 };

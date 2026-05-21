@@ -1,5 +1,7 @@
 "use strict";
+
 const { Model } = require("sequelize");
+
 module.exports = (sequelize, DataTypes) => {
   class Department extends Model {
     static associate(models) {
@@ -7,22 +9,29 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "faculty_id",
         as: "faculty",
       });
-      Department.hasMany(models.User, {
+
+      Department.hasMany(models.StudyProgram, {
         foreignKey: "department_id",
-        as: "users",
+        as: "study_programs",
       });
     }
   }
+
   Department.init(
     {
       id: {
         type: DataTypes.UUID,
         primaryKey: true,
         defaultValue: DataTypes.UUIDV4,
+        allowNull: false,
       },
       faculty_id: {
         type: DataTypes.UUID,
         allowNull: false,
+        references: {
+          model: "faculties",
+          key: "id",
+        },
       },
       code: {
         type: DataTypes.STRING(50),
@@ -45,5 +54,6 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
     },
   );
+
   return Department;
 };

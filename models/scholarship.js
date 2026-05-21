@@ -1,9 +1,11 @@
 "use strict";
+
 const { Model } = require("sequelize");
+
 module.exports = (sequelize, DataTypes) => {
   class Scholarship extends Model {
     static associate(models) {
-      Scholarship.belongsTo(models.User, {
+      Scholarship.belongsTo(models.Staff, {
         foreignKey: "created_by",
         as: "creator",
       });
@@ -19,12 +21,14 @@ module.exports = (sequelize, DataTypes) => {
       });
     }
   }
+
   Scholarship.init(
     {
       id: {
         type: DataTypes.UUID,
         primaryKey: true,
         defaultValue: DataTypes.UUIDV4,
+        allowNull: false,
       },
       name: {
         type: DataTypes.STRING(191),
@@ -72,6 +76,9 @@ module.exports = (sequelize, DataTypes) => {
       contact_person_email: {
         type: DataTypes.STRING(191),
         allowNull: false,
+        validate: {
+          isEmail: true,
+        },
       },
       contact_person_phone: {
         type: DataTypes.STRING(20),
@@ -96,6 +103,10 @@ module.exports = (sequelize, DataTypes) => {
       created_by: {
         type: DataTypes.UUID,
         allowNull: true,
+        references: {
+          model: "staffs",
+          key: "id",
+        },
       },
     },
     {
@@ -105,5 +116,6 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
     },
   );
+
   return Scholarship;
 };

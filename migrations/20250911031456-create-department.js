@@ -44,6 +44,15 @@ module.exports = {
         defaultValue: Sequelize.literal("CURRENT_TIMESTAMP"),
       },
     });
+
+    await queryInterface.addIndex("departments", ["faculty_id"], {
+      name: "idx_departments_faculty_id",
+    });
+
+    await queryInterface.addIndex("departments", ["faculty_id", "code"], {
+      unique: true,
+      name: "uq_departments_faculty_code",
+    });
   },
 
   async down(queryInterface, Sequelize) {

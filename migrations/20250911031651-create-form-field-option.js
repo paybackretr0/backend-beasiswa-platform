@@ -1,4 +1,5 @@
 "use strict";
+
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
@@ -41,9 +42,23 @@ module.exports = {
     });
 
     await queryInterface.addIndex("form_field_options", ["field_id"], {
-      name: "form_field_options_idx_field",
+      name: "idx_form_field_options_field_id",
     });
+
+    await queryInterface.addIndex("form_field_options", ["field_id", "value"], {
+      unique: true,
+      name: "uq_form_field_options_field_value",
+    });
+
+    await queryInterface.addIndex(
+      "form_field_options",
+      ["field_id", "order_no"],
+      {
+        name: "idx_form_field_options_field_order",
+      },
+    );
   },
+
   async down(queryInterface, Sequelize) {
     await queryInterface.dropTable("form_field_options");
   },

@@ -3,9 +3,7 @@ const { Model } = require("sequelize");
 module.exports = (sequelize, DataTypes) => {
   class ChatRoomParticipant extends Model {
     static associate(models) {
-      // ChatRoomParticipant belongs to ChatRoom
       ChatRoomParticipant.belongsTo(models.ChatRoom, { foreignKey: "room_id" });
-      // ChatRoomParticipant belongs to User
       ChatRoomParticipant.belongsTo(models.User, { foreignKey: "user_id" });
     }
   }
@@ -32,7 +30,7 @@ module.exports = (sequelize, DataTypes) => {
       modelName: "ChatRoomParticipant",
       tableName: "chat_room_participants",
       timestamps: false,
-    }
+    },
   );
   return ChatRoomParticipant;
 };

@@ -23,7 +23,7 @@ module.exports = {
       comment_text: {
         type: Sequelize.TEXT,
         allowNull: false,
-        comment: "Isi komentar dari admin/verifikator",
+        comment: "Isi komentar dari staf pengelola",
       },
       comment_type: {
         type: Sequelize.ENUM(
@@ -31,7 +31,7 @@ module.exports = {
           "REVISION",
           "VERIFICATION",
           "VALIDATION",
-          "GENERAL"
+          "GENERAL",
         ),
         allowNull: false,
         defaultValue: "GENERAL",
@@ -46,18 +46,18 @@ module.exports = {
         },
         onUpdate: "CASCADE",
         onDelete: "SET NULL",
-        comment: "Template yang digunakan (jika menggunakan template)",
+        comment: "Template yang digunakan jika menggunakan template",
       },
       commented_by: {
         type: Sequelize.UUID,
         allowNull: false,
         references: {
-          model: "users",
+          model: "staffs",
           key: "id",
         },
         onUpdate: "CASCADE",
-        onDelete: "CASCADE",
-        comment: "User yang memberikan komentar",
+        onDelete: "RESTRICT",
+        comment: "Staf yang memberikan komentar",
       },
       is_visible_to_student: {
         type: Sequelize.BOOLEAN,
@@ -78,15 +78,19 @@ module.exports = {
     });
 
     await queryInterface.addIndex("application_comments", ["application_id"], {
-      name: "app_comments_idx_application",
+      name: "idx_application_comments_application_id",
     });
 
     await queryInterface.addIndex("application_comments", ["comment_type"], {
-      name: "app_comments_idx_type",
+      name: "idx_application_comments_comment_type",
     });
 
     await queryInterface.addIndex("application_comments", ["commented_by"], {
-      name: "app_comments_idx_commenter",
+      name: "idx_application_comments_commented_by",
+    });
+
+    await queryInterface.addIndex("application_comments", ["template_id"], {
+      name: "idx_application_comments_template_id",
     });
   },
 

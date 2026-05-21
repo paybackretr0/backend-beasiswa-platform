@@ -13,7 +13,7 @@ module.exports = {
       template_name: {
         type: Sequelize.STRING(191),
         allowNull: false,
-        comment: "Nama template untuk admin (tidak ditampilkan ke mahasiswa)",
+        comment: "Nama template untuk admin/staf",
       },
       comment_text: {
         type: Sequelize.TEXT,
@@ -24,7 +24,7 @@ module.exports = {
         type: Sequelize.ENUM("REJECTION", "REVISION", "GENERAL"),
         allowNull: false,
         defaultValue: "GENERAL",
-        comment: "Jenis template: untuk rejection, revision, atau umum",
+        comment: "Jenis template: rejection, revision, atau umum",
       },
       is_active: {
         type: Sequelize.BOOLEAN,
@@ -35,12 +35,12 @@ module.exports = {
         type: Sequelize.UUID,
         allowNull: true,
         references: {
-          model: "users",
+          model: "staffs",
           key: "id",
         },
         onUpdate: "CASCADE",
         onDelete: "SET NULL",
-        comment: "Superadmin yang membuat template",
+        comment: "Staf yang membuat template",
       },
       createdAt: {
         type: Sequelize.DATE,
@@ -58,16 +58,24 @@ module.exports = {
       "application_comment_templates",
       ["template_type"],
       {
-        name: "comment_templates_idx_type",
-      }
+        name: "idx_comment_templates_type",
+      },
     );
 
     await queryInterface.addIndex(
       "application_comment_templates",
       ["is_active"],
       {
-        name: "comment_templates_idx_active",
-      }
+        name: "idx_comment_templates_is_active",
+      },
+    );
+
+    await queryInterface.addIndex(
+      "application_comment_templates",
+      ["created_by"],
+      {
+        name: "idx_comment_templates_created_by",
+      },
     );
   },
 

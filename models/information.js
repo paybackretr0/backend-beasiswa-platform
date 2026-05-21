@@ -1,21 +1,24 @@
 "use strict";
+
 const { Model } = require("sequelize");
+
 module.exports = (sequelize, DataTypes) => {
   class Information extends Model {
     static associate(models) {
-      // Information belongs to User (author)
-      Information.belongsTo(models.User, {
+      Information.belongsTo(models.Staff, {
         foreignKey: "author_id",
         as: "author",
       });
     }
   }
+
   Information.init(
     {
       id: {
         type: DataTypes.UUID,
         primaryKey: true,
         defaultValue: DataTypes.UUIDV4,
+        allowNull: false,
       },
       type: {
         type: DataTypes.ENUM("NEWS", "ARTICLE"),
@@ -47,6 +50,10 @@ module.exports = (sequelize, DataTypes) => {
       author_id: {
         type: DataTypes.UUID,
         allowNull: true,
+        references: {
+          model: "staffs",
+          key: "id",
+        },
       },
       published_at: {
         type: DataTypes.DATE,
@@ -60,5 +67,6 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
     },
   );
+
   return Information;
 };

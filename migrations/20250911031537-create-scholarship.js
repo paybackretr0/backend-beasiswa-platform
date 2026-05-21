@@ -78,16 +78,18 @@ module.exports = {
         type: Sequelize.STRING(191),
         allowNull: true,
       },
+
       created_by: {
         type: Sequelize.UUID,
         allowNull: true,
         references: {
-          model: "users",
+          model: "staffs",
           key: "id",
         },
         onUpdate: "CASCADE",
         onDelete: "SET NULL",
       },
+
       createdAt: {
         type: Sequelize.DATE,
         allowNull: false,
@@ -101,10 +103,15 @@ module.exports = {
     });
 
     await queryInterface.addIndex("scholarships", ["year"], {
-      name: "scholarships_index_4",
+      name: "idx_scholarships_year",
     });
+
     await queryInterface.addIndex("scholarships", ["is_active"], {
-      name: "scholarships_index_5",
+      name: "idx_scholarships_is_active",
+    });
+
+    await queryInterface.addIndex("scholarships", ["created_by"], {
+      name: "idx_scholarships_created_by",
     });
   },
 

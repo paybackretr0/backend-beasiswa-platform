@@ -1,5 +1,7 @@
 "use strict";
+
 const { Model } = require("sequelize");
+
 module.exports = (sequelize, DataTypes) => {
   class ScholarshipSchemaRequirement extends Model {
     static associate(models) {
@@ -9,6 +11,7 @@ module.exports = (sequelize, DataTypes) => {
       });
     }
   }
+
   ScholarshipSchemaRequirement.init(
     {
       id: {
@@ -20,6 +23,10 @@ module.exports = (sequelize, DataTypes) => {
       schema_id: {
         type: DataTypes.UUID,
         allowNull: false,
+        references: {
+          model: "scholarship_schemas",
+          key: "id",
+        },
       },
       requirement_type: {
         type: DataTypes.ENUM("FILE", "TEXT"),
@@ -40,7 +47,8 @@ module.exports = (sequelize, DataTypes) => {
       modelName: "ScholarshipSchemaRequirement",
       tableName: "scholarship_schema_requirements",
       timestamps: true,
-    }
+    },
   );
+
   return ScholarshipSchemaRequirement;
 };

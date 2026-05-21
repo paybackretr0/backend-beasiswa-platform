@@ -35,6 +35,10 @@ module.exports = {
         defaultValue: Sequelize.literal("CURRENT_TIMESTAMP"),
       },
     });
+
+    await queryInterface.addIndex("scholarship_benefits", ["scholarship_id"], {
+      name: "idx_scholarship_benefits_scholarship_id",
+    });
   },
 
   async down(queryInterface, Sequelize) {

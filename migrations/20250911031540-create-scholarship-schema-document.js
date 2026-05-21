@@ -28,7 +28,7 @@ module.exports = {
       template_file: {
         type: Sequelize.STRING(512),
         allowNull: true,
-        comment: "Path file template dokumen (jika ada)",
+        comment: "Path file template dokumen jika ada",
       },
       createdAt: {
         type: Sequelize.DATE,
@@ -46,7 +46,16 @@ module.exports = {
       "scholarship_schema_documents",
       ["schema_id"],
       {
-        name: "schema_documents_idx_schema",
+        name: "idx_schema_documents_schema_id",
+      },
+    );
+
+    await queryInterface.addIndex(
+      "scholarship_schema_documents",
+      ["id", "schema_id"],
+      {
+        unique: true,
+        name: "uq_schema_documents_id_schema",
       },
     );
   },

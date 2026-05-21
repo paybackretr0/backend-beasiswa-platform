@@ -23,8 +23,7 @@ module.exports = {
       name: {
         type: Sequelize.STRING(191),
         allowNull: false,
-        comment:
-          "Nama skema beasiswa (e.g., Beasiswa Berkelanjutan, Prestasi Akademik S1/S2/S3)",
+        comment: "Nama skema beasiswa",
       },
       description: {
         type: Sequelize.TEXT,
@@ -34,13 +33,12 @@ module.exports = {
       quota: {
         type: Sequelize.INTEGER,
         allowNull: true,
-        comment: "Kuota per skema (opsional)",
+        comment: "Kuota per skema",
       },
       gpa_minimum: {
         type: Sequelize.DECIMAL(3, 2),
         allowNull: true,
-        comment:
-          "IPK minimum untuk skema ini (override dari parent scholarship)",
+        comment: "IPK minimum untuk skema ini",
       },
       semester_minimum: {
         type: Sequelize.INTEGER,
@@ -65,7 +63,11 @@ module.exports = {
     });
 
     await queryInterface.addIndex("scholarship_schemas", ["scholarship_id"], {
-      name: "scholarship_schemas_idx_scholarship",
+      name: "idx_scholarship_schemas_scholarship_id",
+    });
+
+    await queryInterface.addIndex("scholarship_schemas", ["is_active"], {
+      name: "idx_scholarship_schemas_is_active",
     });
   },
 

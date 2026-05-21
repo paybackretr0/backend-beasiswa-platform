@@ -1,4 +1,5 @@
 "use strict";
+
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
@@ -47,7 +48,17 @@ module.exports = {
         defaultValue: Sequelize.literal("CURRENT_TIMESTAMP"),
       },
     });
+
+    await queryInterface.addIndex("study_programs", ["department_id"], {
+      name: "idx_study_programs_department_id",
+    });
+
+    await queryInterface.addIndex("study_programs", ["department_id", "code"], {
+      unique: true,
+      name: "uq_study_programs_department_code",
+    });
   },
+
   async down(queryInterface, Sequelize) {
     await queryInterface.dropTable("study_programs");
   },

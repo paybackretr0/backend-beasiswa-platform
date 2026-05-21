@@ -1,24 +1,29 @@
 "use strict";
+
 const { Model } = require("sequelize");
+
 module.exports = (sequelize, DataTypes) => {
   class Faculty extends Model {
     static associate(models) {
       Faculty.hasMany(models.Department, {
         foreignKey: "faculty_id",
-        as: "departments", // Add alias
+        as: "departments",
       });
-      Faculty.hasMany(models.User, {
+
+      Faculty.hasMany(models.Staff, {
         foreignKey: "faculty_id",
-        as: "users", // Add alias
+        as: "staffs",
       });
     }
   }
+
   Faculty.init(
     {
       id: {
         type: DataTypes.UUID,
         primaryKey: true,
         defaultValue: DataTypes.UUIDV4,
+        allowNull: false,
       },
       code: {
         type: DataTypes.STRING(50),
@@ -40,8 +45,9 @@ module.exports = (sequelize, DataTypes) => {
       sequelize,
       modelName: "Faculty",
       tableName: "faculties",
-      timestamps: true, // Sequelize will handle createdAt & updatedAt automatically
+      timestamps: true,
     },
   );
+
   return Faculty;
 };

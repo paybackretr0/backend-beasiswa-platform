@@ -44,8 +44,17 @@ module.exports = {
     });
 
     await queryInterface.addIndex("scholarship_schema_stages", ["schema_id"], {
-      name: "schema_stages_idx_schema",
+      name: "idx_schema_stages_schema_id",
     });
+
+    await queryInterface.addIndex(
+      "scholarship_schema_stages",
+      ["schema_id", "order_no"],
+      {
+        unique: true,
+        name: "uq_schema_stages_schema_order",
+      },
+    );
   },
 
   async down(queryInterface, Sequelize) {

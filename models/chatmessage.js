@@ -3,9 +3,7 @@ const { Model } = require("sequelize");
 module.exports = (sequelize, DataTypes) => {
   class ChatMessage extends Model {
     static associate(models) {
-      // ChatMessage belongs to ChatRoom
       ChatMessage.belongsTo(models.ChatRoom, { foreignKey: "room_id" });
-      // ChatMessage belongs to User (sender)
       ChatMessage.belongsTo(models.User, {
         foreignKey: "sender_id",
         as: "sender",
@@ -46,7 +44,7 @@ module.exports = (sequelize, DataTypes) => {
       modelName: "ChatMessage",
       tableName: "chat_messages",
       timestamps: false,
-    }
+    },
   );
   return ChatMessage;
 };

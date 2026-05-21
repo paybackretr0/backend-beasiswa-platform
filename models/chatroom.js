@@ -3,9 +3,7 @@ const { Model } = require("sequelize");
 module.exports = (sequelize, DataTypes) => {
   class ChatRoom extends Model {
     static associate(models) {
-      // ChatRoom hasMany ChatRoomParticipant
       ChatRoom.hasMany(models.ChatRoomParticipant, { foreignKey: "room_id" });
-      // ChatRoom hasMany ChatMessage
       ChatRoom.hasMany(models.ChatMessage, { foreignKey: "room_id" });
     }
   }
@@ -30,8 +28,8 @@ module.exports = (sequelize, DataTypes) => {
       sequelize,
       modelName: "ChatRoom",
       tableName: "chat_rooms",
-      timestamps: true, // createdAt & updatedAt otomatis
-    }
+      timestamps: true,
+    },
   );
   return ChatRoom;
 };

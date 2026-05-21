@@ -23,14 +23,6 @@ module.exports = {
         type: Sequelize.STRING(191),
         allowNull: false,
       },
-      birth_date: {
-        type: Sequelize.DATE,
-        allowNull: true,
-      },
-      birth_place: {
-        type: Sequelize.STRING(100),
-        allowNull: true,
-      },
       role: {
         type: Sequelize.ENUM(
           "MAHASISWA",
@@ -43,44 +35,6 @@ module.exports = {
         ),
         allowNull: false,
         defaultValue: "MAHASISWA",
-      },
-      nim: {
-        type: Sequelize.STRING(50),
-        allowNull: true,
-      },
-      faculty_id: {
-        type: Sequelize.UUID,
-        allowNull: true,
-        references: {
-          model: "faculties",
-          key: "id",
-        },
-        onUpdate: "CASCADE",
-        onDelete: "SET NULL",
-      },
-      department_id: {
-        type: Sequelize.UUID,
-        allowNull: true,
-        references: {
-          model: "departments",
-          key: "id",
-        },
-        onUpdate: "CASCADE",
-        onDelete: "SET NULL",
-      },
-      study_program_id: {
-        type: Sequelize.UUID,
-        allowNull: true,
-        references: {
-          model: "study_programs",
-          key: "id",
-        },
-        onUpdate: "CASCADE",
-        onDelete: "SET NULL",
-      },
-      gender: {
-        type: Sequelize.ENUM("L", "P"),
-        allowNull: true,
       },
       phone_number: {
         type: Sequelize.STRING(20),
@@ -124,13 +78,16 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex("users", ["role"], { name: "users_index_0" });
-    await queryInterface.addIndex("users", ["department_id"], {
-      name: "users_index_2",
+    await queryInterface.addIndex("users", ["role"], {
+      name: "idx_users_role",
     });
   },
 
   async down(queryInterface, Sequelize) {
     await queryInterface.dropTable("users");
+
+    await queryInterface.sequelize
+      .query("DROP TYPE IF EXISTS enum_users_role;")
+      .catch(() => {});
   },
 };

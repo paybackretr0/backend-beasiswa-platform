@@ -49,8 +49,8 @@ module.exports = {
       "scholarship_schema_requirements",
       ["schema_id"],
       {
-        name: "schema_requirements_idx_schema",
-      }
+        name: "idx_schema_requirements_schema_id",
+      },
     );
   },
 
