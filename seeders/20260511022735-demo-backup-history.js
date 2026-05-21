@@ -12,7 +12,7 @@ module.exports = {
 
       return {
         id: Sequelize.literal("UUID()"),
-        executed_by: null,
+        executed_by: "00000000-0000-0000-0000-000000000000",
         storage_target: index % 2 === 0 ? "LOCAL" : "S3",
         file_path: `/backups/demo/backup_${seq}.sql.gz`,
         status: isSuccess ? "SUCCESS" : "FAILED",
