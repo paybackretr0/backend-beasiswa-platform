@@ -1,6 +1,12 @@
 const { GovernmentScholarship, sequelize } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 const { getOrSetCache } = require("../utils/cacheHelper");
+const {
+  applyHeaderStyle,
+  applyDataRowStyle,
+  applyTitleRowStyle,
+  applyInfoRowStyle,
+} = require("../utils/style");
 const ExcelJS = require("exceljs");
 const fs = require("fs");
 const path = require("path");
@@ -510,6 +516,138 @@ const exportGovernmentScholarships = async (req, res) => {
   }
 };
 
+const downloadGovernmentScholarshipTemplate = async (req, res) => {
+  try {
+    const workbook = new ExcelJS.Workbook();
+    const templateSheet = workbook.addWorksheet("Template Import APBN");
+    const guideSheet = workbook.addWorksheet("Petunjuk");
+
+    [8, 18, 18, 28, 14, 14, 14, 12, 12, 14, 28, 14, 14, 14, 14, 14, 24].forEach(
+      (width, index) => {
+        templateSheet.getColumn(index + 1).width = width;
+      },
+    );
+
+    templateSheet.mergeCells("A1:Q1");
+    const titleCell = templateSheet.getCell("A1");
+    titleCell.value =
+      "TEMPLATE IMPORT BEASISWA PEMERINTAH (APBN) | PERIODE: Ganjil/2026";
+    applyTitleRowStyle(titleCell);
+    templateSheet.getRow(1).height = 24;
+
+    templateSheet.mergeCells("A2:Q2");
+    const subtitleCell = templateSheet.getCell("A2");
+    subtitleCell.value =
+      "Ubah bagian PERIODE di atas bila diperlukan. Sistem membaca kolom C, D, H, I, K, dan Q.";
+    applyInfoRowStyle(subtitleCell, "FFEFF6FF");
+
+    const spacerRow = templateSheet.addRow([]);
+    spacerRow.height = 6;
+
+    const headerRow = templateSheet.addRow([
+      "No",
+      "Catatan",
+      "NIM",
+      "Nama Mahasiswa",
+      "",
+      "",
+      "",
+      "Semester",
+      "Angkatan",
+      "",
+      "Program Studi",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "Skema Bantuan",
+    ]);
+    applyHeaderStyle(headerRow);
+    headerRow.height = 22;
+
+    const sampleRows = [
+      [
+        1,
+        "Data Contoh Silakan Ganti",
+        "2211523030",
+        "Nama Mahasiswa Contoh",
+        "",
+        "",
+        "",
+        6,
+        2022,
+        "",
+        "S1 Sistem Informasi",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "KIP Kuliah",
+      ],
+      [
+        2,
+        "Isi data",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+      ],
+    ];
+
+    sampleRows.forEach((rowData, index) => {
+      const row = templateSheet.addRow(rowData);
+      applyDataRowStyle(row, index);
+    });
+
+    ["E", "F", "G", "J", "L", "M", "N", "O", "P"].forEach((columnKey) => {
+      templateSheet.getColumn(columnKey).hidden = true;
+    });
+
+    guideSheet.columns = [{ header: "Petunjuk", key: "petunjuk", width: 120 }];
+    applyHeaderStyle(guideSheet.getRow(1));
+
+    [
+      "Gunakan sheet 'Template Import APBN' untuk mengisi data.",
+      "Kolom yang dibaca sistem adalah: C (NIM), D (Nama Mahasiswa), H (Semester), I (Angkatan), K (Program Studi), dan Q (Skema Bantuan).",
+      "Kolom NIM dan Nama Mahasiswa wajib diisi.",
+      "Baris header harus tetap berada di posisi yang sama seperti template ini.",
+      "Anda boleh mengubah bagian 'PERIODE: Ganjil/2026' pada sel A1 agar sesuai file yang diimport, misalnya 'PERIODE: Genap/2026'.",
+      "Jika Semester, Angkatan, Program Studi, atau Skema Bantuan tidak tersedia, kolom boleh dikosongkan.",
+      "Satu baris mewakili satu penerima beasiswa APBN.",
+      "Disarankan menyimpan file akhir dalam format .xlsx sebelum diupload kembali ke sistem.",
+    ].forEach((text, index) => {
+      const row = guideSheet.addRow({ petunjuk: text });
+      applyDataRowStyle(row, index);
+    });
+
+    const fileName = "template_import_beasiswa_apbn.xlsx";
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error("Error downloading APBN import template:", error);
+    return errorResponse(res, "Gagal mengunduh template import APBN", 500);
+  }
+};
+
 const validateGovernmentScholarshipFile = async (req, res) => {
   const filePath = req.file?.path ?? null;
 
@@ -826,6 +964,7 @@ module.exports = {
   getGovernmentScholarshipByCategory,
   getGovernmentScholarshipYearlyTrend,
   getGovernmentScholarshipList,
+  downloadGovernmentScholarshipTemplate,
   validateGovernmentScholarshipFile,
   exportGovernmentScholarships,
   importGovernmentScholarships,

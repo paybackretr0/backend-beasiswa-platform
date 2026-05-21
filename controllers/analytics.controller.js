@@ -1031,6 +1031,10 @@ const getApplicationsList = async (req, res) => {
       nim: app.student?.nim || "N/A",
       fakultas: app.student?.study_program?.department?.faculty?.name || "N/A",
       departemen: app.student?.study_program?.department?.name || "N/A",
+      prodi:
+        [app.student?.study_program?.degree, app.student?.study_program?.name]
+          .filter(Boolean)
+          .join(" ") || "N/A",
       gender:
         app.student?.gender === "L"
           ? "Laki-laki"

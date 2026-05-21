@@ -1,8 +1,10 @@
 const {
   Application,
+  Student,
   User,
   Scholarship,
   ScholarshipSchema,
+  ScholarshipSchemaStudyProgram,
   Faculty,
   Department,
   StudyProgram,
@@ -37,6 +39,8 @@ const getStatusLabel = (status) => {
   };
   return statusMap[status] || status;
 };
+
+const hasWhereConditions = (value) => Reflect.ownKeys(value || {}).length > 0;
 
 const getSummaryData = async (year) => {
   let whereCondition = {
@@ -176,12 +180,13 @@ const getApplicationsListData = async (filters) => {
   let userWhereCondition = {
     role: "MAHASISWA",
   };
+  let studentWhereCondition = {};
   let studyProgramWhereCondition = {};
   let departmentWhereCondition = {};
   let facultyWhereCondition = {};
 
   if (gender && gender !== "Semua") {
-    userWhereCondition.gender = gender === "Laki-laki" ? "L" : "P";
+    studentWhereCondition.gender = gender === "Laki-laki" ? "L" : "P";
   }
 
   if (prodi && prodi !== "Semua") {
@@ -197,8 +202,9 @@ const getApplicationsListData = async (filters) => {
   }
 
   if (search) {
-    userWhereCondition[Op.or] = [
-      { full_name: { [Op.like]: `%${search}%` } },
+    userWhereCondition[Op.or] = [{ full_name: { [Op.like]: `%${search}%` } }];
+    studentWhereCondition[Op.or] = [
+      ...(studentWhereCondition[Op.or] || []),
       { nim: { [Op.like]: `%${search}%` } },
     ];
   }
@@ -207,24 +213,34 @@ const getApplicationsListData = async (filters) => {
     where: whereCondition,
     include: [
       {
-        model: User,
+        model: Student,
         as: "student",
-        where: userWhereCondition,
-        attributes: ["id", "full_name", "nim", "gender"],
+        where: hasWhereConditions(studentWhereCondition)
+          ? studentWhereCondition
+          : undefined,
+        required: true,
+        attributes: ["id", "nim", "gender"],
         include: [
+          {
+            model: User,
+            as: "user",
+            where: userWhereCondition,
+            required: true,
+            attributes: ["id", "full_name"],
+          },
           {
             model: StudyProgram,
             as: "study_program",
-            where: Object.keys(studyProgramWhereCondition).length
+            where: hasWhereConditions(studyProgramWhereCondition)
               ? studyProgramWhereCondition
               : undefined,
             required: false,
-            attributes: ["id", "degree"],
+            attributes: ["id", "name", "degree"],
             include: [
               {
                 model: Department,
                 as: "department",
-                where: Object.keys(departmentWhereCondition).length
+                where: hasWhereConditions(departmentWhereCondition)
                   ? departmentWhereCondition
                   : undefined,
                 required: false,
@@ -233,7 +249,7 @@ const getApplicationsListData = async (filters) => {
                   {
                     model: Faculty,
                     as: "faculty",
-                    where: Object.keys(facultyWhereCondition).length
+                    where: hasWhereConditions(facultyWhereCondition)
                       ? facultyWhereCondition
                       : undefined,
                     required: false,
@@ -263,12 +279,23 @@ const getApplicationsListData = async (filters) => {
 
   return applications.map((app) => ({
     id: app.id,
-    nama: app.student?.full_name || "N/A",
+    nama: app.student?.user?.full_name || "N/A",
     nim: app.student?.nim || "N/A",
     fakultas: app.student?.study_program?.department?.faculty?.name || "N/A",
     departemen: app.student?.study_program?.department?.name || "N/A",
-    prodi: app.student?.study_program?.degree || "N/A",
-    gender: app.student?.gender === "L" ? "Laki-laki" : "Perempuan",
+    prodi:
+      [
+        app.student?.study_program?.degree,
+        app.student?.study_program?.name,
+      ]
+        .filter(Boolean)
+        .join(" ") || "N/A",
+    gender:
+      app.student?.gender === "L"
+        ? "Laki-laki"
+        : app.student?.gender === "P"
+          ? "Perempuan"
+          : "N/A",
     status: getStatusLabel(app.status),
     beasiswa: app.schema?.scholarship?.name || "N/A",
     tanggalDaftar: app.createdAt,
@@ -335,8 +362,10 @@ const getFacultyDistributionData = async (year) => {
       COUNT(a.id) as value
     FROM faculties f
     LEFT JOIN departments d ON f.id = d.faculty_id
-    LEFT JOIN users u ON u.department_id = d.id AND u.role = 'MAHASISWA'
-    LEFT JOIN applications a ON u.id = a.student_id 
+    LEFT JOIN study_programs sp ON sp.department_id = d.id
+    LEFT JOIN students st ON st.study_program_id = sp.id
+    LEFT JOIN users u ON u.id = st.id AND u.role = 'MAHASISWA'
+    LEFT JOIN applications a ON st.id = a.student_id 
       AND a.status != 'DRAFT'
       ${yearCondition}
     WHERE f.is_active = true
@@ -364,8 +393,10 @@ const getDepartmentDistributionData = async (year) => {
       d.name as label,
       COUNT(a.id) as value
     FROM departments d
-    LEFT JOIN users u ON u.department_id = d.id AND u.role = 'MAHASISWA'
-    LEFT JOIN applications a ON u.id = a.student_id 
+    LEFT JOIN study_programs sp ON sp.department_id = d.id
+    LEFT JOIN students st ON st.study_program_id = sp.id
+    LEFT JOIN users u ON u.id = st.id AND u.role = 'MAHASISWA'
+    LEFT JOIN applications a ON st.id = a.student_id 
       AND a.status != 'DRAFT'
       ${yearCondition}
     WHERE d.is_active = true
@@ -390,15 +421,16 @@ const getStudyProgramDistributionData = async (year) => {
   return await sequelize.query(
     `
     SELECT 
-      sp.degree as label,
+      CONCAT(COALESCE(sp.degree, ''), ' ', COALESCE(sp.name, '')) as label,
       COUNT(a.id) as value
     FROM study_programs sp
-    LEFT JOIN users u ON u.study_program_id = sp.id AND u.role = 'MAHASISWA'
-    LEFT JOIN applications a ON u.id = a.student_id 
+    LEFT JOIN students st ON st.study_program_id = sp.id
+    LEFT JOIN users u ON u.id = st.id AND u.role = 'MAHASISWA'
+    LEFT JOIN applications a ON st.id = a.student_id 
       AND a.status != 'DRAFT'
       ${yearCondition}
     WHERE sp.is_active = true
-    GROUP BY sp.id, sp.degree
+    GROUP BY sp.id, sp.degree, sp.name
     HAVING COUNT(a.id) > 0
     ORDER BY value DESC
     LIMIT 10
@@ -419,19 +451,20 @@ const getGenderDistributionData = async (year) => {
   const genderData = await sequelize.query(
     `
     SELECT 
-      u.gender as label,
+      st.gender as label,
       COUNT(a.id) as value,
       CASE 
-        WHEN u.gender = 'L' THEN '#2D60FF'
-        WHEN u.gender = 'P' THEN '#FF69B4'
+        WHEN st.gender = 'L' THEN '#2D60FF'
+        WHEN st.gender = 'P' THEN '#FF69B4'
         ELSE '#9CA3AF'
       END as color
-    FROM users u
-    LEFT JOIN applications a ON u.id = a.student_id 
+    FROM students st
+    INNER JOIN users u ON u.id = st.id
+    LEFT JOIN applications a ON st.id = a.student_id 
       AND a.status != 'DRAFT'
       ${yearCondition}
     WHERE u.role = 'MAHASISWA' AND a.id IS NOT NULL
-    GROUP BY u.gender
+    GROUP BY st.gender
     HAVING COUNT(a.id) > 0
     `,
     {
@@ -502,10 +535,10 @@ const getOngoingRecipients = async (year) => {
     `
     SELECT 
       u.full_name as nama,
-      u.nim,
+      st.nim,
       f.name as fakultas,
       d.name as departemen,
-      sp.degree as prodi,
+      CONCAT(COALESCE(sp.degree, ''), ' ', COALESCE(sp.name, '')) as prodi,
       s.name as beasiswa,
       a.createdAt as tanggal_diterima,
       s.duration_semesters as durasi_semester,
@@ -517,10 +550,11 @@ const getOngoingRecipients = async (year) => {
       END as status_penerima,
       s.scholarship_value as nilai_beasiswa
     FROM applications a
-    INNER JOIN users u ON a.student_id = u.id
+    INNER JOIN students st ON a.student_id = st.id
+    INNER JOIN users u ON st.id = u.id
     INNER JOIN scholarship_schemas ss ON a.schema_id = ss.id
     INNER JOIN scholarships s ON ss.scholarship_id = s.id
-    LEFT JOIN study_programs sp ON u.study_program_id = sp.id
+    LEFT JOIN study_programs sp ON st.study_program_id = sp.id
     LEFT JOIN departments d ON sp.department_id = d.id
     LEFT JOIN faculties f ON d.faculty_id = f.id
     WHERE a.status = 'AWARDEE'
@@ -548,11 +582,11 @@ const getRecipientsByScholarshipDetail = async (year, scholarshipId) => {
     `
     SELECT 
       u.full_name as nama,
-      u.nim,
-      u.gender,
+      st.nim,
+      st.gender,
       f.name as fakultas,
       d.name as departemen,
-      sp.degree as prodi,
+      CONCAT(COALESCE(sp.degree, ''), ' ', COALESCE(sp.name, '')) as prodi,
       u.phone_number as no_hp,
       u.email,
       a.createdAt as tanggal_diterima,
@@ -562,10 +596,11 @@ const getRecipientsByScholarshipDetail = async (year, scholarshipId) => {
       s.duration_semesters as durasi_semester,
       DATE_ADD(a.createdAt, INTERVAL (s.duration_semesters * 6) MONTH) as estimasi_selesai
     FROM applications a
-    INNER JOIN users u ON a.student_id = u.id
+    INNER JOIN students st ON a.student_id = st.id
+    INNER JOIN users u ON st.id = u.id
     INNER JOIN scholarship_schemas ss ON a.schema_id = ss.id
     INNER JOIN scholarships s ON ss.scholarship_id = s.id
-    LEFT JOIN study_programs sp ON u.study_program_id = sp.id
+    LEFT JOIN study_programs sp ON st.study_program_id = sp.id
     LEFT JOIN departments d ON sp.department_id = d.id
     LEFT JOIN faculties f ON d.faculty_id = f.id
     WHERE a.status = 'AWARDEE'
@@ -600,11 +635,11 @@ const getApplicantsByScholarshipDetail = async (year, scholarshipId) => {
     `
     SELECT 
       u.full_name as nama,
-      u.nim,
-      u.gender,
+      st.nim,
+      st.gender,
       f.name as fakultas,
       d.name as departemen,
-      sp.degree as prodi,
+      CONCAT(COALESCE(sp.degree, ''), ' ', COALESCE(sp.name, '')) as prodi,
       u.phone_number as no_hp,
       u.email,
       a.createdAt as tanggal_daftar,
@@ -628,10 +663,11 @@ const getApplicantsByScholarshipDetail = async (year, scholarshipId) => {
         '-'
       ) as alasan_ditolak
     FROM applications a
-    INNER JOIN users u ON a.student_id = u.id
+    INNER JOIN students st ON a.student_id = st.id
+    INNER JOIN users u ON st.id = u.id
     INNER JOIN scholarship_schemas ss ON a.schema_id = ss.id
     INNER JOIN scholarships s ON ss.scholarship_id = s.id
-    LEFT JOIN study_programs sp ON u.study_program_id = sp.id
+    LEFT JOIN study_programs sp ON st.study_program_id = sp.id
     LEFT JOIN departments d ON sp.department_id = d.id
     LEFT JOIN faculties f ON d.faculty_id = f.id
     WHERE a.status != 'DRAFT'
@@ -1498,10 +1534,14 @@ const getFilteredApplicantsForExport = async ({
 
   const role = user?.role;
   const facultyScopedRoles = ["PIMPINAN_FAKULTAS", "VERIFIKATOR_FAKULTAS"];
-  const studentWhere = {
+  const facultyId = user?.staff?.faculty_id || user?.faculty_id || null;
+  const studentWhere = {};
+  const userWhere = {
     role: "MAHASISWA",
-    ...(facultyScopedRoles.includes(role) && user?.faculty_id
-      ? { faculty_id: user.faculty_id }
+  };
+  const departmentWhere = {
+    ...(facultyScopedRoles.includes(role) && facultyId
+      ? { faculty_id: facultyId }
       : {}),
   };
 
@@ -1517,21 +1557,32 @@ const getFilteredApplicantsForExport = async ({
     where: whereCondition,
     include: [
       {
-        model: User,
+        model: Student,
         as: "student",
-        where: studentWhere,
-        attributes: ["id", "full_name", "nim", "gender", "email"],
+        where: Object.keys(studentWhere).length ? studentWhere : undefined,
+        required: true,
+        attributes: ["id", "nim", "gender"],
         include: [
+          {
+            model: User,
+            as: "user",
+            where: userWhere,
+            required: true,
+            attributes: ["id", "full_name", "email"],
+          },
           {
             model: StudyProgram,
             as: "study_program",
             required: false,
-            attributes: ["id", "degree"],
+            attributes: ["id", "name", "degree"],
             include: [
               {
                 model: Department,
                 as: "department",
-                required: false,
+                where: Object.keys(departmentWhere).length
+                  ? departmentWhere
+                  : undefined,
+                required: Object.keys(departmentWhere).length > 0,
                 attributes: ["id", "name"],
                 include: [
                   {
@@ -1652,14 +1703,22 @@ const exportPendaftarLaporan = async (req, res) => {
     applications.forEach((app, index) => {
       const row = applicantsSheet.addRow({
         no: index + 1,
-        nama: app.student?.full_name || "N/A",
+        nama: app.student?.user?.full_name || "N/A",
         nim: app.student?.nim || "N/A",
         fakultas:
           app.student?.study_program?.department?.faculty?.name || "N/A",
         departemen: app.student?.study_program?.department?.name || "N/A",
-        prodi: app.student?.study_program?.degree || "N/A",
-        gender: app.student?.gender === "L" ? "Laki-laki" : "Perempuan",
-        email: app.student?.email || "-",
+        prodi:
+          [app.student?.study_program?.degree, app.student?.study_program?.name]
+            .filter(Boolean)
+            .join(" ") || "N/A",
+        gender:
+          app.student?.gender === "L"
+            ? "Laki-laki"
+            : app.student?.gender === "P"
+              ? "Perempuan"
+              : "N/A",
+        email: app.student?.user?.email || "-",
         beasiswa: app.schema?.scholarship?.name || "N/A",
         skema: app.schema?.name || "N/A",
         status: getStatusLabel(app.status),
@@ -1955,21 +2014,90 @@ const getOrCreateStudyProgram = async (
   return program;
 };
 
+const findSchemaStudyProgramMapping = async (
+  schemaId,
+  studyProgramId,
+  transaction,
+) => {
+  if (!schemaId || !studyProgramId) return null;
+
+  return ScholarshipSchemaStudyProgram.findOne({
+    where: {
+      schema_id: schemaId,
+      study_program_id: studyProgramId,
+    },
+    attributes: ["id", "schema_id", "study_program_id"],
+    transaction,
+  });
+};
+
+const resolveSchemaStudyProgramFromRow = (row, schemaStudyPrograms = []) => {
+  const normalizedFaculty = normalizeText(row.fakultas);
+  const normalizedDepartment = normalizeText(row.departemen);
+  const normalizedStudyProgram = normalizeText(row.prodi);
+
+  if (!normalizedStudyProgram) return null;
+
+  return (
+    schemaStudyPrograms.find((mapping) => {
+      const studyProgram = mapping.study_program;
+      const department = studyProgram?.department;
+      const faculty = department?.faculty;
+
+      return (
+        normalizeText(studyProgram?.name) === normalizedStudyProgram &&
+        (!normalizedDepartment ||
+          normalizeText(department?.name) === normalizedDepartment) &&
+        (!normalizedFaculty ||
+          normalizeText(faculty?.name) === normalizedFaculty)
+      );
+    }) || null
+  );
+};
+
 const ensureUserForImportedRecipient = async ({
   row,
+  schemaId,
   transaction,
   passwordHash,
   facultyCache,
   departmentCache,
   programCache,
 }) => {
-  let user = await User.findOne({
+  let student = await Student.findOne({
     where: { nim: row.nim },
+    include: [
+      {
+        model: User,
+        as: "user",
+        attributes: ["id", "full_name", "email", "phone_number", "is_active"],
+        required: true,
+      },
+      {
+        model: StudyProgram,
+        as: "study_program",
+        attributes: ["id", "name", "degree", "department_id"],
+        required: false,
+      },
+    ],
     transaction,
   });
 
-  if (user) {
-    return { user, isDummyCreated: false, email_source: "EXISTING" };
+  if (student) {
+    const schemaStudyProgram = await findSchemaStudyProgramMapping(
+      schemaId,
+      student.study_program_id,
+      transaction,
+    );
+
+    return {
+      user: student.user,
+      student,
+      schemaStudyProgram,
+      wasExistingStudent: true,
+      isDummyCreated: false,
+      email_source: "EXISTING",
+    };
   }
 
   const faculty = await getOrCreateFaculty(
@@ -1990,6 +2118,12 @@ const ensureUserForImportedRecipient = async ({
     transaction,
   );
 
+  if (!program?.id) {
+    throw new Error(
+      `Baris ${row.excelRow}: program studi wajib diisi dan valid untuk membuat akun mahasiswa baru`,
+    );
+  }
+
   const requestedEmail = normalizeEmail(row.email);
 
   const nimSafe = String(row.nim || "mahasiswa").replace(/[^a-zA-Z0-9]/g, "");
@@ -2001,7 +2135,7 @@ const ensureUserForImportedRecipient = async ({
   if (requestedEmail) {
     const emailTaken = await User.findOne({
       where: { email: requestedEmail },
-      attributes: ["id", "nim"],
+      attributes: ["id", "email"],
       transaction,
     });
 
@@ -2020,24 +2154,41 @@ const ensureUserForImportedRecipient = async ({
     }
   }
 
-  user = await User.create(
+  const user = await User.create(
     {
       email: emailToUse,
       password: passwordHash,
       full_name: row.nama,
       role: "MAHASISWA",
-      nim: row.nim,
-      faculty_id: faculty?.id || null,
-      department_id: department?.id || null,
-      study_program_id: program?.id || null,
       is_active: true,
       emailVerified: false,
     },
     { transaction },
   );
 
+  student = await Student.create(
+    {
+      id: user.id,
+      nim: row.nim,
+      study_program_id: program.id,
+      gender: null,
+      birth_date: null,
+      birth_place: null,
+    },
+    { transaction },
+  );
+
+  const schemaStudyProgram = await findSchemaStudyProgramMapping(
+    schemaId,
+    student.study_program_id,
+    transaction,
+  );
+
   return {
     user,
+    student,
+    schemaStudyProgram,
+    wasExistingStudent: false,
     isDummyCreated: emailSource === "DUMMY",
     email_source: emailSource,
   };
@@ -2340,7 +2491,7 @@ const downloadTemplateImportPenerima = async (req, res) => {
       "Jika departemen berubah, kosongkan dan pilih ulang prodi.",
       "Sel yang merah menandakan pilihan sudah tidak cocok dengan parent terbaru.",
       "Nama beasiswa dipilih saat proses import di dalam modal.",
-      "Sistem akan menggunakan skema aktif pertama dari beasiswa yang dipilih.",
+      "Sistem akan menggunakan skema yang dipilih saat proses import di dalam modal.",
       "Sistem akan mencocokkan user berdasarkan NIM.",
       "Jika user tidak ditemukan, sistem akan membuat akun dummy mahasiswa secara otomatis.",
       "Password akun dummy default: dummy12345 (bisa diubah kemudian oleh admin).",
@@ -2404,6 +2555,36 @@ const validateImportPenerimaBeasiswa = async (req, res) => {
           attributes: ["id", "name", "year"],
           required: true,
         },
+        {
+          model: ScholarshipSchemaStudyProgram,
+          as: "schema_study_programs",
+          attributes: ["id", "study_program_id"],
+          required: false,
+          include: [
+            {
+              model: StudyProgram,
+              as: "study_program",
+              attributes: ["id", "name", "degree", "department_id"],
+              required: true,
+              include: [
+                {
+                  model: Department,
+                  as: "department",
+                  attributes: ["id", "name", "faculty_id"],
+                  required: false,
+                  include: [
+                    {
+                      model: Faculty,
+                      as: "faculty",
+                      attributes: ["id", "name"],
+                      required: false,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
       ],
     });
 
@@ -2446,14 +2627,39 @@ const validateImportPenerimaBeasiswa = async (req, res) => {
         continue;
       }
 
-      const existingUser = await User.findOne({
+      const existingStudent = await Student.findOne({
         where: { nim: row.nim },
-        attributes: ["id", "full_name", "nim", "email"],
+        attributes: ["id", "nim", "study_program_id"],
+        include: [
+          {
+            model: User,
+            as: "user",
+            attributes: ["id", "full_name", "email"],
+            required: true,
+          },
+        ],
       });
 
-      console.log(`Email yang diminta untuk NIM ${row.nim}:`, row.email);
-
       const requestedEmail = normalizeEmail(row.email);
+      const matchedSchemaStudyProgram = existingStudent
+        ? selectedSchema.schema_study_programs?.find(
+            (mapping) =>
+              mapping.study_program_id === existingStudent.study_program_id,
+          ) || null
+        : resolveSchemaStudyProgramFromRow(
+            row,
+            selectedSchema.schema_study_programs || [],
+          );
+
+      if (!matchedSchemaStudyProgram) {
+        errors.push({
+          row: row.excelRow,
+          field: "prodi",
+          message:
+            "Program studi pada baris ini tidak termasuk dalam cakupan skema terpilih",
+        });
+        continue;
+      }
 
       preview.push({
         nim: row.nim,
@@ -2464,7 +2670,7 @@ const validateImportPenerimaBeasiswa = async (req, res) => {
         beasiswa: selectedScholarship.name,
         skema: selectedSchema.name,
         tahun: selectedScholarship.year,
-        userStatus: existingUser
+        userStatus: existingStudent
           ? "MATCHED"
           : requestedEmail
             ? "USER_BARU_AKAN_DIBUAT"
@@ -2530,6 +2736,36 @@ const importPenerimaBeasiswa = async (req, res) => {
           attributes: ["id", "name", "year"],
           required: true,
         },
+        {
+          model: ScholarshipSchemaStudyProgram,
+          as: "schema_study_programs",
+          attributes: ["id", "study_program_id"],
+          required: false,
+          include: [
+            {
+              model: StudyProgram,
+              as: "study_program",
+              attributes: ["id", "name", "degree", "department_id"],
+              required: true,
+              include: [
+                {
+                  model: Department,
+                  as: "department",
+                  attributes: ["id", "name", "faculty_id"],
+                  required: false,
+                  include: [
+                    {
+                      model: Faculty,
+                      as: "faculty",
+                      attributes: ["id", "name"],
+                      required: false,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
       ],
       transaction,
     });
@@ -2567,61 +2803,90 @@ const importPenerimaBeasiswa = async (req, res) => {
     const errors = [];
 
     for (const row of rows) {
-      if (!row.nama || !row.nim) {
-        errors.push(`Baris ${row.excelRow}: kolom nama dan nim wajib diisi`);
-        continue;
-      }
+      try {
+        if (!row.nama || !row.nim) {
+          errors.push(`Baris ${row.excelRow}: kolom nama dan nim wajib diisi`);
+          continue;
+        }
 
-      const { user, isDummyCreated } = await ensureUserForImportedRecipient({
-        row,
-        transaction,
-        passwordHash: dummyPasswordHash,
-        facultyCache,
-        departmentCache,
-        programCache,
-      });
+        const {
+          student,
+          schemaStudyProgram,
+          wasExistingStudent,
+          isDummyCreated,
+        } = await ensureUserForImportedRecipient({
+          row,
+          schemaId: selectedSchema.id,
+          transaction,
+          passwordHash: dummyPasswordHash,
+          facultyCache,
+          departmentCache,
+          programCache,
+        });
 
-      if (isDummyCreated) createdDummyUsers += 1;
-      else matchedUsers += 1;
+        const resolvedSchemaStudyProgram =
+          schemaStudyProgram ||
+          (!wasExistingStudent
+            ? resolveSchemaStudyProgramFromRow(
+                row,
+                selectedSchema.schema_study_programs || [],
+              )
+            : null);
 
-      const importYear = selectedScholarship.year || new Date().getFullYear();
+        if (!student?.study_program_id || !resolvedSchemaStudyProgram) {
+          errors.push(
+            `Baris ${row.excelRow}: program studi tidak termasuk dalam cakupan skema terpilih`,
+          );
+          continue;
+        }
 
-      const importDate = new Date(`${importYear}-01-01T00:00:00.000Z`);
+        if (isDummyCreated) createdDummyUsers += 1;
+        else matchedUsers += 1;
 
-      const existingApplication = await Application.findOne({
-        where: {
-          student_id: user.id,
-          schema_id: selectedSchema.id,
-        },
-        transaction,
-      });
+        const importYear = selectedScholarship.year || new Date().getFullYear();
+        const importDate = new Date(`${importYear}-01-01T00:00:00.000Z`);
 
-      if (existingApplication) {
-        await existingApplication.update(
-          {
-            status: "AWARDEE",
-            submitted_at: existingApplication.submitted_at || importDate,
-            validated_by: req.user?.id || null,
-            validated_at: new Date(),
-          },
-          { transaction },
-        );
-        updatedApplications += 1;
-      } else {
-        await Application.create(
-          {
+        const existingApplication = await Application.findOne({
+          where: {
+            student_id: student.id,
             schema_id: selectedSchema.id,
-            student_id: user.id,
-            status: "AWARDEE",
-            submitted_at: importDate,
-            validated_by: req.user?.id || null,
-            validated_at: new Date(),
-            createdAt: importDate,
-            updatedAt: new Date(),
           },
-          { transaction },
+          transaction,
+        });
+
+        if (existingApplication) {
+          await existingApplication.update(
+            {
+              status: "AWARDEE",
+              submitted_at: existingApplication.submitted_at || importDate,
+              validated_by: req.user?.id || null,
+              validated_at: new Date(),
+              schema_study_program_id: resolvedSchemaStudyProgram.id,
+            },
+            { transaction },
+          );
+          updatedApplications += 1;
+        } else {
+          await Application.create(
+            {
+              schema_id: selectedSchema.id,
+              student_id: student.id,
+              schema_study_program_id: resolvedSchemaStudyProgram.id,
+              status: "AWARDEE",
+              submitted_at: importDate,
+              validated_by: req.user?.id || null,
+              validated_at: new Date(),
+              createdAt: importDate,
+              updatedAt: new Date(),
+            },
+            { transaction },
+          );
+          createdApplications += 1;
+        }
+      } catch (rowError) {
+        errors.push(
+          rowError.message || `Baris ${row.excelRow}: gagal memproses data`,
         );
-        createdApplications += 1;
       }
     }
 

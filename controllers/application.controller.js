@@ -18,6 +18,8 @@ const {
   Faculty,
   FormAnswer,
   FormField,
+  FormAnswerOption,
+  FormFieldOption,
 } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 const { Op } = require("sequelize");
@@ -386,8 +388,27 @@ const getApplicationDetail = async (req, res) => {
           include: [
             {
               model: FormField,
-              as: "FormField",
+              as: "field",
               attributes: ["id", "label", "type"],
+              include: [
+                {
+                  model: FormFieldOption,
+                  as: "options",
+                  attributes: ["id", "value", "order_no"],
+                },
+              ],
+            },
+            {
+              model: FormAnswerOption,
+              as: "selected_options",
+              attributes: ["id", "option_id"],
+              include: [
+                {
+                  model: FormFieldOption,
+                  as: "option",
+                  attributes: ["id", "value", "order_no"],
+                },
+              ],
             },
           ],
         },
@@ -463,18 +484,33 @@ const getApplicationDetail = async (req, res) => {
 
     if (application.formAnswers) {
       application.formAnswers.forEach((answer) => {
-        if (answer.FormField?.type === "FILE" && answer.file_path) {
+        const field = answer.field;
+        const selectedOptionValues =
+          answer.selected_options
+            ?.map((selectedOption) => selectedOption.option?.value)
+            .filter(Boolean) || [];
+
+        if (field?.type === "FILE" && answer.file_path) {
           documentAnswers.push({
             id: answer.id,
-            type: answer.FormField.label,
+            type: field.label,
             fileName: answer.file_path.split(/[/\\]/).pop(),
             filePath: answer.file_path.replace(/\\/g, "/"),
             mimeType: answer.mime_type,
             uploadedAt: answer.uploaded_at || answer.createdAt,
             field_id: answer.field_id,
           });
+        } else if (field?.type === "MULTI_SELECT" && selectedOptionValues.length) {
+          formAnswers[field?.label || `Field ${answer.field_id}`] =
+            selectedOptionValues.join(", ");
+        } else if (
+          field?.type === "SELECT" &&
+          (selectedOptionValues[0] || answer.answer_text)
+        ) {
+          formAnswers[field?.label || `Field ${answer.field_id}`] =
+            selectedOptionValues[0] || answer.answer_text;
         } else if (answer.answer_text) {
-          formAnswers[answer.FormField?.label || `Field ${answer.field_id}`] =
+          formAnswers[field?.label || `Field ${answer.field_id}`] =
             answer.answer_text;
         }
       });
@@ -561,10 +597,16 @@ const getApplicationDetail = async (req, res) => {
       formAnswers:
         application.formAnswers?.map((answer) => ({
           field_id: answer.field_id,
+          field_label: answer.field?.label || `Field ${answer.field_id}`,
+          field_type: answer.field?.type || null,
           answer_text: answer.answer_text,
           file_path: answer.file_path,
           mime_type: answer.mime_type,
           uploaded_at: answer.uploaded_at,
+          selected_options:
+            answer.selected_options
+              ?.map((selectedOption) => selectedOption.option?.value)
+              .filter(Boolean) || [],
         })) || [],
     };
 
