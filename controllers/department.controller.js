@@ -1,5 +1,6 @@
 const { Department, Faculty, StudyProgram, ActivityLog } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
+const { Op } = require("sequelize");
 
 const getStudyProgramsByDepartmentId = async (req, res) => {
   try {
@@ -122,6 +123,7 @@ const editDepartment = async (req, res) => {
       where: {
         code: code,
         faculty_id: faculty_id,
+        id: { [Op.ne]: id },
       },
     });
     if (existingDepartment) {

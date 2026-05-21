@@ -1,6 +1,7 @@
 const { Faculty, Department, ActivityLog } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 const { sequelize } = require("../models");
+const { Op } = require("sequelize");
 
 const getDepartmentsByFacultyId = async (req, res) => {
   try {
@@ -122,7 +123,12 @@ const editFaculty = async (req, res) => {
       return errorResponse(res, "Fakultas tidak ditemukan", 404);
     }
 
-    const existingFaculty = await Faculty.findOne({ where: { code } });
+    const existingFaculty = await Faculty.findOne({
+      where: {
+        code,
+        id: { [Op.ne]: id },
+      },
+    });
     if (existingFaculty) {
       return errorResponse(res, "Kode fakultas sudah digunakan", 400);
     }
