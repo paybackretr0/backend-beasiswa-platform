@@ -1,14 +1,40 @@
-const { Information, ActivityLog } = require("../models");
+const { Information, ActivityLog, Staff, User } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 const { getFileInfo } = require("../utils/upload");
 const { generateUniqueSlug } = require("../utils/slug");
 const { getOrSetCache } = require("../utils/cacheHelper");
+
+const informationAuthorInclude = [
+  {
+    model: Staff,
+    as: "author",
+    attributes: ["id", "staff_number", "faculty_id"],
+    required: false,
+    include: [
+      {
+        model: User,
+        as: "user",
+        attributes: ["id", "full_name", "email"],
+        required: false,
+      },
+    ],
+  },
+];
+
+const resolveAuthorStaff = async (userId) => {
+  if (!userId) return null;
+
+  return Staff.findByPk(userId, {
+    attributes: ["id", "staff_number", "faculty_id"],
+  });
+};
 
 const getAllNews = async (req, res) => {
   try {
     const data = await getOrSetCache("admin_news", 300, async () => {
       return await Information.findAll({
         where: { type: "NEWS" },
+        include: informationAuthorInclude,
         order: [["createdAt", "DESC"]],
       });
     });
@@ -25,6 +51,7 @@ const getAllArticles = async (req, res) => {
     const data = await getOrSetCache("admin_articles", 300, async () => {
       return await Information.findAll({
         where: { type: "ARTICLE" },
+        include: informationAuthorInclude,
         order: [["createdAt", "DESC"]],
       });
     });
@@ -57,6 +84,15 @@ const createInformation = async (req, res) => {
       .replace(/(^-|-$)/g, "");
 
     const slug = await generateUniqueSlug(Information, baseSlug);
+    const authorStaff = await resolveAuthorStaff(req.user?.id);
+
+    if (!authorStaff) {
+      return errorResponse(
+        res,
+        "Akun login belum memiliki profil staff, sehingga tidak dapat menjadi author informasi",
+        400,
+      );
+    }
 
     const newInformation = await Information.create({
       type,
@@ -65,8 +101,12 @@ const createInformation = async (req, res) => {
       content,
       cover_url,
       status,
-      author_id: req.user ? req.user.id : null,
+      author_id: authorStaff.id,
       published_at: status === "PUBLISHED" ? new Date() : null,
+    });
+
+    const createdInformation = await Information.findByPk(newInformation.id, {
+      include: informationAuthorInclude,
     });
 
     const userName = req.user.full_name || "User";
@@ -83,7 +123,7 @@ const createInformation = async (req, res) => {
     return successResponse(
       res,
       "Informasi berhasil dibuat",
-      newInformation,
+      createdInformation,
       201,
     );
   } catch (error) {
@@ -133,6 +173,10 @@ const editInformation = async (req, res) => {
 
     await information.update(updateData);
 
+    const updatedInformation = await Information.findByPk(information.id, {
+      include: informationAuthorInclude,
+    });
+
     const userName = req.user.full_name || "User";
     await ActivityLog.create({
       user_id: req.user.id,
@@ -144,7 +188,11 @@ const editInformation = async (req, res) => {
       user_agent: req.headers["user-agent"],
     });
 
-    return successResponse(res, "Informasi berhasil diperbarui", information);
+    return successResponse(
+      res,
+      "Informasi berhasil diperbarui",
+      updatedInformation,
+    );
   } catch (error) {
     console.error("Error editing information:", error);
     return errorResponse(res, "Gagal memperbarui informasi", 500);
@@ -192,6 +240,10 @@ const publishInformation = async (req, res) => {
       published_at: new Date(),
     });
 
+    const publishedInformation = await Information.findByPk(information.id, {
+      include: informationAuthorInclude,
+    });
+
     const userName = req.user.full_name || "User";
     await ActivityLog.create({
       user_id: req.user.id,
@@ -206,7 +258,7 @@ const publishInformation = async (req, res) => {
     return successResponse(
       res,
       "Informasi berhasil dipublikasikan",
-      information,
+      publishedInformation,
     );
   } catch (error) {
     console.error("Error publishing information:", error);
@@ -223,7 +275,10 @@ const archiveInformation = async (req, res) => {
     }
     await information.update({
       status: "ARCHIVED",
-      archived_at: new Date(),
+    });
+
+    const archivedInformation = await Information.findByPk(information.id, {
+      include: informationAuthorInclude,
     });
 
     const userName = req.user.full_name || "User";
@@ -237,7 +292,11 @@ const archiveInformation = async (req, res) => {
       user_agent: req.headers["user-agent"],
     });
 
-    return successResponse(res, "Informasi berhasil diarsipkan", information);
+    return successResponse(
+      res,
+      "Informasi berhasil diarsipkan",
+      archivedInformation,
+    );
   } catch (error) {
     console.error("Error archiving information:", error);
     return errorResponse(res, "Gagal mengarsipkan informasi", 500);
@@ -249,6 +308,7 @@ const getLatestInformation = async (req, res) => {
     const data = await getOrSetCache("latest_informations", 300, async () => {
       return await Information.findAll({
         where: { status: "PUBLISHED" },
+        include: informationAuthorInclude,
         order: [["published_at", "DESC"]],
         limit: 3,
       });
@@ -269,7 +329,10 @@ const getInformationBySlug = async (req, res) => {
       `information_slug:${slug}`,
       600,
       async () => {
-        return await Information.findOne({ where: { slug } });
+        return await Information.findOne({
+          where: { slug },
+          include: informationAuthorInclude,
+        });
       },
     );
 
@@ -289,6 +352,7 @@ const getAllInformations = async (req, res) => {
     const data = await getOrSetCache("public_informations", 300, async () => {
       return await Information.findAll({
         where: { status: "PUBLISHED" },
+        include: informationAuthorInclude,
         order: [["createdAt", "DESC"]],
       });
     });
