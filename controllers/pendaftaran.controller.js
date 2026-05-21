@@ -7,11 +7,14 @@ const {
   Faculty,
   Department,
   StudyProgram,
+  ScholarshipSchemaStudyProgram,
   Application,
   FormAnswer,
+  FormAnswerOption,
   ApplicationDocument,
   ActivityLog,
   User,
+  Student,
   sequelize,
 } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
@@ -35,16 +38,46 @@ const parseNumberAnswer = (value) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-const isUserEligibleForSchema = (user, schema) => {
-  const facultyIds = new Set((schema.faculties || []).map((f) => f.id));
-  const departmentIds = new Set((schema.departments || []).map((d) => d.id));
-  const studyProgramIds = new Set(
-    (schema.studyPrograms || []).map((sp) => sp.id),
+const isOptionFieldType = (type) =>
+  type === "SELECT" || type === "MULTI_SELECT";
+
+const normalizeSelectedOptionIds = (value) => {
+  if (Array.isArray(value)) {
+    return [...new Set(value.filter(Boolean).map((item) => String(item)))];
+  }
+
+  if (value === undefined || value === null || value === "") {
+    return [];
+  }
+
+  return [String(value)];
+};
+
+const getSchemaStudyPrograms = (schema) =>
+  schema?.study_programs || schema?.studyPrograms || [];
+
+const buildEligibilityTargetsFromSchema = (schema) => {
+  const schemaStudyPrograms = getSchemaStudyPrograms(schema);
+  const studyProgramIds = new Set(schemaStudyPrograms.map((sp) => sp.id));
+  const departmentIds = new Set(
+    schemaStudyPrograms.map((sp) => sp.department?.id).filter(Boolean),
   );
+  const facultyIds = new Set(
+    schemaStudyPrograms
+      .map((sp) => sp.department?.faculty?.id)
+      .filter(Boolean),
+  );
+
+  return { facultyIds, departmentIds, studyProgramIds };
+};
+
+const isUserEligibleForSchema = (user, schema) => {
+  const { facultyIds, departmentIds, studyProgramIds } =
+    buildEligibilityTargetsFromSchema(schema);
 
   const hasRestriction =
     facultyIds.size > 0 || departmentIds.size > 0 || studyProgramIds.size > 0;
-  if (!hasRestriction) return false;
+  if (!hasRestriction) return true;
 
   const isStudyProgramEligible =
     studyProgramIds.size > 0 && studyProgramIds.has(user.study_program_id);
@@ -54,6 +87,49 @@ const isUserEligibleForSchema = (user, schema) => {
     facultyIds.size > 0 && facultyIds.has(user.faculty_id);
 
   return isStudyProgramEligible || isDepartmentEligible || isFacultyEligible;
+};
+
+const getStudentEligibilityProfile = async (userId) => {
+  const student = await Student.findByPk(userId, {
+    attributes: ["id", "nim", "study_program_id"],
+    include: [
+      {
+        model: StudyProgram,
+        as: "study_program",
+        attributes: ["id", "name", "degree", "department_id"],
+        required: false,
+        include: [
+          {
+            model: Department,
+            as: "department",
+            attributes: ["id", "name", "faculty_id"],
+            required: false,
+            include: [
+              {
+                model: Faculty,
+                as: "faculty",
+                attributes: ["id", "name", "code"],
+                required: false,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
+  if (!student) return null;
+
+  const studyProgram = student.study_program;
+  const department = studyProgram?.department;
+
+  return {
+    id: student.id,
+    nim: student.nim,
+    faculty_id: department?.faculty_id || null,
+    department_id: studyProgram?.department_id || null,
+    study_program_id: student.study_program_id || null,
+  };
 };
 
 const getScholarshipForm = async (req, res) => {
@@ -89,22 +165,24 @@ const getScholarshipForm = async (req, res) => {
           ],
           include: [
             {
-              model: Faculty,
-              as: "faculties",
-              through: { attributes: [] },
-              attributes: ["id"],
-            },
-            {
-              model: Department,
-              as: "departments",
-              through: { attributes: [] },
-              attributes: ["id"],
-            },
-            {
               model: StudyProgram,
-              as: "studyPrograms",
+              as: "study_programs",
               through: { attributes: [] },
-              attributes: ["id"],
+              attributes: ["id", "name", "degree", "department_id"],
+              include: [
+                {
+                  model: Department,
+                  as: "department",
+                  attributes: ["id", "name", "faculty_id"],
+                  include: [
+                    {
+                      model: Faculty,
+                      as: "faculty",
+                      attributes: ["id", "name", "code"],
+                    },
+                  ],
+                },
+              ],
             },
           ],
         },
@@ -119,15 +197,7 @@ const getScholarshipForm = async (req, res) => {
       );
     }
 
-    const user = await User.findByPk(userId, {
-      attributes: [
-        "id",
-        "nim",
-        "faculty_id",
-        "department_id",
-        "study_program_id",
-      ],
-    });
+    const user = await getStudentEligibilityProfile(userId);
 
     if (!user) {
       return errorResponse(res, "User tidak ditemukan", 404);
@@ -200,8 +270,20 @@ const getScholarshipForm = async (req, res) => {
           include: [
             {
               model: FormField,
-              as: "FormField",
+              as: "field",
               attributes: ["id", "type", "label"],
+            },
+            {
+              model: FormAnswerOption,
+              as: "selected_options",
+              attributes: ["id", "option_id"],
+              include: [
+                {
+                  model: FormFieldOption,
+                  as: "option",
+                  attributes: ["id", "value", "order_no"],
+                },
+              ],
             },
           ],
         },
@@ -236,17 +318,27 @@ const getScholarshipForm = async (req, res) => {
       is_required: field.is_required,
       options: (field.options || [])
         .sort((a, b) => a.order_no - b.order_no)
-        .map((option) => option.value),
+        .map((option) => ({
+          id: option.id,
+          value: option.value,
+        })),
       order_no: field.order_no,
     }));
 
     let existingAnswers = {};
     if (existingApplication && existingApplication.formAnswers) {
       existingApplication.formAnswers.forEach((answer) => {
+        const selectedOptions =
+          answer.selected_options
+            ?.map((selectedOption) => selectedOption.option)
+            .filter(Boolean) || [];
+
         existingAnswers[answer.field_id] = {
           answer_text: answer.answer_text,
           file_path: answer.file_path,
           mime_type: answer.mime_type,
+          selected_option_ids: selectedOptions.map((option) => option.id),
+          selected_option_values: selectedOptions.map((option) => option.value),
         };
       });
     }
@@ -312,22 +404,24 @@ const submitApplication = async (req, res) => {
       },
       include: [
         {
-          model: Faculty,
-          as: "faculties",
-          through: { attributes: [] },
-          attributes: ["id"],
-        },
-        {
-          model: Department,
-          as: "departments",
-          through: { attributes: [] },
-          attributes: ["id"],
-        },
-        {
           model: StudyProgram,
-          as: "studyPrograms",
+          as: "study_programs",
           through: { attributes: [] },
-          attributes: ["id"],
+          attributes: ["id", "name", "degree", "department_id"],
+          include: [
+            {
+              model: Department,
+              as: "department",
+              attributes: ["id", "name", "faculty_id"],
+              include: [
+                {
+                  model: Faculty,
+                  as: "faculty",
+                  attributes: ["id", "name", "code"],
+                },
+              ],
+            },
+          ],
         },
       ],
     });
@@ -360,9 +454,7 @@ const submitApplication = async (req, res) => {
       );
     }
 
-    const user = await User.findByPk(userId, {
-      attributes: ["id", "faculty_id", "department_id", "study_program_id"],
-    });
+    const user = await getStudentEligibilityProfile(userId);
 
     if (!user) {
       return errorResponse(res, "User tidak ditemukan", 404);
@@ -428,6 +520,30 @@ const submitApplication = async (req, res) => {
             return errorResponse(
               res,
               `Field "${field.label}" wajib diunggah`,
+              400,
+            );
+          }
+        } else if (field.type === "MULTI_SELECT") {
+          const selectedOptionIds = normalizeSelectedOptionIds(
+            fieldAnswer?.selected_option_ids || fieldAnswer?.answer_text,
+          );
+
+          if (selectedOptionIds.length === 0) {
+            return errorResponse(
+              res,
+              `Field "${field.label}" wajib dipilih minimal satu opsi`,
+              400,
+            );
+          }
+        } else if (field.type === "SELECT") {
+          const selectedOptionIds = normalizeSelectedOptionIds(
+            fieldAnswer?.selected_option_ids || fieldAnswer?.answer_text,
+          );
+
+          if (selectedOptionIds.length === 0) {
+            return errorResponse(
+              res,
+              `Field "${field.label}" wajib dipilih`,
               400,
             );
           }
@@ -526,14 +642,36 @@ const submitApplication = async (req, res) => {
       },
     });
 
+    const schemaStudyProgramMapping =
+      await ScholarshipSchemaStudyProgram.findOne({
+        where: {
+          schema_id: schemaId,
+          study_program_id: user.study_program_id,
+        },
+        attributes: ["id"],
+      });
+
+    if (!schemaStudyProgramMapping) {
+      return errorResponse(
+        res,
+        "Program studi Anda belum terhubung dengan skema ini",
+        400,
+      );
+    }
+
     if (!application) {
       application = await Application.create({
         schema_id: schemaId,
         student_id: userId,
+        schema_study_program_id: schemaStudyProgramMapping.id,
         status: isDraft ? "DRAFT" : "MENUNGGU_VERIFIKASI",
         submitted_at: isDraft ? null : new Date(),
       });
     } else {
+      await application.update({
+        schema_study_program_id: schemaStudyProgramMapping.id,
+      });
+
       if (!isDraft && application.status === "DRAFT") {
         await application.update({
           status: "MENUNGGU_VERIFIKASI",
@@ -546,6 +684,19 @@ const submitApplication = async (req, res) => {
           400,
         );
       }
+    }
+
+    const existingAnswers = await FormAnswer.findAll({
+      where: { application_id: application.id },
+      attributes: ["id"],
+    });
+
+    if (existingAnswers.length > 0) {
+      await FormAnswerOption.destroy({
+        where: {
+          answer_id: existingAnswers.map((answer) => answer.id),
+        },
+      });
     }
 
     await FormAnswer.destroy({
@@ -584,14 +735,43 @@ const submitApplication = async (req, res) => {
           answerData.mime_type = fieldAnswer.mime_type;
           answerData.uploaded_at = new Date();
         }
-      } else {
+      } else if (!isOptionFieldType(field.type)) {
         if (fieldAnswer?.answer_text) {
           answerData.answer_text = fieldAnswer.answer_text;
         }
       }
 
-      if (answerData.answer_text || answerData.file_path) {
-        return FormAnswer.create(answerData);
+      const selectedOptionIds = isOptionFieldType(field.type)
+        ? normalizeSelectedOptionIds(
+            fieldAnswer?.selected_option_ids || fieldAnswer?.answer_text,
+          )
+        : [];
+
+      if (answerData.answer_text || answerData.file_path || selectedOptionIds.length) {
+        const createdAnswer = await FormAnswer.create(answerData);
+
+        if (selectedOptionIds.length > 0) {
+          const validOptions = await FormFieldOption.findAll({
+            where: {
+              id: selectedOptionIds,
+              field_id: field.id,
+            },
+            attributes: ["id"],
+          });
+
+          if (validOptions.length !== selectedOptionIds.length) {
+            throw new Error(`Pilihan untuk field ${field.label} tidak valid`);
+          }
+
+          await FormAnswerOption.bulkCreate(
+            validOptions.map((option) => ({
+              answer_id: createdAnswer.id,
+              option_id: option.id,
+            })),
+          );
+        }
+
+        return createdAnswer;
       }
 
       return null;
@@ -627,6 +807,7 @@ const submitApplication = async (req, res) => {
 
         let documentData = {
           application_id: application.id,
+          schema_id: schemaId,
           schema_document_id: schemaDocumentId,
           file_path: uploadedFile ? uploadedFile.path : fieldAnswer.file_path,
           mime_type: uploadedFile
@@ -787,6 +968,32 @@ const submitRevision = async (req, res) => {
             400,
           );
         }
+      } else if (field.type === "MULTI_SELECT") {
+        const selectedOptionIds = normalizeSelectedOptionIds(
+          fieldAnswer?.selected_option_ids || fieldAnswer?.answer_text,
+        );
+
+        if (selectedOptionIds.length === 0) {
+          await transaction.rollback();
+          return errorResponse(
+            res,
+            `Field "${field.label}" wajib dipilih minimal satu opsi`,
+            400,
+          );
+        }
+      } else if (field.type === "SELECT") {
+        const selectedOptionIds = normalizeSelectedOptionIds(
+          fieldAnswer?.selected_option_ids || fieldAnswer?.answer_text,
+        );
+
+        if (selectedOptionIds.length === 0) {
+          await transaction.rollback();
+          return errorResponse(
+            res,
+            `Field "${field.label}" wajib dipilih`,
+            400,
+          );
+        }
       } else {
         if (
           !fieldAnswer ||
@@ -797,6 +1004,21 @@ const submitRevision = async (req, res) => {
           return errorResponse(res, `Field "${field.label}" wajib diisi`, 400);
         }
       }
+    }
+
+    const existingAnswers = await FormAnswer.findAll({
+      where: { application_id: applicationId },
+      attributes: ["id"],
+      transaction,
+    });
+
+    if (existingAnswers.length > 0) {
+      await FormAnswerOption.destroy({
+        where: {
+          answer_id: existingAnswers.map((answer) => answer.id),
+        },
+        transaction,
+      });
     }
 
     await FormAnswer.destroy({
@@ -836,14 +1058,47 @@ const submitRevision = async (req, res) => {
           answerData.mime_type = fieldAnswer.mime_type;
           answerData.uploaded_at = new Date();
         }
-      } else {
+      } else if (!isOptionFieldType(field.type)) {
         if (fieldAnswer?.answer_text) {
           answerData.answer_text = fieldAnswer.answer_text;
         }
       }
 
-      if (answerData.answer_text || answerData.file_path) {
-        return FormAnswer.create(answerData, { transaction });
+      const selectedOptionIds = isOptionFieldType(field.type)
+        ? normalizeSelectedOptionIds(
+            fieldAnswer?.selected_option_ids || fieldAnswer?.answer_text,
+          )
+        : [];
+
+      if (answerData.answer_text || answerData.file_path || selectedOptionIds.length) {
+        const createdAnswer = await FormAnswer.create(answerData, {
+          transaction,
+        });
+
+        if (selectedOptionIds.length > 0) {
+          const validOptions = await FormFieldOption.findAll({
+            where: {
+              id: selectedOptionIds,
+              field_id: field.id,
+            },
+            attributes: ["id"],
+            transaction,
+          });
+
+          if (validOptions.length !== selectedOptionIds.length) {
+            throw new Error(`Pilihan untuk field ${field.label} tidak valid`);
+          }
+
+          await FormAnswerOption.bulkCreate(
+            validOptions.map((option) => ({
+              answer_id: createdAnswer.id,
+              option_id: option.id,
+            })),
+            { transaction },
+          );
+        }
+
+        return createdAnswer;
       }
 
       return null;
@@ -880,6 +1135,7 @@ const submitRevision = async (req, res) => {
 
         let documentData = {
           application_id: applicationId,
+          schema_id: application.schema_id,
           schema_document_id: schemaDocumentId,
           file_path: uploadedFile ? uploadedFile.path : fieldAnswer.file_path,
           mime_type: uploadedFile
