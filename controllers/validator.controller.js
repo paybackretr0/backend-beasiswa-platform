@@ -1,6 +1,7 @@
 const {
   Application,
   User,
+  Student,
   ActivityLog,
   ScholarshipSchema,
   Scholarship,
@@ -11,6 +12,11 @@ const { successResponse, errorResponse } = require("../utils/response");
 const moment = require("moment-timezone");
 const { sendWhatsAppMessage } = require("../utils/fonnte");
 const { buildApplicationProcessMessage } = require("../utils/whatsappTemplate");
+
+const getScholarshipRegistrationEndMoment = (endDate) => {
+  if (!endDate) return null;
+  return moment.tz(endDate, "YYYY-MM-DD", "Asia/Jakarta").endOf("day");
+};
 
 const normalizeWhatsAppTarget = (phoneNumber) => {
   if (!phoneNumber) return null;
@@ -31,11 +37,14 @@ const notifyApplicationStatusWhatsApp = async ({
 }) => {
   if (!process.env.FONNTE_TOKEN) return;
 
-  const target = normalizeWhatsAppTarget(application?.student?.phone_number);
+  const target = normalizeWhatsAppTarget(
+    application?.student?.user?.phone_number || application?.student?.phone_number,
+  );
   if (!target) return;
 
   const message = buildApplicationProcessMessage({
-    recipientName: application?.student?.full_name,
+    recipientName:
+      application?.student?.user?.full_name || application?.student?.full_name,
     statusKey,
     scholarshipName: application?.schema?.scholarship?.name,
     schemaName: application?.schema?.name,
@@ -50,14 +59,27 @@ const validateApplication = async (req, res) => {
   try {
     const { id } = req.params;
     const { notes } = req.body;
-    const validatorId = req.user.id;
+    const validatorId = req.user.staff?.id;
+    const actorUserId = req.user.id;
+
+    if (!validatorId) {
+      return errorResponse(res, "Profil staff validator tidak ditemukan", 400);
+    }
 
     const application = await Application.findByPk(id, {
       include: [
         {
-          model: User,
+          model: Student,
           as: "student",
-          attributes: ["full_name", "email", "phone_number"],
+          attributes: ["id"],
+          include: [
+            {
+              model: User,
+              as: "user",
+              attributes: ["full_name", "email", "phone_number"],
+              required: true,
+            },
+          ],
         },
         {
           model: ScholarshipSchema,
@@ -66,7 +88,7 @@ const validateApplication = async (req, res) => {
             {
               model: Scholarship,
               as: "scholarship",
-              attributes: ["id", "name"],
+              attributes: ["id", "name", "end_date"],
             },
           ],
         },
@@ -103,11 +125,11 @@ const validateApplication = async (req, res) => {
     }
 
     await ActivityLog.create({
-      user_id: validatorId,
+      user_id: actorUserId,
       action: "VALIDATE_APPLICATION",
       entity_type: "Application",
       entity_id: application.id,
-      description: `Memvalidasi pendaftaran ${application.student?.full_name} untuk beasiswa ${application.schema?.scholarship?.name}`,
+      description: `Memvalidasi pendaftaran ${application.student?.user?.full_name || application.student?.full_name} untuk beasiswa ${application.schema?.scholarship?.name}`,
       ip_address: req.ip,
       user_agent: req.get("User-Agent"),
     });
@@ -141,7 +163,12 @@ const rejectApplication = async (req, res) => {
   try {
     const { id } = req.params;
     const { notes, template_ids } = req.body;
-    const validatorId = req.user.id;
+    const validatorId = req.user.staff?.id;
+    const actorUserId = req.user.id;
+
+    if (!validatorId) {
+      return errorResponse(res, "Profil staff validator tidak ditemukan", 400);
+    }
 
     if (
       (!notes || notes.trim() === "") &&
@@ -157,9 +184,17 @@ const rejectApplication = async (req, res) => {
     const application = await Application.findByPk(id, {
       include: [
         {
-          model: User,
+          model: Student,
           as: "student",
-          attributes: ["full_name", "email", "phone_number"],
+          attributes: ["id"],
+          include: [
+            {
+              model: User,
+              as: "user",
+              attributes: ["full_name", "email", "phone_number"],
+              required: true,
+            },
+          ],
         },
         {
           model: ScholarshipSchema,
@@ -228,11 +263,11 @@ const rejectApplication = async (req, res) => {
     });
 
     await ActivityLog.create({
-      user_id: validatorId,
+      user_id: actorUserId,
       action: "REJECT_APPLICATION",
       entity_type: "Application",
       entity_id: application.id,
-      description: `Menolak pendaftaran ${application.student?.full_name} untuk beasiswa ${application.schema?.scholarship?.name} dengan ${createdComments.length} komentar`,
+      description: `Menolak pendaftaran ${application.student?.user?.full_name || application.student?.full_name} untuk beasiswa ${application.schema?.scholarship?.name} dengan ${createdComments.length} komentar`,
       ip_address: req.ip,
       user_agent: req.get("User-Agent"),
     });
@@ -266,7 +301,12 @@ const requestRevision = async (req, res) => {
   try {
     const { id } = req.params;
     const { notes, template_ids, revision_deadline } = req.body;
-    const validatorId = req.user.id;
+    const validatorId = req.user.staff?.id;
+    const actorUserId = req.user.id;
+
+    if (!validatorId) {
+      return errorResponse(res, "Profil staff validator tidak ditemukan", 400);
+    }
 
     if (
       (!notes || notes.trim() === "") &&
@@ -293,9 +333,17 @@ const requestRevision = async (req, res) => {
     const application = await Application.findByPk(id, {
       include: [
         {
-          model: User,
+          model: Student,
           as: "student",
-          attributes: ["full_name", "email", "phone_number"],
+          attributes: ["id"],
+          include: [
+            {
+              model: User,
+              as: "user",
+              attributes: ["full_name", "email", "phone_number"],
+              required: true,
+            },
+          ],
         },
         {
           model: ScholarshipSchema,
@@ -304,7 +352,7 @@ const requestRevision = async (req, res) => {
             {
               model: Scholarship,
               as: "scholarship",
-              attributes: ["id", "name"],
+              attributes: ["id", "name", "end_date"],
             },
           ],
         },
@@ -319,6 +367,18 @@ const requestRevision = async (req, res) => {
       return errorResponse(
         res,
         "Application cannot be sent for revision. Current status is not VERIFIED",
+        400,
+      );
+    }
+
+    const scholarshipEndWIB = getScholarshipRegistrationEndMoment(
+      application.schema?.scholarship?.end_date,
+    );
+
+    if (scholarshipEndWIB && deadlineWIB.isAfter(scholarshipEndWIB)) {
+      return errorResponse(
+        res,
+        `Deadline revisi tidak boleh melewati tanggal selesai pendaftaran beasiswa (${scholarshipEndWIB.format("DD MMMM YYYY")} WIB)`,
         400,
       );
     }
@@ -368,11 +428,11 @@ const requestRevision = async (req, res) => {
     });
 
     await ActivityLog.create({
-      user_id: validatorId,
+      user_id: actorUserId,
       action: "REQUEST_REVISION",
       entity_type: "Application",
       entity_id: application.id,
-      description: `Meminta revisi pendaftaran ${application.student?.full_name} untuk beasiswa ${application.schema?.scholarship?.name} dengan deadline ${deadlineWIB.format("DD MMMM YYYY, HH:mm")} WIB dan ${createdComments.length} komentar`,
+      description: `Meminta revisi pendaftaran ${application.student?.user?.full_name || application.student?.full_name} untuk beasiswa ${application.schema?.scholarship?.name} dengan deadline ${deadlineWIB.format("DD MMMM YYYY, HH:mm")} WIB dan ${createdComments.length} komentar`,
       ip_address: req.ip,
       user_agent: req.get("User-Agent"),
     });

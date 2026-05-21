@@ -33,7 +33,13 @@ const getAllApplications = async (req, res) => {
     let scholarshipInclude = {
       model: Scholarship,
       as: "scholarship",
-      attributes: ["id", "name", "is_active", "verification_level"],
+      attributes: [
+        "id",
+        "name",
+        "is_active",
+        "verification_level",
+        "end_date",
+      ],
       required: true,
     };
     let schemaEligibilityInclude = null;
@@ -127,6 +133,7 @@ const getAllApplications = async (req, res) => {
       scholarship_id: app.schema?.scholarship_id,
       student_id: app.student_id,
       verification_level: app.schema?.scholarship?.verification_level,
+      scholarship_end_date: app.schema?.scholarship?.end_date || null,
     }));
 
     return successResponse(
@@ -316,6 +323,7 @@ const getApplicationDetail = async (req, res) => {
                 "description",
                 "organizer",
                 "year",
+                "end_date",
                 "scholarship_value",
                 "duration_semesters",
                 "verification_level",
@@ -584,6 +592,7 @@ const getApplicationDetail = async (req, res) => {
         description: application.schema?.scholarship?.description || "N/A",
         organizer: application.schema?.scholarship?.organizer || "N/A",
         year: application.schema?.scholarship?.year,
+        end_date: application.schema?.scholarship?.end_date || null,
         scholarship_value: application.schema?.scholarship?.scholarship_value,
         duration_semesters: application.schema?.scholarship?.duration_semesters,
         schema_name: application.schema?.name || "N/A",
