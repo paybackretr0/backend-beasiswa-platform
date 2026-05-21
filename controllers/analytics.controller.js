@@ -1,6 +1,8 @@
 const {
   Application,
   User,
+  Student,
+  StudyProgram,
   Scholarship,
   ScholarshipSchema,
   Faculty,
@@ -15,7 +17,7 @@ const { getOrSetCache } = require("../utils/cacheHelper");
 const getUserFacultyFilter = (req) => {
   const user = req.user;
   const role = user?.role;
-  const facultyId = user?.faculty_id;
+  const facultyId = user?.staff?.faculty_id || user?.faculty_id;
 
   if (role === "VERIFIKATOR_FAKULTAS" && facultyId) {
     return {
@@ -64,13 +66,35 @@ const getSummary = async (req, res) => {
         scholarshipFilter.year = year;
       }
 
-      let mahasiswaFilter = {
-        role: "MAHASISWA",
-        is_active: true,
-      };
+      let mahasiswaInclude = [
+        {
+          model: User,
+          as: "user",
+          attributes: [],
+          where: {
+            role: "MAHASISWA",
+            is_active: true,
+          },
+          required: true,
+        },
+      ];
 
       if (isFiltered && facultyId) {
-        mahasiswaFilter.faculty_id = facultyId;
+        mahasiswaInclude.push({
+          model: StudyProgram,
+          as: "study_program",
+          attributes: [],
+          required: true,
+          include: [
+            {
+              model: Department,
+              as: "department",
+              attributes: [],
+              required: true,
+              where: { faculty_id: facultyId },
+            },
+          ],
+        });
       }
 
       const [
@@ -85,11 +109,27 @@ const getSummary = async (req, res) => {
               where: applicationFilter,
               include: [
                 {
-                  model: User,
+                  model: Student,
                   as: "student",
-                  where: { faculty_id: facultyId },
                   attributes: [],
                   required: true,
+                  include: [
+                    {
+                      model: StudyProgram,
+                      as: "study_program",
+                      attributes: [],
+                      required: true,
+                      include: [
+                        {
+                          model: Department,
+                          as: "department",
+                          attributes: [],
+                          required: true,
+                          where: { faculty_id: facultyId },
+                        },
+                      ],
+                    },
+                  ],
                 },
               ],
             })
@@ -105,7 +145,10 @@ const getSummary = async (req, res) => {
           },
         }),
 
-        User.count({ where: mahasiswaFilter }),
+        Student.count({
+          include: mahasiswaInclude,
+          distinct: true,
+        }),
 
         Scholarship.count({
           where: {
@@ -157,8 +200,12 @@ const getMonthlyTrend = async (req, res) => {
       }
 
       if (isFiltered) {
-        query += ` INNER JOIN users u ON a.student_id = u.id`;
-        whereClause += " AND u.faculty_id = :facultyId";
+        query += `
+          INNER JOIN students st ON a.student_id = st.id
+          INNER JOIN study_programs sp ON st.study_program_id = sp.id
+          INNER JOIN departments d ON sp.department_id = d.id
+        `;
+        whereClause += " AND d.faculty_id = :facultyId";
         replacements.facultyId = facultyId;
       }
 
@@ -232,7 +279,11 @@ const getScholarshipPerformance = async (req, res) => {
       `;
 
       if (isFiltered) {
-        query += ` LEFT JOIN users u ON a.student_id = u.id `;
+        query += `
+          LEFT JOIN students st ON a.student_id = st.id
+          LEFT JOIN study_programs sp ON st.study_program_id = sp.id
+          LEFT JOIN departments d ON sp.department_id = d.id
+        `;
       }
 
       let whereClause = `
@@ -240,7 +291,7 @@ const getScholarshipPerformance = async (req, res) => {
       `;
 
       if (isFiltered) {
-        whereClause += ` AND (a.id IS NULL OR u.faculty_id = :facultyId) `;
+        whereClause += ` AND (a.id IS NULL OR d.faculty_id = :facultyId) `;
         replacements.facultyId = facultyId;
       }
 
@@ -309,8 +360,11 @@ const getTopPerformingFaculties = async (req, res) => {
           ) as tingkat_keberhasilan,
           '#2D60FF' as color
         FROM faculties f
-        LEFT JOIN users u ON u.faculty_id = f.id AND u.role = 'MAHASISWA'
-        LEFT JOIN applications a ON u.id = a.student_id 
+        LEFT JOIN departments d ON d.faculty_id = f.id
+        LEFT JOIN study_programs sp ON sp.department_id = d.id
+        LEFT JOIN students st ON st.study_program_id = sp.id
+        LEFT JOIN users u ON u.id = st.id AND u.role = 'MAHASISWA'
+        LEFT JOIN applications a ON st.id = a.student_id 
           AND a.status != 'DRAFT'
           ${yearCondition}
         INNER JOIN scholarship_schemas ss ON a.schema_id = ss.id
@@ -362,10 +416,27 @@ const getSelectionSummary = async (req, res) => {
     let includeUser = isFiltered
       ? [
           {
-            model: User,
+            model: Student,
             as: "student",
-            where: { faculty_id: facultyId },
             attributes: [],
+            required: true,
+            include: [
+              {
+                model: StudyProgram,
+                as: "study_program",
+                attributes: [],
+                required: true,
+                include: [
+                  {
+                    model: Department,
+                    as: "department",
+                    attributes: [],
+                    required: true,
+                    where: { faculty_id: facultyId },
+                  },
+                ],
+              },
+            ],
           },
         ]
       : [];
@@ -458,8 +529,11 @@ const getFacultyDistribution = async (req, res) => {
           f.name as label,
           COUNT(a.id) as value
         FROM faculties f
-        LEFT JOIN users u ON u.faculty_id = f.id AND u.role = 'MAHASISWA'
-        LEFT JOIN applications a ON u.id = a.student_id 
+        LEFT JOIN departments d ON d.faculty_id = f.id
+        LEFT JOIN study_programs sp ON sp.department_id = d.id
+        LEFT JOIN students st ON st.study_program_id = sp.id
+        LEFT JOIN users u ON u.id = st.id AND u.role = 'MAHASISWA'
+        LEFT JOIN applications a ON st.id = a.student_id 
           AND a.status != 'DRAFT'
           ${yearCondition}
         INNER JOIN scholarship_schemas ss ON a.schema_id = ss.id
@@ -518,8 +592,10 @@ const getDepartmentDistribution = async (req, res) => {
           d.name as label,
           COUNT(a.id) as value
         FROM departments d
-        LEFT JOIN users u ON u.department_id = d.id AND u.role = 'MAHASISWA'
-        LEFT JOIN applications a ON u.id = a.student_id 
+        LEFT JOIN study_programs sp ON sp.department_id = d.id
+        LEFT JOIN students st ON st.study_program_id = sp.id
+        LEFT JOIN users u ON u.id = st.id AND u.role = 'MAHASISWA'
+        LEFT JOIN applications a ON st.id = a.student_id 
           AND a.status != 'DRAFT'
           ${yearCondition}
         INNER JOIN scholarship_schemas ss ON a.schema_id = ss.id
@@ -581,8 +657,12 @@ const getYearlyTrend = async (req, res) => {
       let replacements = { startYear, currentYear };
 
       if (isFiltered) {
-        query += ` INNER JOIN users u ON a.student_id = u.id `;
-        whereClause += " AND u.faculty_id = :facultyId";
+        query += `
+          INNER JOIN students st ON a.student_id = st.id
+          INNER JOIN study_programs sp ON st.study_program_id = sp.id
+          INNER JOIN departments d ON sp.department_id = d.id
+        `;
+        whereClause += " AND d.faculty_id = :facultyId";
         replacements.facultyId = facultyId;
       }
 
@@ -626,7 +706,7 @@ const getGenderDistribution = async (req, res) => {
       let replacements = {};
 
       if (isFiltered) {
-        userWhere += " AND u.faculty_id = :facultyId";
+        userWhere += " AND d.faculty_id = :facultyId";
         replacements.facultyId = facultyId;
       }
 
@@ -639,21 +719,24 @@ const getGenderDistribution = async (req, res) => {
       const result = await sequelize.query(
         `
         SELECT 
-          u.gender as label,
+          st.gender as label,
           COUNT(a.id) as value,
           CASE 
-            WHEN u.gender = 'L' THEN '#2D60FF'
-            WHEN u.gender = 'P' THEN '#FF69B4'
+            WHEN st.gender = 'L' THEN '#2D60FF'
+            WHEN st.gender = 'P' THEN '#FF69B4'
             ELSE '#9CA3AF'
           END as color
-        FROM users u
-        LEFT JOIN applications a ON u.id = a.student_id 
+        FROM students st
+        INNER JOIN users u ON u.id = st.id
+        INNER JOIN study_programs sp ON st.study_program_id = sp.id
+        INNER JOIN departments d ON sp.department_id = d.id
+        LEFT JOIN applications a ON st.id = a.student_id 
           AND a.status != 'DRAFT'
           ${yearCondition}
         INNER JOIN scholarship_schemas ss ON a.schema_id = ss.id
         INNER JOIN scholarships s ON ss.scholarship_id = s.id
         WHERE ${userWhere}
-        GROUP BY u.gender
+        GROUP BY st.gender
         HAVING COUNT(a.id) > 0
         `,
         { replacements, type: sequelize.QueryTypes.SELECT },
@@ -698,10 +781,14 @@ const getStatusSummary = async (req, res) => {
 
       let joinUser = "";
       if (isFiltered) {
-        joinUser = "INNER JOIN users u ON a.student_id = u.id";
+        joinUser = `
+          INNER JOIN students st ON a.student_id = st.id
+          INNER JOIN study_programs sp ON st.study_program_id = sp.id
+          INNER JOIN departments d ON sp.department_id = d.id
+        `;
         baseWhere += baseWhere
-          ? " AND u.faculty_id = :facultyId"
-          : "u.faculty_id = :facultyId";
+          ? " AND d.faculty_id = :facultyId"
+          : "d.faculty_id = :facultyId";
         replacements.facultyId = facultyId;
       }
 
@@ -763,6 +850,7 @@ const getActivities = async (req, res) => {
             model: User,
             attributes: ["full_name", "role"],
             required: false,
+            as: "user",
           },
         ],
         order: [["createdAt", "DESC"]],
@@ -843,15 +931,13 @@ const getApplicationsList = async (req, res) => {
       role: "MAHASISWA",
     };
 
-    if (isFiltered && facultyId) {
-      userWhereCondition.faculty_id = facultyId;
-    }
+    let studentWhereCondition = {};
 
     let departmentWhereCondition = {};
     let facultyWhereCondition = {};
 
     if (gender && gender !== "Semua") {
-      userWhereCondition.gender = gender === "Laki-laki" ? "L" : "P";
+      studentWhereCondition.gender = gender === "Laki-laki" ? "L" : "P";
     }
 
     if (departemen && departemen !== "Semua") {
@@ -862,10 +948,14 @@ const getApplicationsList = async (req, res) => {
       facultyWhereCondition.name = fakultas;
     }
 
+    if (isFiltered && facultyId) {
+      departmentWhereCondition.faculty_id = facultyId;
+    }
+
     if (search) {
-      userWhereCondition[Op.or] = [
-        { full_name: { [Op.like]: `%${search}%` } },
+      studentWhereCondition[Op.or] = [
         { nim: { [Op.like]: `%${search}%` } },
+        { "$user.full_name$": { [Op.like]: `%${search}%` } },
       ];
     }
 
@@ -873,28 +963,46 @@ const getApplicationsList = async (req, res) => {
       where: whereCondition,
       include: [
         {
-          model: User,
+          model: Student,
           as: "student",
-          where: userWhereCondition,
-          attributes: ["id", "full_name", "nim", "gender"],
+          where: Object.keys(studentWhereCondition).length
+            ? studentWhereCondition
+            : undefined,
+          required: true,
+          attributes: ["id", "nim", "gender"],
           include: [
             {
-              model: Department,
-              as: "department",
-              where: Object.keys(departmentWhereCondition).length
-                ? departmentWhereCondition
-                : undefined,
-              required: false,
-              attributes: ["id", "name"],
+              model: User,
+              as: "user",
+              required: true,
+              where: userWhereCondition,
+              attributes: ["full_name"],
+            },
+            {
+              model: StudyProgram,
+              as: "study_program",
+              required: true,
+              attributes: ["id", "name", "degree"],
               include: [
                 {
-                  model: Faculty,
-                  as: "faculty",
-                  where: Object.keys(facultyWhereCondition).length
-                    ? facultyWhereCondition
+                  model: Department,
+                  as: "department",
+                  where: Object.keys(departmentWhereCondition).length
+                    ? departmentWhereCondition
                     : undefined,
-                  required: false,
+                  required: Object.keys(departmentWhereCondition).length > 0,
                   attributes: ["id", "name"],
+                  include: [
+                    {
+                      model: Faculty,
+                      as: "faculty",
+                      where: Object.keys(facultyWhereCondition).length
+                        ? facultyWhereCondition
+                        : undefined,
+                      required: Object.keys(facultyWhereCondition).length > 0,
+                      attributes: ["id", "name"],
+                    },
+                  ],
                 },
               ],
             },
@@ -919,11 +1027,16 @@ const getApplicationsList = async (req, res) => {
 
     const transformedApplications = applications.map((app) => ({
       id: app.id,
-      nama: app.student?.full_name || "N/A",
+      nama: app.student?.user?.full_name || "N/A",
       nim: app.student?.nim || "N/A",
-      fakultas: app.student?.department?.faculty?.name || "N/A",
-      departemen: app.student?.department?.name || "N/A",
-      gender: app.student?.gender === "L" ? "Laki-laki" : "Perempuan",
+      fakultas: app.student?.study_program?.department?.faculty?.name || "N/A",
+      departemen: app.student?.study_program?.department?.name || "N/A",
+      gender:
+        app.student?.gender === "L"
+          ? "Laki-laki"
+          : app.student?.gender === "P"
+            ? "Perempuan"
+            : "N/A",
       status: app.status,
       rawStatus: app.status,
       beasiswa: app.schema?.scholarship?.name || "N/A",
