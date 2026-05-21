@@ -11,6 +11,9 @@ const {
   ScholarshipSchemaDocument,
   ScholarshipSchemaStage,
   User,
+  Student,
+  Staff,
+  StudyProgram,
   Department,
   Faculty,
   FormAnswer,
@@ -34,7 +37,7 @@ const getAllApplications = async (req, res) => {
     let schemaEligibilityInclude = null;
 
     if (user.role === "VERIFIKATOR_FAKULTAS") {
-      if (!user.faculty_id) {
+      if (!user.staff?.faculty_id) {
         return errorResponse(
           res,
           "User tidak memiliki fakultas terdaftar",
@@ -46,7 +49,7 @@ const getAllApplications = async (req, res) => {
       schemaEligibilityInclude = {
         model: ScholarshipSchemaFaculty,
         as: "scholarshipSchemaFaculties",
-        where: { faculty_id: user.faculty_id },
+        where: { faculty_id: user.staff?.faculty_id },
         attributes: [],
         required: true,
       };
@@ -55,22 +58,36 @@ const getAllApplications = async (req, res) => {
     }
 
     let studentInclude = {
-      model: User,
+      model: Student,
       as: "student",
-      attributes: ["id", "full_name", "email"],
+      attributes: ["id", "nim"],
       required: true,
+      include: [
+        {
+          model: User,
+          as: "user",
+          attributes: ["id", "full_name", "email"],
+          required: true,
+        },
+      ],
     };
 
     if (user.role === "VERIFIKATOR_FAKULTAS") {
-      studentInclude.include = [
-        {
-          model: Department,
-          as: "department",
-          attributes: ["id", "faculty_id"],
-          where: { faculty_id: user.faculty_id },
-          required: true,
-        },
-      ];
+      studentInclude.include.push({
+        model: StudyProgram,
+        as: "study_program",
+        attributes: ["id"],
+        required: true,
+        include: [
+          {
+            model: Department,
+            as: "department",
+            attributes: ["id", "faculty_id"],
+            where: { faculty_id: user.staff?.faculty_id },
+            required: true,
+          },
+        ],
+      });
     }
 
     const applications = await Application.findAll({
@@ -92,8 +109,8 @@ const getAllApplications = async (req, res) => {
 
     const transformedApplications = applications.map((app) => ({
       id: app.id,
-      nama: app.student?.full_name || "N/A",
-      email: app.student?.email || "N/A",
+      nama: app.student?.user?.full_name || "N/A",
+      email: app.student?.user?.email || "N/A",
       beasiswa: app.schema?.scholarship?.name || "N/A",
       skema: app.schema?.name || "N/A",
       tanggalDaftar: app.submitted_at
@@ -125,13 +142,13 @@ const getApplicationsSummary = async (req, res) => {
   try {
     const user = req.user;
 
-    const cacheKey = `applications_summary:${user.role}:${user.faculty_id || "all"}`;
+    const cacheKey = `applications_summary:${user.role}:${user.staff?.faculty_id || "all"}`;
 
     const summary = await getOrSetCache(cacheKey, 300, async () => {
       let includeOptions = [];
 
       if (user.role === "VERIFIKATOR_FAKULTAS") {
-        if (!user.faculty_id) {
+        if (!user.staff?.faculty_id) {
           throw new Error("User tidak memiliki fakultas terdaftar");
         }
 
@@ -152,24 +169,32 @@ const getApplicationsSummary = async (req, res) => {
               {
                 model: ScholarshipSchemaFaculty,
                 as: "scholarshipSchemaFaculties",
-                where: { faculty_id: user.faculty_id },
+                where: { faculty_id: user.staff?.faculty_id },
                 attributes: [],
                 required: true,
               },
             ],
           },
           {
-            model: User,
+            model: Student,
             as: "student",
             attributes: [],
             required: true,
             include: [
               {
-                model: Department,
-                as: "department",
+                model: StudyProgram,
+                as: "study_program",
                 attributes: [],
-                where: { faculty_id: user.faculty_id },
                 required: true,
+                include: [
+                  {
+                    model: Department,
+                    as: "department",
+                    attributes: [],
+                    where: { faculty_id: user.staff?.faculty_id },
+                    required: true,
+                  },
+                ],
               },
             ],
           },
@@ -324,28 +349,32 @@ const getApplicationDetail = async (req, res) => {
           ],
         },
         {
-          model: User,
+          model: Student,
           as: "student",
-          attributes: [
-            "id",
-            "full_name",
-            "email",
-            "nim",
-            "phone_number",
-            "gender",
-            "birth_date",
-            "birth_place",
-          ],
+          attributes: ["id", "nim", "gender", "birth_date", "birth_place"],
           include: [
             {
-              model: Department,
-              as: "department",
-              attributes: ["id", "name"],
+              model: User,
+              as: "user",
+              attributes: ["id", "full_name", "email", "phone_number"],
+              required: true,
+            },
+            {
+              model: StudyProgram,
+              as: "study_program",
+              attributes: ["id", "name", "degree"],
               include: [
                 {
-                  model: Faculty,
-                  as: "faculty",
+                  model: Department,
+                  as: "department",
                   attributes: ["id", "name"],
+                  include: [
+                    {
+                      model: Faculty,
+                      as: "faculty",
+                      attributes: ["id", "name"],
+                    },
+                  ],
                 },
               ],
             },
@@ -363,24 +392,52 @@ const getApplicationDetail = async (req, res) => {
           ],
         },
         {
-          model: User,
+          model: Staff,
           as: "verificator",
-          attributes: ["id", "full_name", "email", "role"],
+          attributes: ["id"],
+          include: [
+            {
+              model: User,
+              as: "user",
+              attributes: ["id", "full_name", "email", "role"],
+            },
+          ],
         },
         {
-          model: User,
+          model: Staff,
           as: "validator",
-          attributes: ["id", "full_name", "email", "role"],
+          attributes: ["id"],
+          include: [
+            {
+              model: User,
+              as: "user",
+              attributes: ["id", "full_name", "email", "role"],
+            },
+          ],
         },
         {
-          model: User,
+          model: Staff,
           as: "rejector",
-          attributes: ["id", "full_name", "email", "role"],
+          attributes: ["id"],
+          include: [
+            {
+              model: User,
+              as: "user",
+              attributes: ["id", "full_name", "email", "role"],
+            },
+          ],
         },
         {
-          model: User,
+          model: Staff,
           as: "revision_requester",
-          attributes: ["id", "full_name", "email", "role"],
+          attributes: ["id"],
+          include: [
+            {
+              model: User,
+              as: "user",
+              attributes: ["id", "full_name", "email", "role"],
+            },
+          ],
         },
         {
           model: ApplicationDocument,
@@ -466,21 +523,24 @@ const getApplicationDetail = async (req, res) => {
 
       student: {
         id: application.student?.id,
-        nama: application.student?.full_name || "N/A",
-        email: application.student?.email || "N/A",
+        nama: application.student?.user?.full_name || "N/A",
+        email: application.student?.user?.email || "N/A",
         nim: application.student?.nim || "N/A",
-        phone_number: application.student?.phone_number || "N/A",
+        phone_number: application.student?.user?.phone_number || "N/A",
         gender: application.student?.gender === "L" ? "Laki-laki" : "Perempuan",
         birth_date: application.student?.birth_date,
         birth_place: application.student?.birth_place || "N/A",
-        fakultas: application.student?.department?.faculty?.name || "N/A",
-        departemen: application.student?.department?.name || "N/A",
+        fakultas:
+          application.student?.study_program?.department?.faculty?.name ||
+          "N/A",
+        departemen:
+          application.student?.study_program?.department?.name || "N/A",
       },
 
-      verificator: application.verificator,
-      validator: application.validator,
-      rejector: application.rejector,
-      revision_requester: application.revision_requester,
+      verificator: application.verificator?.user || null,
+      validator: application.validator?.user || null,
+      rejector: application.rejector?.user || null,
+      revision_requester: application.revision_requester?.user || null,
 
       scholarship: {
         id: application.schema?.scholarship?.id,
@@ -546,9 +606,16 @@ const getApplicationComments = async (req, res) => {
       },
       include: [
         {
-          model: User,
+          model: Staff,
           as: "commenter",
-          attributes: ["id", "full_name", "role"],
+          attributes: ["id"],
+          include: [
+            {
+              model: User,
+              as: "user",
+              attributes: ["id", "full_name", "role"],
+            },
+          ],
         },
         {
           model: ApplicationCommentTemplate,
@@ -559,10 +626,18 @@ const getApplicationComments = async (req, res) => {
       order: [["createdAt", "DESC"]],
     });
 
+    const normalizedComments = comments.map((comment) => {
+      const data = comment.toJSON();
+      return {
+        ...data,
+        commenter: data.commenter?.user || null,
+      };
+    });
+
     return successResponse(
       res,
       "Application comments retrieved successfully",
-      comments,
+      normalizedComments,
     );
   } catch (error) {
     console.error("Error fetching application comments:", error);

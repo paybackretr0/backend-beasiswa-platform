@@ -7,6 +7,9 @@ const {
 } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 
+const isOptionFieldType = (type) =>
+  type === "SELECT" || type === "MULTI_SELECT";
+
 const checkScholarshipForm = async (req, res) => {
   try {
     const { schemaId } = req.params;
@@ -40,7 +43,7 @@ const getScholarshipForm = async (req, res) => {
       include: [
         {
           model: FormField,
-          as: "formFields",
+          as: "form_fields",
           attributes: ["id", "label", "type", "is_required", "order_no"],
           include: [
             {
@@ -57,7 +60,7 @@ const getScholarshipForm = async (req, res) => {
       return errorResponse(res, "Schema tidak ditemukan", 404);
     }
 
-    const fields = schema.formFields
+    const fields = (schema.form_fields || [])
       .sort((a, b) => a.order_no - b.order_no)
       .map((field) => ({
         ...field.toJSON(),
@@ -106,7 +109,7 @@ const createScholarshipForm = async (req, res) => {
         order_no: index + 1,
       });
 
-      if (field.type === "SELECT" && Array.isArray(field.options)) {
+      if (isOptionFieldType(field.type) && Array.isArray(field.options)) {
         const optionRows = field.options
           .filter((option) => String(option).trim() !== "")
           .map((option, optionIndex) => ({
@@ -172,7 +175,7 @@ const updateScholarshipForm = async (req, res) => {
         order_no: index + 1,
       });
 
-      if (field.type === "SELECT" && Array.isArray(field.options)) {
+      if (isOptionFieldType(field.type) && Array.isArray(field.options)) {
         const optionRows = field.options
           .filter((option) => String(option).trim() !== "")
           .map((option, optionIndex) => ({
