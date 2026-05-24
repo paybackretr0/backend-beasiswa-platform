@@ -1,6 +1,7 @@
 const {
   ActivityLog,
   User,
+  Staff,
   BackupHistory,
   ApplicationCommentTemplate,
 } = require("../models");
@@ -20,8 +21,16 @@ const getAllBackups = async (req, res) => {
     const backups = await BackupHistory.findAll({
       include: [
         {
-          model: User,
-          attributes: ["id", "email", "full_name"],
+          model: Staff,
+          as: "executor",
+          attributes: ["id"],
+          include: [
+            {
+              model: User,
+              as: "user",
+              attributes: ["id", "email", "full_name"],
+            },
+          ],
         },
       ],
       order: [["createdAt", "DESC"]],
@@ -85,15 +94,20 @@ const createExcelBackup = async (userId) => {
     });
 
     const users = await sequelize.query(
-      `SELECT u.id, u.email, u.full_name, u.nim, u.role, u.phone_number, 
-              u.gender, u.is_active, u.emailVerified, u.last_login_at,
-              f.name as faculty_name, d.name as department_name, 
+      `SELECT u.id, u.email, u.full_name, st.nim, u.role, u.phone_number, 
+              COALESCE(st.gender, sf.gender) as gender,
+              u.is_active, u.emailVerified, u.last_login_at,
+              COALESCE(f.name, fs.name) as faculty_name,
+              d.name as department_name, 
               sp.code as study_program_code,
               u.createdAt, u.updatedAt
        FROM users u
-       LEFT JOIN faculties f ON u.faculty_id = f.id
-       LEFT JOIN departments d ON u.department_id = d.id
-       LEFT JOIN study_programs sp ON u.study_program_id = sp.id
+       LEFT JOIN students st ON st.id = u.id
+       LEFT JOIN staffs sf ON sf.id = u.id
+       LEFT JOIN study_programs sp ON st.study_program_id = sp.id
+       LEFT JOIN departments d ON sp.department_id = d.id
+       LEFT JOIN faculties f ON d.faculty_id = f.id
+       LEFT JOIN faculties fs ON sf.faculty_id = fs.id
        ORDER BY u.createdAt DESC`,
       { type: sequelize.QueryTypes.SELECT },
     );
@@ -168,15 +182,51 @@ const createExcelBackup = async (userId) => {
     });
 
     const scholarships = await sequelize.query(
-      `SELECT s.id, s.name, s.organizer, s.year, s.quota, s.scholarship_value,
-              s.duration_semesters, s.gpa_minimum, s.semester_minimum,
-              s.start_date, s.end_date, s.is_active, s.is_external,
-              s.verification_level, s.contact_person_name, s.contact_person_email,
-              u.full_name as creator_name,
-              s.createdAt, s.updatedAt
-       FROM scholarships s
-       LEFT JOIN users u ON s.created_by = u.id
-       ORDER BY s.year DESC, s.createdAt DESC`,
+      `SELECT 
+          s.id,
+          s.name,
+          s.organizer,
+          s.year,
+          s.scholarship_value,
+          s.duration_semesters,
+          GROUP_CONCAT(DISTINCT ss.name SEPARATOR ', ') AS schema_names,
+          MIN(ss.gpa_minimum) AS gpa_minimum,
+          MIN(ss.semester_minimum) AS semester_minimum,
+          s.start_date,
+          s.end_date,
+          s.is_active,
+          s.is_external,
+          s.verification_level,
+          s.contact_person_name,
+          s.contact_person_email,
+          u.full_name AS creator_name,
+          s.createdAt,
+          s.updatedAt
+      FROM scholarships s
+      LEFT JOIN scholarship_schemas ss 
+          ON ss.scholarship_id = s.id
+      LEFT JOIN staffs st 
+          ON s.created_by = st.id
+      LEFT JOIN users u 
+          ON st.id = u.id
+      GROUP BY 
+          s.id,
+          s.name,
+          s.organizer,
+          s.year,
+          s.scholarship_value,
+          s.duration_semesters,
+          s.start_date,
+          s.end_date,
+          s.is_active,
+          s.is_external,
+          s.verification_level,
+          s.contact_person_name,
+          s.contact_person_email,
+          u.full_name,
+          s.createdAt,
+          s.updatedAt
+      ORDER BY s.year DESC, s.createdAt DESC`,
       { type: sequelize.QueryTypes.SELECT },
     );
 
@@ -184,9 +234,9 @@ const createExcelBackup = async (userId) => {
       { header: "Nama Beasiswa", key: "name", width: 40 },
       { header: "Penyelenggara", key: "organizer", width: 30 },
       { header: "Tahun", key: "year", width: 10 },
-      { header: "Kuota", key: "quota", width: 10 },
       { header: "Nilai (Rp)", key: "scholarship_value", width: 15 },
       { header: "Durasi (Semester)", key: "duration_semesters", width: 15 },
+      { header: "Skema", key: "schema_names", width: 35 },
       { header: "Min. IPK", key: "gpa_minimum", width: 10 },
       { header: "Min. Semester", key: "semester_minimum", width: 15 },
       { header: "Mulai", key: "start_date", width: 15 },
@@ -223,6 +273,12 @@ const createExcelBackup = async (userId) => {
         scholarship_value: scholarship.scholarship_value
           ? parseFloat(scholarship.scholarship_value).toLocaleString("id-ID")
           : "-",
+        duration_semesters: scholarship.duration_semesters ?? "-",
+        schema_names: scholarship.schema_names || "-",
+        gpa_minimum: scholarship.gpa_minimum
+          ? parseFloat(scholarship.gpa_minimum).toFixed(2)
+          : "-",
+        semester_minimum: scholarship.semester_minimum ?? "-",
         is_active: scholarship.is_active ? "Aktif" : "Nonaktif",
         is_external: scholarship.is_external ? "Ya" : "Tidak",
         start_date: scholarship.start_date
@@ -231,7 +287,9 @@ const createExcelBackup = async (userId) => {
         end_date: scholarship.end_date
           ? new Date(scholarship.end_date).toLocaleDateString("id-ID")
           : "-",
-        createdAt: new Date(scholarship.createdAt).toLocaleString("id-ID"),
+        createdAt: scholarship.createdAt
+          ? new Date(scholarship.createdAt).toLocaleString("id-ID")
+          : "-",
       });
 
       if (index % 2 === 0) {
@@ -260,23 +318,44 @@ const createExcelBackup = async (userId) => {
     });
 
     const applications = await sequelize.query(
-      `SELECT a.id, 
-              sch.name as scholarship_name,
-              \`schema\`.name as schema_name,
-              u.full_name as student_name, u.nim, u.email,
-              a.status, a.submitted_at, a.verified_at, a.validated_at,
-              a.rejected_at, a.revision_requested_at,
-              verif.full_name as verified_by_name,
-              valid.full_name as validated_by_name,
-              a.createdAt, a.updatedAt
-       FROM applications a
-       INNER JOIN scholarship_schemas \`schema\` ON a.schema_id = \`schema\`.id
-       INNER JOIN scholarships sch ON \`schema\`.scholarship_id = sch.id
-       INNER JOIN users u ON a.student_id = u.id
-       LEFT JOIN users verif ON a.verified_by = verif.id
-       LEFT JOIN users valid ON a.validated_by = valid.id
-       ORDER BY a.createdAt DESC
-       LIMIT 1000`,
+      `
+      SELECT 
+        a.id,
+        sch.name AS scholarship_name,
+        ss.name AS schema_name,
+        u.full_name AS student_name,
+        st.nim,
+        u.email,
+        a.status,
+        a.submitted_at,
+        a.verified_at,
+        a.validated_at,
+        a.rejected_at,
+        a.revision_requested_at,
+        verif_user.full_name AS verified_by_name,
+        valid_user.full_name AS validated_by_name,
+        a.createdAt,
+        a.updatedAt
+      FROM applications a
+      INNER JOIN scholarship_schemas ss 
+        ON a.schema_id = ss.id
+      INNER JOIN scholarships sch 
+        ON ss.scholarship_id = sch.id
+      INNER JOIN students st 
+        ON a.student_id = st.id
+      INNER JOIN users u 
+        ON st.id = u.id
+      LEFT JOIN staffs verif_staff 
+        ON a.verified_by = verif_staff.id
+      LEFT JOIN users verif_user 
+        ON verif_staff.id = verif_user.id
+      LEFT JOIN staffs valid_staff 
+        ON a.validated_by = valid_staff.id
+      LEFT JOIN users valid_user 
+        ON valid_staff.id = valid_user.id
+      ORDER BY a.createdAt DESC
+      LIMIT 1000
+    `,
       { type: sequelize.QueryTypes.SELECT },
     );
 
@@ -385,7 +464,8 @@ const createExcelBackup = async (userId) => {
               gs.period, gs.assistance_scheme, gs.imported_at,
               u.full_name as imported_by_name
        FROM government_scholarships gs
-       LEFT JOIN users u ON gs.imported_by = u.id
+       LEFT JOIN staffs sf ON gs.imported_by = sf.id
+       LEFT JOIN users u ON sf.id = u.id
        ORDER BY gs.fiscal_year DESC, gs.ipk DESC`,
       { type: sequelize.QueryTypes.SELECT },
     );
@@ -473,34 +553,49 @@ const createExcelBackup = async (userId) => {
       }
     });
 
-    const orgSheet = workbook.addWorksheet("Fakultas & Jurusan", {
+    const referenceSheet = workbook.addWorksheet("Data Referensi", {
       properties: { tabColor: { argb: "FF5B9BD5" } },
     });
 
-    const faculties = await sequelize.query(
-      `SELECT f.code as faculty_code, f.name as faculty_name, f.is_active as faculty_active,
-              d.code as dept_code, d.name as dept_name, d.is_active as dept_active,
-              sp.code as prodi_code, sp.degree as prodi_degree, sp.is_active as prodi_active
-       FROM faculties f
-       LEFT JOIN departments d ON f.id = d.faculty_id
-       LEFT JOIN study_programs sp ON d.id = sp.department_id
-       ORDER BY f.name, d.name, sp.code`,
+    const referenceData = await sequelize.query(
+      `SELECT 
+          f.code AS faculty_code,
+          f.name AS faculty_name,
+          f.is_active AS faculty_active,
+
+          d.code AS department_code,
+          d.name AS department_name,
+          d.is_active AS department_active,
+
+          sp.code AS study_program_code,
+          sp.name AS study_program_name,
+          sp.degree AS study_program_degree,
+          sp.is_active AS study_program_active
+      FROM faculties f
+      LEFT JOIN departments d 
+          ON f.id = d.faculty_id
+      LEFT JOIN study_programs sp 
+          ON d.id = sp.department_id
+      ORDER BY f.name ASC, d.name ASC, sp.name ASC`,
       { type: sequelize.QueryTypes.SELECT },
     );
 
-    orgSheet.columns = [
+    referenceSheet.columns = [
       { header: "Kode Fakultas", key: "faculty_code", width: 15 },
-      { header: "Nama Fakultas", key: "faculty_name", width: 30 },
+      { header: "Nama Fakultas", key: "faculty_name", width: 35 },
       { header: "Status Fakultas", key: "faculty_active", width: 15 },
-      { header: "Kode Jurusan", key: "dept_code", width: 15 },
-      { header: "Nama Jurusan", key: "dept_name", width: 35 },
-      { header: "Status Jurusan", key: "dept_active", width: 15 },
-      { header: "Kode Prodi", key: "prodi_code", width: 15 },
-      { header: "Jenjang", key: "prodi_degree", width: 12 },
-      { header: "Status Prodi", key: "prodi_active", width: 15 },
+
+      { header: "Kode Departemen", key: "department_code", width: 18 },
+      { header: "Nama Departemen", key: "department_name", width: 35 },
+      { header: "Status Departemen", key: "department_active", width: 18 },
+
+      { header: "Kode Prodi", key: "study_program_code", width: 15 },
+      { header: "Nama Prodi", key: "study_program_name", width: 35 },
+      { header: "Jenjang", key: "study_program_degree", width: 12 },
+      { header: "Status Prodi", key: "study_program_active", width: 15 },
     ];
 
-    orgSheet.getRow(1).eachCell((cell) => {
+    referenceSheet.getRow(1).eachCell((cell) => {
       cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
       cell.fill = {
         type: "pattern",
@@ -515,14 +610,31 @@ const createExcelBackup = async (userId) => {
         right: { style: "thin" },
       };
     });
-    orgSheet.getRow(1).height = 25;
+    referenceSheet.getRow(1).height = 25;
 
-    faculties.forEach((org, index) => {
-      const row = orgSheet.addRow({
-        ...org,
-        faculty_active: org.faculty_active ? "Aktif" : "Nonaktif",
-        dept_active: org.dept_active ? "Aktif" : "Nonaktif",
-        prodi_active: org.prodi_active ? "Aktif" : "Nonaktif",
+    referenceData.forEach((item, index) => {
+      const row = referenceSheet.addRow({
+        ...item,
+        faculty_active: item.faculty_active ? "Aktif" : "Nonaktif",
+        department_code: item.department_code || "-",
+        department_name: item.department_name || "-",
+        department_active:
+          item.department_active === null ||
+          item.department_active === undefined
+            ? "-"
+            : item.department_active
+              ? "Aktif"
+              : "Nonaktif",
+        study_program_code: item.study_program_code || "-",
+        study_program_name: item.study_program_name || "-",
+        study_program_degree: item.study_program_degree || "-",
+        study_program_active:
+          item.study_program_active === null ||
+          item.study_program_active === undefined
+            ? "-"
+            : item.study_program_active
+              ? "Aktif"
+              : "Nonaktif",
       });
 
       if (index % 2 === 0) {
@@ -808,6 +920,7 @@ const exportActivityLogsToExcel = async (req, res) => {
         {
           model: User,
           attributes: ["id", "email", "full_name", "role"],
+          as: "user",
         },
       ],
       order: [["createdAt", "DESC"]],
@@ -1113,6 +1226,7 @@ const getAllActivityLogs = async (req, res) => {
         {
           model: User,
           attributes: ["id", "email", "full_name", "role"],
+          as: "user",
           where:
             Object.keys(userWhereConditions).length > 0
               ? userWhereConditions
@@ -1201,9 +1315,16 @@ const getAllCommentTemplates = async (req, res) => {
         where: whereConditions,
         include: [
           {
-            model: User,
+            model: Staff,
             as: "creator",
-            attributes: ["id", "full_name", "email"],
+            attributes: ["id"],
+            include: [
+              {
+                model: User,
+                as: "user",
+                attributes: ["id", "full_name", "email"],
+              },
+            ],
           },
         ],
         order: [["createdAt", "DESC"]],
@@ -1211,8 +1332,16 @@ const getAllCommentTemplates = async (req, res) => {
         offset: parseInt(offset),
       });
 
+      const normalizedRows = rows.map((template) => {
+        const data = template.toJSON();
+        return {
+          ...data,
+          creator: data.creator?.user || null,
+        };
+      });
+
       return {
-        templates: rows,
+        templates: normalizedRows,
         pagination: {
           currentPage: parseInt(page),
           totalPages: Math.ceil(count / limit),
@@ -1237,15 +1366,32 @@ const getCommentTemplateById = async (req, res) => {
       `comment_template:${id}`,
       600,
       async () => {
-        return await ApplicationCommentTemplate.findByPk(id, {
+        const template = await ApplicationCommentTemplate.findByPk(id, {
           include: [
             {
-              model: User,
+              model: Staff,
               as: "creator",
-              attributes: ["id", "full_name", "email"],
+              attributes: ["id"],
+              include: [
+                {
+                  model: User,
+                  as: "user",
+                  attributes: ["id", "full_name", "email"],
+                },
+              ],
             },
           ],
         });
+
+        if (!template) {
+          return null;
+        }
+
+        const data = template.toJSON();
+        return {
+          ...data,
+          creator: data.creator?.user || null,
+        };
       },
     );
 

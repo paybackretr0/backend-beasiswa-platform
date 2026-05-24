@@ -1,5 +1,7 @@
 "use strict";
+
 const { Model } = require("sequelize");
+
 module.exports = (sequelize, DataTypes) => {
   class FormField extends Model {
     static associate(models) {
@@ -7,26 +9,34 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: "schema_id",
         as: "schema",
       });
+
       FormField.hasMany(models.FormAnswer, {
         foreignKey: "field_id",
         as: "answers",
       });
+
       FormField.hasMany(models.FormFieldOption, {
         foreignKey: "field_id",
         as: "options",
       });
     }
   }
+
   FormField.init(
     {
       id: {
         type: DataTypes.UUID,
         primaryKey: true,
         defaultValue: DataTypes.UUIDV4,
+        allowNull: false,
       },
       schema_id: {
         type: DataTypes.UUID,
         allowNull: false,
+        references: {
+          model: "scholarship_schemas",
+          key: "id",
+        },
       },
       label: {
         type: DataTypes.STRING(191),
@@ -39,6 +49,7 @@ module.exports = (sequelize, DataTypes) => {
           "DATE",
           "FILE",
           "SELECT",
+          "MULTI_SELECT",
           "TEXTAREA",
         ),
         allowNull: false,
@@ -62,5 +73,6 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
     },
   );
+
   return FormField;
 };

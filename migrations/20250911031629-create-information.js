@@ -42,7 +42,7 @@ module.exports = {
         type: Sequelize.UUID,
         allowNull: true,
         references: {
-          model: "users",
+          model: "staffs",
           key: "id",
         },
         onUpdate: "CASCADE",
@@ -65,13 +65,15 @@ module.exports = {
     });
 
     await queryInterface.addIndex("informations", ["status"], {
-      name: "informations_index_12",
+      name: "idx_informations_status",
     });
+
     await queryInterface.addIndex("informations", ["published_at"], {
-      name: "informations_index_13",
+      name: "idx_informations_published_at",
     });
+
     await queryInterface.addIndex("informations", ["author_id"], {
-      name: "informations_index_14",
+      name: "idx_informations_author_id",
     });
   },
 

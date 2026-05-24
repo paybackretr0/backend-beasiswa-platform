@@ -1,10 +1,10 @@
 "use strict";
+
 const { Model } = require("sequelize");
 
 module.exports = (sequelize, DataTypes) => {
   class ScholarshipBenefit extends Model {
     static associate(models) {
-      // Relasi dengan Scholarship
       ScholarshipBenefit.belongsTo(models.Scholarship, {
         foreignKey: "scholarship_id",
         as: "scholarship",
@@ -18,10 +18,15 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.UUID,
         primaryKey: true,
         defaultValue: DataTypes.UUIDV4,
+        allowNull: false,
       },
       scholarship_id: {
         type: DataTypes.UUID,
         allowNull: false,
+        references: {
+          model: "scholarships",
+          key: "id",
+        },
       },
       benefit_text: {
         type: DataTypes.TEXT,
@@ -33,7 +38,7 @@ module.exports = (sequelize, DataTypes) => {
       modelName: "ScholarshipBenefit",
       tableName: "scholarship_benefits",
       timestamps: true,
-    }
+    },
   );
 
   return ScholarshipBenefit;

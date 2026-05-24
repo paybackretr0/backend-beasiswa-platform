@@ -33,7 +33,7 @@ module.exports = {
       answer_text: {
         type: Sequelize.TEXT,
         allowNull: true,
-        comment: "Isi jawaban untuk TEXT, NUMBER, DATE, SELECT, TEXTAREA",
+        comment: "Isi jawaban untuk TEXT, NUMBER, DATE, TEXTAREA",
       },
       file_path: {
         type: Sequelize.STRING(512),
@@ -61,11 +61,21 @@ module.exports = {
     });
 
     await queryInterface.addIndex("form_answers", ["application_id"], {
-      name: "form_answers_idx_application",
+      name: "idx_form_answers_application_id",
     });
+
     await queryInterface.addIndex("form_answers", ["field_id"], {
-      name: "form_answers_idx_field",
+      name: "idx_form_answers_field_id",
     });
+
+    await queryInterface.addIndex(
+      "form_answers",
+      ["application_id", "field_id"],
+      {
+        unique: true,
+        name: "uq_form_answers_application_field",
+      },
+    );
   },
 
   async down(queryInterface, Sequelize) {

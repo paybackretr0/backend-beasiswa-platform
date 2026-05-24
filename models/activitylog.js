@@ -1,22 +1,32 @@
 "use strict";
+
 const { Model } = require("sequelize");
+
 module.exports = (sequelize, DataTypes) => {
   class ActivityLog extends Model {
     static associate(models) {
-      // ActivityLog belongs to User
-      ActivityLog.belongsTo(models.User, { foreignKey: "user_id" });
+      ActivityLog.belongsTo(models.User, {
+        foreignKey: "user_id",
+        as: "user",
+      });
     }
   }
+
   ActivityLog.init(
     {
       id: {
         type: DataTypes.UUID,
         primaryKey: true,
         defaultValue: DataTypes.UUIDV4,
+        allowNull: false,
       },
       user_id: {
         type: DataTypes.UUID,
         allowNull: true,
+        references: {
+          model: "users",
+          key: "id",
+        },
       },
       action: {
         type: DataTypes.STRING(100),
@@ -47,9 +57,10 @@ module.exports = (sequelize, DataTypes) => {
       sequelize,
       modelName: "ActivityLog",
       tableName: "activity_logs",
-      timestamps: true, // hanya ada createdAt
+      timestamps: true,
       updatedAt: false,
-    }
+    },
   );
+
   return ActivityLog;
 };

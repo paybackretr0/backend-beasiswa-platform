@@ -4,14 +4,13 @@ const {
   ScholarshipSchemaRequirement,
   ScholarshipSchemaDocument,
   ScholarshipSchemaStage,
-  ScholarshipSchemaFaculty,
-  ScholarshipSchemaDepartment,
   ScholarshipSchemaStudyProgram,
   ScholarshipBenefit,
   FormField,
   Faculty,
   Department,
   StudyProgram,
+  Student,
   User,
   ActivityLog,
   Application,
@@ -73,19 +72,45 @@ const notifyEligibleStudentsForNewScholarship = async (
       is_active: true,
       phone_number: { [Op.ne]: null },
     },
-    attributes: [
-      "id",
-      "full_name",
-      "phone_number",
-      "faculty_id",
-      "department_id",
-      "study_program_id",
+    attributes: ["id", "full_name", "phone_number"],
+    include: [
+      {
+        model: Student,
+        as: "student",
+        attributes: ["study_program_id"],
+        required: true,
+        include: [
+          {
+            model: StudyProgram,
+            as: "study_program",
+            attributes: ["id", "department_id"],
+            required: true,
+            include: [
+              {
+                model: Department,
+                as: "department",
+                attributes: ["id", "faculty_id"],
+                required: true,
+              },
+            ],
+          },
+        ],
+      },
     ],
   });
 
   const eligibleRecipients = new Map();
   mahasiswaUsers.forEach((user) => {
-    if (!isUserEligibleForAnySchema(user, parsedSchemas)) return;
+    const studentStudyProgram = user.student?.study_program;
+    const studentDepartment = studentStudyProgram?.department;
+
+    const eligibilityUser = {
+      faculty_id: studentDepartment?.faculty_id || null,
+      department_id: studentStudyProgram?.department_id || null,
+      study_program_id: user.student?.study_program_id || null,
+    };
+
+    if (!isUserEligibleForAnySchema(eligibilityUser, parsedSchemas)) return;
 
     const normalizedTarget = normalizeWhatsAppTarget(user.phone_number);
     if (!normalizedTarget) return;
@@ -191,70 +216,71 @@ const getAllScholarships = async (req, res) => {
         .flatMap((s) => (s.schemas || []).map((schema) => schema.id))
         .filter(Boolean);
 
-      const [faculties, departments, studyPrograms] = schemaIds.length
-        ? await Promise.all([
-            ScholarshipSchemaFaculty.findAll({
-              where: { schema_id: schemaIds },
-              include: [
-                { model: Faculty, as: "faculty", attributes: ["id", "name"] },
-              ],
-              attributes: ["schema_id"],
-            }),
-            ScholarshipSchemaDepartment.findAll({
-              where: { schema_id: schemaIds },
-              include: [
-                {
-                  model: Department,
-                  as: "department",
-                  attributes: ["id", "name"],
-                },
-              ],
-              attributes: ["schema_id"],
-            }),
-            ScholarshipSchemaStudyProgram.findAll({
-              where: { schema_id: schemaIds },
-              include: [
-                {
-                  model: StudyProgram,
-                  as: "study_program",
-                  attributes: ["id", "name", "degree"],
-                },
-              ],
-              attributes: ["schema_id"],
-            }),
-          ])
-        : [[], [], []];
+      const schemaStudyPrograms = schemaIds.length
+        ? await ScholarshipSchemaStudyProgram.findAll({
+            where: { schema_id: schemaIds },
+            include: [
+              {
+                model: StudyProgram,
+                as: "study_program",
+                attributes: ["id", "name", "degree"],
+                include: [
+                  {
+                    model: Department,
+                    as: "department",
+                    attributes: ["id", "name"],
+                    include: [
+                      {
+                        model: Faculty,
+                        as: "faculty",
+                        attributes: ["id", "name"],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+            attributes: ["schema_id"],
+          })
+        : [];
+
+      const addUniqueItem = (map, schemaId, item) => {
+        if (!item) return;
+        if (!map[schemaId]) map[schemaId] = [];
+        if (!map[schemaId].some((existing) => existing.id === item.id)) {
+          map[schemaId].push(item);
+        }
+      };
 
       const facultiesMap = {};
-      faculties.forEach((f) => {
-        if (!facultiesMap[f.schema_id]) facultiesMap[f.schema_id] = [];
-        if (f.faculty)
-          facultiesMap[f.schema_id].push({
-            id: f.faculty.id,
-            name: f.faculty.name,
-          });
-      });
-
       const departmentsMap = {};
-      departments.forEach((d) => {
-        if (!departmentsMap[d.schema_id]) departmentsMap[d.schema_id] = [];
-        if (d.department)
-          departmentsMap[d.schema_id].push({
-            id: d.department.id,
-            name: d.department.name,
-          });
-      });
-
       const studyProgramsMap = {};
-      studyPrograms.forEach((sp) => {
-        if (!studyProgramsMap[sp.schema_id])
-          studyProgramsMap[sp.schema_id] = [];
-        if (sp.study_program)
-          studyProgramsMap[sp.schema_id].push({
-            id: sp.study_program.id,
-            name: sp.study_program.name,
-            degree: sp.study_program.degree,
+
+      schemaStudyPrograms.forEach((sp) => {
+        const studyProgram = sp.study_program;
+        if (studyProgram) {
+          addUniqueItem(studyProgramsMap, sp.schema_id, {
+            id: studyProgram.id,
+            name: studyProgram.name,
+            degree: studyProgram.degree,
           });
+        }
+
+        const department = studyProgram?.department;
+        if (department) {
+          addUniqueItem(departmentsMap, sp.schema_id, {
+            id: department.id,
+            name: department.name,
+          });
+        }
+
+        const faculty = department?.faculty;
+        if (faculty) {
+          addUniqueItem(facultiesMap, sp.schema_id, {
+            id: faculty.id,
+            name: faculty.name,
+          });
+        }
       });
 
       return scholarships.map((scholarship) => {
@@ -606,24 +632,6 @@ const createScholarship = async (req, res) => {
         await ScholarshipSchemaStage.bulkCreate(stageData, { transaction });
       }
 
-      if (faculties && faculties.length > 0) {
-        const facultyData = faculties.map((facultyId) => ({
-          schema_id: schema.id,
-          faculty_id: facultyId,
-        }));
-        await ScholarshipSchemaFaculty.bulkCreate(facultyData, { transaction });
-      }
-
-      if (departments && departments.length > 0) {
-        const departmentData = departments.map((departmentId) => ({
-          schema_id: schema.id,
-          department_id: departmentId,
-        }));
-        await ScholarshipSchemaDepartment.bulkCreate(departmentData, {
-          transaction,
-        });
-      }
-
       if (study_programs && study_programs.length > 0) {
         const studyProgramData = study_programs.map((studyProgramId) => ({
           schema_id: schema.id,
@@ -681,43 +689,24 @@ const createScholarship = async (req, res) => {
         },
         {
           model: FormField,
-          as: "formFields",
+          as: "form_fields",
           attributes: ["id", "label", "type", "is_required", "order_no"],
         },
         {
-          model: Faculty,
-          as: "faculties",
-          through: { attributes: [] },
-          attributes: ["id", "name"],
-        },
-        {
-          model: Department,
-          as: "departments",
-          through: { attributes: [] },
-          attributes: ["id", "name"],
-          include: [
-            {
-              model: Faculty,
-              as: "faculty",
-              attributes: ["id", "name"],
-            },
-          ],
-        },
-        {
           model: StudyProgram,
-          as: "studyPrograms",
+          as: "study_programs",
           through: { attributes: [] },
-          attributes: ["id", "name", "degree"],
+          attributes: ["id", "name", "code", "degree", "department_id"],
           include: [
             {
               model: Department,
               as: "department",
-              attributes: ["id", "name"],
+              attributes: ["id", "name", "code", "faculty_id"],
               include: [
                 {
                   model: Faculty,
                   as: "faculty",
-                  attributes: ["id", "name"],
+                  attributes: ["id", "name", "code"],
                 },
               ],
             },
@@ -726,12 +715,41 @@ const createScholarship = async (req, res) => {
       ],
     });
 
+    const formattedSchemas = await Promise.all(
+      createdSchemas.map(async (schema) => {
+        const schemaJson = schema.toJSON();
+        const selectedStudyPrograms = schemaJson.study_programs || [];
+
+        const {
+          eligibleFaculties,
+          eligibleDepartments,
+          eligibleStudyPrograms,
+        } = await buildEligibilityFromStudyPrograms(selectedStudyPrograms);
+
+        return {
+          ...schemaJson,
+          formFields: schemaJson.form_fields || [],
+          directStudyPrograms: selectedStudyPrograms,
+          studyPrograms: selectedStudyPrograms,
+          faculties: eligibleFaculties,
+          departments: eligibleDepartments,
+          study_programs: eligibleStudyPrograms,
+          eligibleFaculties,
+          eligibleDepartments,
+          eligibleStudyPrograms,
+          effectiveFaculties: eligibleFaculties,
+          effectiveDepartments: eligibleDepartments,
+          effectiveStudyPrograms: eligibleStudyPrograms,
+          stages: (schemaJson.stages || []).sort(
+            (a, b) => a.order_no - b.order_no,
+          ),
+        };
+      }),
+    );
+
     const result = {
       ...createdScholarship.toJSON(),
-      schemas: createdSchemas.map((s) => ({
-        ...s.toJSON(),
-        stages: (s.stages || []).sort((a, b) => a.order_no - b.order_no),
-      })),
+      schemas: formattedSchemas,
     };
 
     const userName = req.user.full_name || "User";
@@ -756,10 +774,154 @@ const createScholarship = async (req, res) => {
 
     return successResponse(res, "Beasiswa berhasil dibuat", result);
   } catch (error) {
-    await transaction.rollback();
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
     console.error("Error creating scholarship:", error);
     return errorResponse(res, "Gagal membuat beasiswa", 500);
   }
+};
+
+const buildEligibilityFromStudyPrograms = async (selectedStudyPrograms) => {
+  const selectedStudyProgramIds = new Set(
+    selectedStudyPrograms.map((sp) => sp.id),
+  );
+
+  const departmentMap = new Map();
+  const facultyMap = new Map();
+
+  selectedStudyPrograms.forEach((sp) => {
+    const department = sp.department;
+    const faculty = department?.faculty;
+
+    if (department) {
+      if (!departmentMap.has(department.id)) {
+        departmentMap.set(department.id, {
+          id: department.id,
+          name: department.name,
+          code: department.code,
+          faculty_id: department.faculty_id,
+          faculty,
+          selectedStudyPrograms: [],
+        });
+      }
+
+      departmentMap.get(department.id).selectedStudyPrograms.push({
+        id: sp.id,
+        name: sp.name,
+        code: sp.code,
+        degree: sp.degree,
+      });
+    }
+
+    if (faculty) {
+      if (!facultyMap.has(faculty.id)) {
+        facultyMap.set(faculty.id, {
+          id: faculty.id,
+          name: faculty.name,
+          code: faculty.code,
+          selectedDepartments: new Map(),
+        });
+      }
+
+      if (department) {
+        facultyMap.get(faculty.id).selectedDepartments.set(department.id, {
+          id: department.id,
+          name: department.name,
+          code: department.code,
+        });
+      }
+    }
+  });
+
+  const allSelectedDepartments = Array.from(departmentMap.values());
+
+  const eligibleDepartments = [];
+
+  for (const department of allSelectedDepartments) {
+    const allDepartmentStudyPrograms = await StudyProgram.findAll({
+      where: {
+        department_id: department.id,
+        is_active: true,
+      },
+      attributes: ["id"],
+    });
+
+    const allDepartmentStudyProgramIds = allDepartmentStudyPrograms.map(
+      (sp) => sp.id,
+    );
+
+    const isAllStudyProgramsSelected =
+      allDepartmentStudyProgramIds.length > 0 &&
+      allDepartmentStudyProgramIds.every((spId) =>
+        selectedStudyProgramIds.has(spId),
+      );
+
+    if (isAllStudyProgramsSelected) {
+      eligibleDepartments.push({
+        id: department.id,
+        name: department.name,
+        code: department.code,
+        faculty: department.faculty,
+      });
+    }
+  }
+
+  const eligibleDepartmentIds = new Set(eligibleDepartments.map((d) => d.id));
+  const eligibleFaculties = [];
+
+  const allFacultiesFromSelection = Array.from(facultyMap.values());
+
+  for (const faculty of allFacultiesFromSelection) {
+    const allFacultyDepartments = await Department.findAll({
+      where: {
+        faculty_id: faculty.id,
+        is_active: true,
+      },
+      attributes: ["id", "name", "code"],
+      include: [
+        {
+          model: StudyProgram,
+          as: "study_programs",
+          attributes: ["id"],
+          where: {
+            is_active: true,
+          },
+          required: false,
+        },
+      ],
+    });
+
+    const activeDepartmentIds = allFacultyDepartments
+      .filter((department) => department.study_programs?.length > 0)
+      .map((department) => department.id);
+
+    const isAllDepartmentsEligible =
+      activeDepartmentIds.length > 0 &&
+      activeDepartmentIds.every((departmentId) =>
+        eligibleDepartmentIds.has(departmentId),
+      );
+
+    if (isAllDepartmentsEligible) {
+      eligibleFaculties.push({
+        id: faculty.id,
+        name: faculty.name,
+        code: faculty.code,
+      });
+    }
+  }
+
+  return {
+    eligibleFaculties,
+    eligibleDepartments,
+    eligibleStudyPrograms: selectedStudyPrograms.map((sp) => ({
+      id: sp.id,
+      name: sp.name,
+      code: sp.code,
+      degree: sp.degree,
+      department: sp.department,
+    })),
+  };
 };
 
 const getBeasiswaById = async (req, res) => {
@@ -780,12 +942,6 @@ const getBeasiswaById = async (req, res) => {
 
       if (!scholarship) {
         return null;
-      }
-
-      if (!scholarship.is_active) {
-        return {
-          inactive: true,
-        };
       }
 
       const schemas = await ScholarshipSchema.findAll({
@@ -821,39 +977,20 @@ const getBeasiswaById = async (req, res) => {
             attributes: ["id", "stage_name", "order_no"],
           },
           {
-            model: Faculty,
-            as: "faculties",
-            through: { attributes: [] },
-            attributes: ["id", "name"],
-          },
-          {
-            model: Department,
-            as: "departments",
-            through: { attributes: [] },
-            attributes: ["id", "name"],
-            include: [
-              {
-                model: Faculty,
-                as: "faculty",
-                attributes: ["id", "name"],
-              },
-            ],
-          },
-          {
             model: StudyProgram,
-            as: "studyPrograms",
+            as: "study_programs",
             through: { attributes: [] },
-            attributes: ["id", "name", "degree"],
+            attributes: ["id", "name", "code", "degree", "department_id"],
             include: [
               {
                 model: Department,
                 as: "department",
-                attributes: ["id", "name"],
+                attributes: ["id", "name", "code", "faculty_id"],
                 include: [
                   {
                     model: Faculty,
                     as: "faculty",
-                    attributes: ["id", "name"],
+                    attributes: ["id", "name", "code"],
                   },
                 ],
               },
@@ -866,107 +1003,26 @@ const getBeasiswaById = async (req, res) => {
         schemas.map(async (schema) => {
           const schemaJson = schema.toJSON();
 
-          const directFacultyIds = (schemaJson.faculties || []).map(
-            (f) => f.id,
-          );
-          const directDepartmentIds = (schemaJson.departments || []).map(
-            (d) => d.id,
-          );
-          const directStudyProgramIds = (schemaJson.studyPrograms || []).map(
-            (sp) => sp.id,
-          );
+          const selectedStudyPrograms = schemaJson.study_programs || [];
 
-          const departmentsFromFaculties =
-            directFacultyIds.length > 0
-              ? await Department.findAll({
-                  where: {
-                    faculty_id: directFacultyIds,
-                    is_active: true,
-                  },
-                  attributes: ["id", "name", "faculty_id"],
-                  include: [
-                    {
-                      model: Faculty,
-                      as: "faculty",
-                      attributes: ["id", "name"],
-                    },
-                  ],
-                  order: [["name", "ASC"]],
-                })
-              : [];
-
-          const effectiveDepartmentMap = new Map();
-
-          (schemaJson.departments || []).forEach((department) => {
-            effectiveDepartmentMap.set(department.id, department);
-          });
-
-          departmentsFromFaculties.forEach((department) => {
-            effectiveDepartmentMap.set(department.id, department.toJSON());
-          });
-
-          const effectiveDepartments = Array.from(
-            effectiveDepartmentMap.values(),
-          );
-
-          const effectiveDepartmentIds = effectiveDepartments.map((d) => d.id);
-
-          const studyProgramsFromDepartments =
-            effectiveDepartmentIds.length > 0
-              ? await StudyProgram.findAll({
-                  where: {
-                    department_id: effectiveDepartmentIds,
-                    is_active: true,
-                  },
-                  attributes: ["id", "name", "degree", "department_id"],
-                  include: [
-                    {
-                      model: Department,
-                      as: "department",
-                      attributes: ["id", "name", "faculty_id"],
-                      include: [
-                        {
-                          model: Faculty,
-                          as: "faculty",
-                          attributes: ["id", "name"],
-                        },
-                      ],
-                    },
-                  ],
-                  order: [
-                    ["name", "ASC"],
-                    ["degree", "ASC"],
-                  ],
-                })
-              : [];
-
-          const effectiveStudyProgramMap = new Map();
-
-          (schemaJson.studyPrograms || []).forEach((studyProgram) => {
-            effectiveStudyProgramMap.set(studyProgram.id, studyProgram);
-          });
-
-          studyProgramsFromDepartments.forEach((studyProgram) => {
-            effectiveStudyProgramMap.set(
-              studyProgram.id,
-              studyProgram.toJSON(),
-            );
-          });
-
-          const effectiveStudyPrograms = Array.from(
-            effectiveStudyProgramMap.values(),
-          );
+          const {
+            eligibleFaculties,
+            eligibleDepartments,
+            eligibleStudyPrograms,
+          } = await buildEligibilityFromStudyPrograms(selectedStudyPrograms);
 
           return {
             ...schemaJson,
 
-            directFaculties: schemaJson.faculties || [],
-            directDepartments: schemaJson.departments || [],
-            directStudyPrograms: schemaJson.studyPrograms || [],
+            eligibleFaculties,
+            eligibleDepartments,
+            eligibleStudyPrograms,
 
-            effectiveFaculties: schemaJson.faculties || [],
-            effectiveDepartments,
-            effectiveStudyPrograms,
+            effectiveFaculties: eligibleFaculties,
+            effectiveDepartments: eligibleDepartments,
+            effectiveStudyPrograms: eligibleStudyPrograms,
+
+            directStudyPrograms: selectedStudyPrograms,
 
             stages: (schemaJson.stages || []).sort(
               (a, b) => a.order_no - b.order_no,
@@ -983,10 +1039,6 @@ const getBeasiswaById = async (req, res) => {
 
     if (!result) {
       return errorResponse(res, "Beasiswa tidak ditemukan", 404);
-    }
-
-    if (result.inactive) {
-      return errorResponse(res, "Beasiswa tidak aktif", 403);
     }
 
     return successResponse(res, "Detail beasiswa berhasil didapatkan", result);
@@ -1121,23 +1173,17 @@ const updateScholarship = async (req, res) => {
         quota,
         gpa_minimum,
         semester_minimum,
-        requirements,
-        documents,
-        stages,
-        faculties,
-        departments,
-        study_programs,
+        requirements = [],
+        documents = [],
+        stages = [],
+        study_programs = [],
         is_active: schemaIsActive,
       } = schemaData;
-
-      if (!schemaName) {
-        await transaction.rollback();
-        return errorResponse(res, "Nama skema wajib diisi", 400);
-      }
 
       const parsedGpaMinimum = hasNonEmptyValue(gpa_minimum)
         ? parseFloat(gpa_minimum)
         : null;
+
       const parsedSemesterMinimum = hasNonEmptyValue(semester_minimum)
         ? parseInt(semester_minimum)
         : null;
@@ -1145,7 +1191,8 @@ const updateScholarship = async (req, res) => {
       let schema;
 
       if (schemaId && !schemaId.toString().startsWith("new-")) {
-        schema = await ScholarshipSchema.findByPk(schemaId);
+        schema = await ScholarshipSchema.findByPk(schemaId, { transaction });
+
         if (schema) {
           await schema.update(
             {
@@ -1158,7 +1205,8 @@ const updateScholarship = async (req, res) => {
             },
             { transaction },
           );
-          schemasToKeep.push(schemaId);
+
+          schemasToKeep.push(schema.id);
         }
       } else {
         schema = await ScholarshipSchema.create(
@@ -1173,7 +1221,17 @@ const updateScholarship = async (req, res) => {
           },
           { transaction },
         );
+
         schemasToKeep.push(schema.id);
+      }
+
+      if (!schema) {
+        await transaction.rollback();
+        return errorResponse(
+          res,
+          "Skema tidak ditemukan atau gagal diproses",
+          404,
+        );
       }
 
       await ScholarshipSchemaRequirement.destroy({
@@ -1379,45 +1437,85 @@ const updateScholarship = async (req, res) => {
         await ScholarshipSchemaStage.bulkCreate(stageData, { transaction });
       }
 
-      await ScholarshipSchemaFaculty.destroy({
-        where: { schema_id: schema.id },
-        transaction,
-      });
-      await ScholarshipSchemaDepartment.destroy({
-        where: { schema_id: schema.id },
-        transaction,
-      });
-      await ScholarshipSchemaStudyProgram.destroy({
-        where: { schema_id: schema.id },
-        transaction,
-      });
+      const normalizedStudyProgramIds = Array.isArray(study_programs)
+        ? [...new Set(study_programs.filter(Boolean))]
+        : [];
 
-      if (faculties && faculties.length > 0) {
-        const facultyData = faculties.map((facultyId) => ({
-          schema_id: schema.id,
-          faculty_id: facultyId,
-        }));
-        await ScholarshipSchemaFaculty.bulkCreate(facultyData, {
+      const existingStudyProgramMappings =
+        await ScholarshipSchemaStudyProgram.findAll({
+          where: { schema_id: schema.id },
+          include: [
+            {
+              model: StudyProgram,
+              as: "study_program",
+              attributes: ["id", "name"],
+            },
+          ],
           transaction,
         });
-      }
 
-      if (departments && departments.length > 0) {
-        const departmentData = departments.map((departmentId) => ({
-          schema_id: schema.id,
-          department_id: departmentId,
-        }));
-        await ScholarshipSchemaDepartment.bulkCreate(departmentData, {
-          transaction,
-        });
-      }
+      const existingStudyProgramIdSet = new Set(
+        existingStudyProgramMappings.map((item) => item.study_program_id),
+      );
 
-      if (study_programs && study_programs.length > 0) {
-        const studyProgramData = study_programs.map((studyProgramId) => ({
+      const studyProgramMappingsToCreate = normalizedStudyProgramIds
+        .filter(
+          (studyProgramId) => !existingStudyProgramIdSet.has(studyProgramId),
+        )
+        .map((studyProgramId) => ({
           schema_id: schema.id,
           study_program_id: studyProgramId,
         }));
-        await ScholarshipSchemaStudyProgram.bulkCreate(studyProgramData, {
+
+      if (studyProgramMappingsToCreate.length > 0) {
+        await ScholarshipSchemaStudyProgram.bulkCreate(
+          studyProgramMappingsToCreate,
+          { transaction },
+        );
+      }
+
+      const studyProgramMappingsToRemove = existingStudyProgramMappings.filter(
+        (mapping) =>
+          !normalizedStudyProgramIds.includes(mapping.study_program_id),
+      );
+
+      if (studyProgramMappingsToRemove.length > 0) {
+        const usedMappingIds = studyProgramMappingsToRemove.map(
+          (mapping) => mapping.id,
+        );
+
+        const usedApplications = await Application.findAll({
+          where: {
+            schema_study_program_id: usedMappingIds,
+          },
+          attributes: ["schema_study_program_id"],
+          group: ["schema_study_program_id"],
+          transaction,
+        });
+
+        const usedMappingIdSet = new Set(
+          usedApplications.map((item) => item.schema_study_program_id),
+        );
+
+        if (usedMappingIdSet.size > 0) {
+          await transaction.rollback();
+
+          const blockedStudyProgramNames = studyProgramMappingsToRemove
+            .filter((mapping) => usedMappingIdSet.has(mapping.id))
+            .map(
+              (mapping) =>
+                mapping.study_program?.name || mapping.study_program_id,
+            );
+
+          return errorResponse(
+            res,
+            `Program studi ${blockedStudyProgramNames.join(", ")} tidak dapat dihapus dari skema karena sudah memiliki pendaftar.`,
+            400,
+          );
+        }
+
+        await ScholarshipSchemaStudyProgram.destroy({
+          where: { id: usedMappingIds },
           transaction,
         });
       }
@@ -1460,16 +1558,6 @@ const updateScholarship = async (req, res) => {
       });
 
       await FormField.destroy({
-        where: { schema_id: schemasToDelete },
-        transaction,
-      });
-
-      await ScholarshipSchemaFaculty.destroy({
-        where: { schema_id: schemasToDelete },
-        transaction,
-      });
-
-      await ScholarshipSchemaDepartment.destroy({
         where: { schema_id: schemasToDelete },
         transaction,
       });
@@ -1548,43 +1636,25 @@ const updateScholarship = async (req, res) => {
         },
         {
           model: FormField,
-          as: "formFields",
+          as: "form_fields",
           attributes: ["id", "label", "type", "is_required", "order_no"],
-        },
-        {
-          model: Faculty,
-          as: "faculties",
-          through: { attributes: [] },
-          attributes: ["id", "name"],
-        },
-        {
-          model: Department,
-          as: "departments",
-          through: { attributes: [] },
-          attributes: ["id", "name"],
-          include: [
-            {
-              model: Faculty,
-              as: "faculty",
-              attributes: ["id", "name"],
-            },
-          ],
+          required: false,
         },
         {
           model: StudyProgram,
-          as: "studyPrograms",
+          as: "study_programs",
           through: { attributes: [] },
-          attributes: ["id", "name", "degree"],
+          attributes: ["id", "name", "code", "degree"],
           include: [
             {
               model: Department,
               as: "department",
-              attributes: ["id", "name"],
+              attributes: ["id", "name", "code", "faculty_id"],
               include: [
                 {
                   model: Faculty,
                   as: "faculty",
-                  attributes: ["id", "name"],
+                  attributes: ["id", "name", "code"],
                 },
               ],
             },
@@ -1595,10 +1665,39 @@ const updateScholarship = async (req, res) => {
 
     const result = {
       ...updatedScholarship.toJSON(),
-      schemas: updatedSchemas.map((s) => ({
-        ...s.toJSON(),
-        stages: (s.stages || []).sort((a, b) => a.order_no - b.order_no),
-      })),
+      schemas: updatedSchemas.map((schema) => {
+        const schemaJson = schema.toJSON();
+
+        return {
+          ...schemaJson,
+
+          directStudyPrograms: schemaJson.study_programs || [],
+
+          study_programs: schemaJson.study_programs || [],
+
+          faculties: [
+            ...new Map(
+              (schemaJson.study_programs || [])
+                .map((sp) => sp.department?.faculty)
+                .filter(Boolean)
+                .map((faculty) => [faculty.id, faculty]),
+            ).values(),
+          ],
+
+          departments: [
+            ...new Map(
+              (schemaJson.study_programs || [])
+                .map((sp) => sp.department)
+                .filter(Boolean)
+                .map((department) => [department.id, department]),
+            ).values(),
+          ],
+
+          stages: (schemaJson.stages || []).sort(
+            (a, b) => a.order_no - b.order_no,
+          ),
+        };
+      }),
     };
 
     const userName = req.user.full_name || "User";

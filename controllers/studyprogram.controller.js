@@ -1,5 +1,6 @@
 const { Department, ActivityLog, StudyProgram, Faculty } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
+const { Op } = require("sequelize");
 
 const getAllStudyPrograms = async (req, res) => {
   try {
@@ -148,10 +149,9 @@ const editStudyProgram = async (req, res) => {
 
     const existingStudyProgram = await StudyProgram.findOne({
       where: {
-        name: name,
         code: code,
         department_id: department_id,
-        id: { [require("sequelize").Op.ne]: id },
+        id: { [Op.ne]: id },
       },
     });
 
@@ -163,7 +163,7 @@ const editStudyProgram = async (req, res) => {
       );
     }
 
-    await studyProgram.update({ code, degree, department_id });
+    await studyProgram.update({ name, code, degree, department_id });
 
     const updatedStudyProgram = await StudyProgram.findByPk(id, {
       include: [

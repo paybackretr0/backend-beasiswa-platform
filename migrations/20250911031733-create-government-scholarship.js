@@ -60,14 +60,19 @@ module.exports = {
         type: Sequelize.STRING(191),
         allowNull: true,
       },
+
+      // PENTING: ke staffs, bukan users
       imported_by: {
         type: Sequelize.UUID,
         allowNull: true,
         references: {
-          model: "users",
+          model: "staffs",
           key: "id",
         },
+        onUpdate: "CASCADE",
+        onDelete: "SET NULL",
       },
+
       imported_at: {
         type: Sequelize.DATE,
         allowNull: false,
@@ -75,14 +80,29 @@ module.exports = {
       },
     });
 
-    await queryInterface.addIndex("government_scholarships", ["nim"]);
-    await queryInterface.addIndex("government_scholarships", [
-      "academic_status",
-    ]);
-    await queryInterface.addIndex("government_scholarships", [
-      "fiscal_year",
-      "period",
-    ]);
+    await queryInterface.addIndex("government_scholarships", ["nim"], {
+      name: "idx_government_scholarships_nim",
+    });
+
+    await queryInterface.addIndex(
+      "government_scholarships",
+      ["academic_status"],
+      {
+        name: "idx_government_scholarships_academic_status",
+      },
+    );
+
+    await queryInterface.addIndex(
+      "government_scholarships",
+      ["fiscal_year", "period"],
+      {
+        name: "idx_government_scholarships_fiscal_year_period",
+      },
+    );
+
+    await queryInterface.addIndex("government_scholarships", ["imported_by"], {
+      name: "idx_government_scholarships_imported_by",
+    });
   },
 
   async down(queryInterface, Sequelize) {

@@ -1,47 +1,60 @@
 "use strict";
+
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.createTable("scholarship_schema_departments", {
+    await queryInterface.createTable("staffs", {
       id: {
         type: Sequelize.UUID,
-        defaultValue: Sequelize.UUIDV4,
         primaryKey: true,
         allowNull: false,
-      },
-      schema_id: {
-        type: Sequelize.UUID,
-        allowNull: false,
         references: {
-          model: "scholarship_schemas",
+          model: "users",
           key: "id",
         },
         onUpdate: "CASCADE",
         onDelete: "CASCADE",
       },
-      department_id: {
+      staff_number: {
+        type: Sequelize.STRING(50),
+        allowNull: true,
+      },
+      gender: {
+        type: Sequelize.ENUM("L", "P"),
+        allowNull: true,
+      },
+      faculty_id: {
         type: Sequelize.UUID,
-        allowNull: false,
+        allowNull: true,
         references: {
-          model: "departments",
+          model: "faculties",
           key: "id",
         },
         onUpdate: "CASCADE",
-        onDelete: "CASCADE",
+        onDelete: "SET NULL",
       },
       createdAt: {
-        allowNull: false,
         type: Sequelize.DATE,
+        allowNull: false,
         defaultValue: Sequelize.literal("CURRENT_TIMESTAMP"),
       },
       updatedAt: {
-        allowNull: false,
         type: Sequelize.DATE,
+        allowNull: false,
         defaultValue: Sequelize.literal("CURRENT_TIMESTAMP"),
       },
     });
+
+    await queryInterface.addIndex("staffs", ["faculty_id"], {
+      name: "idx_staffs_faculty_id",
+    });
+
+    await queryInterface.addIndex("staffs", ["staff_number"], {
+      name: "idx_staffs_staff_number",
+    });
   },
+
   async down(queryInterface, Sequelize) {
-    await queryInterface.dropTable("scholarship_schema_departments");
+    await queryInterface.dropTable("staffs");
   },
 };

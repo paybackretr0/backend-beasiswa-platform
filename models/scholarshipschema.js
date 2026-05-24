@@ -1,5 +1,7 @@
 "use strict";
+
 const { Model } = require("sequelize");
+
 module.exports = (sequelize, DataTypes) => {
   class ScholarshipSchema extends Model {
     static associate(models) {
@@ -8,43 +10,16 @@ module.exports = (sequelize, DataTypes) => {
         as: "scholarship",
       });
 
-      ScholarshipSchema.hasMany(models.FormField, {
-        foreignKey: "schema_id",
-        as: "formFields",
-      });
-
-      ScholarshipSchema.hasMany(models.ScholarshipSchemaFaculty, {
-        foreignKey: "schema_id",
-        as: "scholarshipSchemaFaculties",
-      });
-      ScholarshipSchema.hasMany(models.ScholarshipSchemaDepartment, {
-        foreignKey: "schema_id",
-        as: "scholarshipSchemaDepartments",
-      });
       ScholarshipSchema.hasMany(models.ScholarshipSchemaStudyProgram, {
         foreignKey: "schema_id",
-        as: "scholarshipSchemaStudyPrograms",
-      });
-
-      ScholarshipSchema.belongsToMany(models.Faculty, {
-        through: models.ScholarshipSchemaFaculty,
-        foreignKey: "schema_id",
-        otherKey: "faculty_id",
-        as: "faculties",
-      });
-
-      ScholarshipSchema.belongsToMany(models.Department, {
-        through: models.ScholarshipSchemaDepartment,
-        foreignKey: "schema_id",
-        otherKey: "department_id",
-        as: "departments",
+        as: "schema_study_programs",
       });
 
       ScholarshipSchema.belongsToMany(models.StudyProgram, {
         through: models.ScholarshipSchemaStudyProgram,
         foreignKey: "schema_id",
         otherKey: "study_program_id",
-        as: "studyPrograms",
+        as: "study_programs",
       });
 
       ScholarshipSchema.hasMany(models.ScholarshipSchemaRequirement, {
@@ -62,12 +37,23 @@ module.exports = (sequelize, DataTypes) => {
         as: "stages",
       });
 
+      ScholarshipSchema.hasMany(models.FormField, {
+        foreignKey: "schema_id",
+        as: "form_fields",
+      });
+
       ScholarshipSchema.hasMany(models.Application, {
         foreignKey: "schema_id",
         as: "applications",
       });
+
+      ScholarshipSchema.hasMany(models.ApplicationDocument, {
+        foreignKey: "schema_id",
+        as: "application_documents",
+      });
     }
   }
+
   ScholarshipSchema.init(
     {
       id: {
@@ -79,6 +65,10 @@ module.exports = (sequelize, DataTypes) => {
       scholarship_id: {
         type: DataTypes.UUID,
         allowNull: false,
+        references: {
+          model: "scholarships",
+          key: "id",
+        },
       },
       name: {
         type: DataTypes.STRING(191),
@@ -113,5 +103,6 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
     },
   );
+
   return ScholarshipSchema;
 };

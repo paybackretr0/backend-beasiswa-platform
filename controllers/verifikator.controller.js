@@ -1,6 +1,9 @@
 const {
   Application,
   User,
+  Student,
+  StudyProgram,
+  Department,
   Scholarship,
   ScholarshipSchema,
   ActivityLog,
@@ -11,6 +14,11 @@ const { successResponse, errorResponse } = require("../utils/response");
 const moment = require("moment-timezone");
 const { sendWhatsAppMessage } = require("../utils/fonnte");
 const { buildApplicationProcessMessage } = require("../utils/whatsappTemplate");
+
+const getScholarshipRegistrationEndMoment = (endDate) => {
+  if (!endDate) return null;
+  return moment.tz(endDate, "YYYY-MM-DD", "Asia/Jakarta").endOf("day");
+};
 
 const normalizeWhatsAppTarget = (phoneNumber) => {
   if (!phoneNumber) return null;
@@ -31,11 +39,14 @@ const notifyApplicationStatusWhatsApp = async ({
 }) => {
   if (!process.env.FONNTE_TOKEN) return;
 
-  const target = normalizeWhatsAppTarget(application?.student?.phone_number);
+  const target = normalizeWhatsAppTarget(
+    application?.student?.user?.phone_number || application?.student?.phone_number,
+  );
   if (!target) return;
 
   const message = buildApplicationProcessMessage({
-    recipientName: application?.student?.full_name,
+    recipientName:
+      application?.student?.user?.full_name || application?.student?.full_name,
     statusKey,
     scholarshipName: application?.schema?.scholarship?.name,
     schemaName: application?.schema?.name,
@@ -50,15 +61,44 @@ const verifyApplication = async (req, res) => {
   try {
     const { id } = req.params;
     const { notes } = req.body;
-    const verifikatorId = req.user.id;
+    const verifikatorId = req.user.staff?.id;
+    const actorUserId = req.user.id;
     const verifikatorRole = req.user.role;
+
+    if (!verifikatorId) {
+      return errorResponse(
+        res,
+        "Profil staff verifikator tidak ditemukan",
+        400,
+      );
+    }
 
     const application = await Application.findByPk(id, {
       include: [
         {
-          model: User,
+          model: Student,
           as: "student",
-          attributes: ["full_name", "email", "faculty_id", "phone_number"],
+          attributes: ["id"],
+          include: [
+            {
+              model: User,
+              as: "user",
+              attributes: ["full_name", "email", "phone_number"],
+              required: true,
+            },
+            {
+              model: StudyProgram,
+              as: "study_program",
+              attributes: ["id"],
+              include: [
+                {
+                  model: Department,
+                  as: "department",
+                  attributes: ["id", "faculty_id"],
+                },
+              ],
+            },
+          ],
         },
         {
           model: ScholarshipSchema,
@@ -67,7 +107,7 @@ const verifyApplication = async (req, res) => {
             {
               model: Scholarship,
               as: "scholarship",
-              attributes: ["id", "name", "verification_level"],
+              attributes: ["id", "name", "verification_level", "end_date"],
             },
           ],
         },
@@ -106,7 +146,10 @@ const verifyApplication = async (req, res) => {
         );
       }
 
-      if (application.student.faculty_id !== req.user.faculty_id) {
+      if (
+        application.student?.study_program?.department?.faculty_id !==
+        req.user.staff?.faculty_id
+      ) {
         return errorResponse(
           res,
           "Anda hanya dapat memverifikasi pendaftaran dari fakultas Anda sendiri.",
@@ -141,11 +184,11 @@ const verifyApplication = async (req, res) => {
     }
 
     await ActivityLog.create({
-      user_id: verifikatorId,
+      user_id: actorUserId,
       action: "VERIFY_APPLICATION",
       entity_type: "Application",
       entity_id: application.id,
-      description: `Memverifikasi pendaftaran ${application.student?.full_name} untuk beasiswa ${application.schema?.scholarship?.name}`,
+      description: `Memverifikasi pendaftaran ${application.student?.user?.full_name || application.student?.full_name} untuk beasiswa ${application.schema?.scholarship?.name}`,
       ip_address: req.ip,
       user_agent: req.get("User-Agent"),
     });
@@ -179,8 +222,17 @@ const rejectApplication = async (req, res) => {
   try {
     const { id } = req.params;
     const { notes, template_ids } = req.body;
-    const verifikatorId = req.user.id;
+    const verifikatorId = req.user.staff?.id;
+    const actorUserId = req.user.id;
     const verifikatorRole = req.user.role;
+
+    if (!verifikatorId) {
+      return errorResponse(
+        res,
+        "Profil staff verifikator tidak ditemukan",
+        400,
+      );
+    }
 
     if (
       (!notes || notes.trim() === "") &&
@@ -196,9 +248,29 @@ const rejectApplication = async (req, res) => {
     const application = await Application.findByPk(id, {
       include: [
         {
-          model: User,
+          model: Student,
           as: "student",
-          attributes: ["full_name", "email", "faculty_id", "phone_number"],
+          attributes: ["id"],
+          include: [
+            {
+              model: User,
+              as: "user",
+              attributes: ["full_name", "email", "phone_number"],
+              required: true,
+            },
+            {
+              model: StudyProgram,
+              as: "study_program",
+              attributes: ["id"],
+              include: [
+                {
+                  model: Department,
+                  as: "department",
+                  attributes: ["id", "faculty_id"],
+                },
+              ],
+            },
+          ],
         },
         {
           model: ScholarshipSchema,
@@ -207,7 +279,7 @@ const rejectApplication = async (req, res) => {
             {
               model: Scholarship,
               as: "scholarship",
-              attributes: ["id", "name", "verification_level"],
+              attributes: ["id", "name", "verification_level", "end_date"],
             },
           ],
         },
@@ -246,7 +318,10 @@ const rejectApplication = async (req, res) => {
         );
       }
 
-      if (application.student.faculty_id !== req.user.faculty_id) {
+      if (
+        application.student?.study_program?.department?.faculty_id !==
+        req.user.staff?.faculty_id
+      ) {
         return errorResponse(
           res,
           "Anda hanya dapat menolak pendaftaran dari fakultas Anda sendiri.",
@@ -304,11 +379,11 @@ const rejectApplication = async (req, res) => {
     });
 
     await ActivityLog.create({
-      user_id: verifikatorId,
+      user_id: actorUserId,
       action: "REJECT_APPLICATION",
       entity_type: "Application",
       entity_id: application.id,
-      description: `Menolak pendaftaran ${application.student?.full_name} untuk beasiswa ${application.schema?.scholarship?.name} dengan ${createdComments.length} komentar`,
+      description: `Menolak pendaftaran ${application.student?.user?.full_name || application.student?.full_name} untuk beasiswa ${application.schema?.scholarship?.name} dengan ${createdComments.length} komentar`,
       ip_address: req.ip,
       user_agent: req.get("User-Agent"),
     });
@@ -342,8 +417,17 @@ const requestRevision = async (req, res) => {
   try {
     const { id } = req.params;
     const { notes, template_ids, revision_deadline } = req.body;
-    const verifikatorId = req.user.id;
+    const verifikatorId = req.user.staff?.id;
+    const actorUserId = req.user.id;
     const verifikatorRole = req.user.role;
+
+    if (!verifikatorId) {
+      return errorResponse(
+        res,
+        "Profil staff verifikator tidak ditemukan",
+        400,
+      );
+    }
 
     if (
       (!notes || notes.trim() === "") &&
@@ -370,9 +454,29 @@ const requestRevision = async (req, res) => {
     const application = await Application.findByPk(id, {
       include: [
         {
-          model: User,
+          model: Student,
           as: "student",
-          attributes: ["full_name", "email", "faculty_id", "phone_number"],
+          attributes: ["id"],
+          include: [
+            {
+              model: User,
+              as: "user",
+              attributes: ["full_name", "email", "phone_number"],
+              required: true,
+            },
+            {
+              model: StudyProgram,
+              as: "study_program",
+              attributes: ["id"],
+              include: [
+                {
+                  model: Department,
+                  as: "department",
+                  attributes: ["id", "faculty_id"],
+                },
+              ],
+            },
+          ],
         },
         {
           model: ScholarshipSchema,
@@ -381,7 +485,7 @@ const requestRevision = async (req, res) => {
             {
               model: Scholarship,
               as: "scholarship",
-              attributes: ["id", "name", "verification_level"],
+              attributes: ["id", "name", "verification_level", "end_date"],
             },
           ],
         },
@@ -396,6 +500,18 @@ const requestRevision = async (req, res) => {
       return errorResponse(
         res,
         "Application cannot be sent for revision. Current status is not MENUNGGU_VERIFIKASI",
+        400,
+      );
+    }
+
+    const scholarshipEndWIB = getScholarshipRegistrationEndMoment(
+      application.schema?.scholarship?.end_date,
+    );
+
+    if (scholarshipEndWIB && deadlineWIB.isAfter(scholarshipEndWIB)) {
+      return errorResponse(
+        res,
+        `Deadline revisi tidak boleh melewati tanggal selesai pendaftaran beasiswa (${scholarshipEndWIB.format("DD MMMM YYYY")} WIB)`,
         400,
       );
     }
@@ -420,7 +536,10 @@ const requestRevision = async (req, res) => {
         );
       }
 
-      if (application.student.faculty_id !== req.user.faculty_id) {
+      if (
+        application.student?.study_program?.department?.faculty_id !==
+        req.user.staff?.faculty_id
+      ) {
         return errorResponse(
           res,
           "Anda hanya dapat meminta revisi pendaftaran dari fakultas Anda sendiri.",
@@ -482,11 +601,11 @@ const requestRevision = async (req, res) => {
     });
 
     await ActivityLog.create({
-      user_id: verifikatorId,
+      user_id: actorUserId,
       action: "REQUEST_REVISION",
       entity_type: "Application",
       entity_id: application.id,
-      description: `Meminta revisi pendaftaran ${application.student?.full_name} untuk beasiswa ${application.schema?.scholarship?.name} dengan deadline ${deadlineWIB.format("DD MMMM YYYY, HH:mm")} WIB dan ${createdComments.length} komentar`,
+      description: `Meminta revisi pendaftaran ${application.student?.user?.full_name || application.student?.full_name} untuk beasiswa ${application.schema?.scholarship?.name} dengan deadline ${deadlineWIB.format("DD MMMM YYYY, HH:mm")} WIB dan ${createdComments.length} komentar`,
       ip_address: req.ip,
       user_agent: req.get("User-Agent"),
     });

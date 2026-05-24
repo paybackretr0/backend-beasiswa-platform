@@ -11,6 +11,7 @@ const {
   getGovernmentScholarshipByCategory,
   getGovernmentScholarshipYearlyTrend,
   getGovernmentScholarshipList,
+  downloadGovernmentScholarshipTemplate,
   exportGovernmentScholarships,
   validateGovernmentScholarshipFile,
   importGovernmentScholarships,
@@ -32,6 +33,17 @@ router.get(
     "VERIFIKATOR_DITMAWA",
   ]),
   getGovernmentScholarshipList,
+);
+
+router.get(
+  "/template",
+  authorize([
+    "SUPERADMIN",
+    "PIMPINAN_DITMAWA",
+    "VALIDATOR_DITMAWA",
+    "VERIFIKATOR_DITMAWA",
+  ]),
+  downloadGovernmentScholarshipTemplate,
 );
 
 router.get(

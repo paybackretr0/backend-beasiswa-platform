@@ -1,14 +1,22 @@
 "use strict";
+
 const { Model } = require("sequelize");
+
 module.exports = (sequelize, DataTypes) => {
   class ApplicationCommentTemplate extends Model {
     static associate(models) {
-      ApplicationCommentTemplate.belongsTo(models.User, {
+      ApplicationCommentTemplate.belongsTo(models.Staff, {
         foreignKey: "created_by",
         as: "creator",
       });
+
+      ApplicationCommentTemplate.hasMany(models.ApplicationComment, {
+        foreignKey: "template_id",
+        as: "comments",
+      });
     }
   }
+
   ApplicationCommentTemplate.init(
     {
       id: {
@@ -38,6 +46,10 @@ module.exports = (sequelize, DataTypes) => {
       created_by: {
         type: DataTypes.UUID,
         allowNull: true,
+        references: {
+          model: "staffs",
+          key: "id",
+        },
       },
     },
     {
@@ -45,7 +57,8 @@ module.exports = (sequelize, DataTypes) => {
       modelName: "ApplicationCommentTemplate",
       tableName: "application_comment_templates",
       timestamps: true,
-    }
+    },
   );
+
   return ApplicationCommentTemplate;
 };

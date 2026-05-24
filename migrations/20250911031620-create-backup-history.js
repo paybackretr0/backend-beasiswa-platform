@@ -14,7 +14,7 @@ module.exports = {
         type: Sequelize.UUID,
         allowNull: true,
         references: {
-          model: "users",
+          model: "staffs",
           key: "id",
         },
         onUpdate: "CASCADE",
@@ -43,8 +43,12 @@ module.exports = {
       },
     });
 
+    await queryInterface.addIndex("backup_histories", ["executed_by"], {
+      name: "idx_backup_histories_executed_by",
+    });
+
     await queryInterface.addIndex("backup_histories", ["status"], {
-      name: "backup_histories_index_11",
+      name: "idx_backup_histories_status",
     });
   },
 

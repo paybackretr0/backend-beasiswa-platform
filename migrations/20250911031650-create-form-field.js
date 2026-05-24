@@ -32,6 +32,7 @@ module.exports = {
           "DATE",
           "FILE",
           "SELECT",
+          "MULTI_SELECT",
           "TEXTAREA",
         ),
         allowNull: false,
@@ -61,7 +62,11 @@ module.exports = {
     });
 
     await queryInterface.addIndex("form_fields", ["schema_id"], {
-      name: "form_fields_idx_schema",
+      name: "idx_form_fields_schema_id",
+    });
+
+    await queryInterface.addIndex("form_fields", ["schema_id", "order_no"], {
+      name: "idx_form_fields_schema_order",
     });
   },
 

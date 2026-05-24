@@ -1,9 +1,17 @@
 const jwt = require("jsonwebtoken");
-const { User } = require("../models");
+const { User, Staff } = require("../models");
 const { errorResponse } = require("../utils/response");
 
 const verifiedUser = async (req, res, next) => {
-  const user = await User.findByPk(req.user.id);
+  const user = await User.findByPk(req.user.id, {
+    include: [
+      {
+        model: Staff,
+        as: "staff",
+        attributes: ["id", "faculty_id"],
+      },
+    ],
+  });
   if (!user || !user.emailVerified || !user.is_active) {
     return errorResponse(
       res,

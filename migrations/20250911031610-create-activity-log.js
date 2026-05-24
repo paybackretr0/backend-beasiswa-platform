@@ -52,12 +52,15 @@ module.exports = {
     });
 
     await queryInterface.addIndex("activity_logs", ["user_id"], {
-      name: "activity_logs_index_9",
+      name: "idx_activity_logs_user_id",
     });
+
     await queryInterface.addIndex(
       "activity_logs",
       ["entity_type", "entity_id"],
-      { name: "activity_logs_index_10" },
+      {
+        name: "idx_activity_logs_entity",
+      },
     );
   },
 
