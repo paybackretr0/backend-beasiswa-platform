@@ -63,9 +63,7 @@ const buildEligibilityTargetsFromSchema = (schema) => {
     schemaStudyPrograms.map((sp) => sp.department?.id).filter(Boolean),
   );
   const facultyIds = new Set(
-    schemaStudyPrograms
-      .map((sp) => sp.department?.faculty?.id)
-      .filter(Boolean),
+    schemaStudyPrograms.map((sp) => sp.department?.faculty?.id).filter(Boolean),
   );
 
   return { facultyIds, departmentIds, studyProgramIds };
@@ -747,7 +745,11 @@ const submitApplication = async (req, res) => {
           )
         : [];
 
-      if (answerData.answer_text || answerData.file_path || selectedOptionIds.length) {
+      if (
+        answerData.answer_text ||
+        answerData.file_path ||
+        selectedOptionIds.length
+      ) {
         const createdAnswer = await FormAnswer.create(answerData);
 
         if (selectedOptionIds.length > 0) {
@@ -1070,7 +1072,11 @@ const submitRevision = async (req, res) => {
           )
         : [];
 
-      if (answerData.answer_text || answerData.file_path || selectedOptionIds.length) {
+      if (
+        answerData.answer_text ||
+        answerData.file_path ||
+        selectedOptionIds.length
+      ) {
         const createdAnswer = await FormAnswer.create(answerData, {
           transaction,
         });
