@@ -45,9 +45,10 @@ const hasWhereConditions = (value) => Reflect.ownKeys(value || {}).length > 0;
 const getReportUserScope = (user) => {
   const role = user?.role;
   const facultyId = user?.staff?.faculty_id || user?.faculty_id || null;
-  const isFacultyScoped = ["PIMPINAN_FAKULTAS", "VERIFIKATOR_FAKULTAS"].includes(
-    role,
-  );
+  const isFacultyScoped = [
+    "PIMPINAN_FAKULTAS",
+    "VERIFIKATOR_FAKULTAS",
+  ].includes(role);
 
   return {
     role,
@@ -379,10 +380,7 @@ const getApplicationsListData = async (filters, userScope = {}) => {
     fakultas: app.student?.study_program?.department?.faculty?.name || "N/A",
     departemen: app.student?.study_program?.department?.name || "N/A",
     prodi:
-      [
-        app.student?.study_program?.degree,
-        app.student?.study_program?.name,
-      ]
+      [app.student?.study_program?.degree, app.student?.study_program?.name]
         .filter(Boolean)
         .join(" ") || "N/A",
     gender:
@@ -995,7 +993,9 @@ const getRecipientsRecapAllYears = async ({
       replacements: {
         startYear,
         endYear,
-        ...(userScope.isFacultyScoped ? { facultyId: userScope.facultyId } : {}),
+        ...(userScope.isFacultyScoped
+          ? { facultyId: userScope.facultyId }
+          : {}),
       },
       type: sequelize.QueryTypes.SELECT,
     },

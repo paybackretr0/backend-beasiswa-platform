@@ -33,13 +33,7 @@ const getAllApplications = async (req, res) => {
     let scholarshipInclude = {
       model: Scholarship,
       as: "scholarship",
-      attributes: [
-        "id",
-        "name",
-        "is_active",
-        "verification_level",
-        "end_date",
-      ],
+      attributes: ["id", "name", "is_active", "verification_level", "end_date"],
       required: true,
     };
     let schemaEligibilityInclude = null;
@@ -487,6 +481,29 @@ const getApplicationDetail = async (req, res) => {
       return errorResponse(res, "Application not found", 404);
     }
 
+    const facultyScopedRoles = ["PIMPINAN_FAKULTAS", "VERIFIKATOR_FAKULTAS"];
+    if (facultyScopedRoles.includes(req.user?.role)) {
+      const facultyId = req.user?.staff?.faculty_id;
+      if (!facultyId) {
+        return errorResponse(
+          res,
+          "User tidak memiliki fakultas terdaftar",
+          400,
+        );
+      }
+
+      const applicationFacultyId =
+        application.student?.study_program?.department?.faculty?.id || null;
+
+      if (!applicationFacultyId || applicationFacultyId !== facultyId) {
+        return errorResponse(
+          res,
+          "Akses ditolak: data bukan milik fakultas Anda",
+          403,
+        );
+      }
+    }
+
     const formAnswers = {};
     const documentAnswers = [];
 
@@ -508,7 +525,10 @@ const getApplicationDetail = async (req, res) => {
             uploadedAt: answer.uploaded_at || answer.createdAt,
             field_id: answer.field_id,
           });
-        } else if (field?.type === "MULTI_SELECT" && selectedOptionValues.length) {
+        } else if (
+          field?.type === "MULTI_SELECT" &&
+          selectedOptionValues.length
+        ) {
           formAnswers[field?.label || `Field ${answer.field_id}`] =
             selectedOptionValues.join(", ");
         } else if (
