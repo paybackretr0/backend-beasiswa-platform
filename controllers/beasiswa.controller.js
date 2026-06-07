@@ -204,10 +204,7 @@ const getAllScholarships = async (req, res) => {
             attributes: ["benefit_text"],
           },
         ],
-        order: [
-          ["end_date", "DESC"],
-          ["createdAt", "ASC"],
-        ],
+        order: [["end_date", "ASC"]],
       });
 
       if (scholarships.length === 0) return [];
