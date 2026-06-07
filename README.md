@@ -1,415 +1,327 @@
-# 🎓 Beasiswa Platform - Backend API
+# Backend Beasiswa Platform
 
-<div align="center">
-  <img src="https://img.shields.io/badge/Node.js-43853D?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js" />
-  <img src="https://img.shields.io/badge/Express.js-404D59?style=for-the-badge&logo=express&logoColor=white" alt="Express.js" />
-  <img src="https://img.shields.io/badge/MySQL-00000F?style=for-the-badge&logo=mysql&logoColor=white" alt="MySQL" />
-  <img src="https://img.shields.io/badge/Sequelize-52B0E7?style=for-the-badge&logo=sequelize&logoColor=white" alt="Sequelize" />
-  <img src="https://img.shields.io/badge/JWT-black?style=for-the-badge&logo=JSON%20web%20tokens" alt="JWT" />
-</div>
-
-<div align="center">
-  <h3>🚀 RESTful API untuk Platform Manajemen Beasiswa</h3>
-  <p>Backend service yang robust dengan authentication, authorization, dan file management</p>
-</div>
+RESTful API untuk sistem manajemen beasiswa — menangani autentikasi, workflow pengajuan, verifikasi dokumen, dan pelaporan.
 
 ---
 
-## ✨ Fitur Backend
+## Tech Stack
 
-### 🔐 Authentication & Authorization
-
-- JWT-based authentication
-- Role-based access control (RBAC)
-- Password hashing dengan bcrypt
-- Token refresh mechanism
-
-### 📊 Core Modules
-
-- **👥 User Management** - CRUD operations untuk semua role
-- **🏛️ Academic Structure** - Fakultas dan Departemen
-- **🎓 Scholarship Management** - Beasiswa dan kategori
-- **📝 Application Processing** - Pengajuan dan workflow
-- **📄 File Management** - Upload dan validasi dokumen
-
-### 🛡️ Security Features
-
-- SQL injection prevention
-- XSS protection
-- File upload validation
-- Rate limiting
-- CORS configuration
+- **Node.js** + **Express.js v5**
+- **Sequelize ORM** + **MySQL**
+- **Redis** (ioredis) — caching
+- **JWT** — access & refresh token
+- **Multer** — file upload
+- **Nodemailer** — email
+- **Fonnte** — notifikasi WhatsApp
+- **ExcelJS** — export laporan
 
 ---
 
-## 🛠️ Tech Stack
-
-- **🟢 Node.js** - JavaScript runtime environment
-- **🚀 Express.js** - Fast, minimalist web framework
-- **🗄️ Sequelize ORM** - Promise-based Node.js ORM
-- **🐬 MySQL** - Relational database management
-- **🔒 bcrypt** - Password hashing library
-- **🎫 jsonwebtoken** - JWT implementation
-- **📧 Nodemailer** - Email sending capability
-- **📁 Multer** - File upload handling
-- **✅ Joi** - Data validation library
-
----
-
-## 📁 Struktur Proyek
+## Struktur Proyek
 
 ```
 backend-beasiswa/
-├── 📂 controllers/              # Business logic layer
-│   ├── 🔐 auth.controller.js    # Authentication logic
-│   ├── 👥 user.controller.js    # User management
-│   ├── 🏛️ faculty.controller.js # Faculty operations
-│   ├── 🎓 scholarship.controller.js
-│   └── 📝 application.controller.js
-├── 📂 models/                   # Database models
-│   ├── 👤 user.js               # User model
-│   ├── 🏛️ faculty.js            # Faculty model
-│   ├── 📚 department.js         # Department model
-│   └── 🎓 scholarship.js        # Scholarship model
-├── 📂 routes/                   # API route definitions
-│   ├── 🔐 auth.routes.js        # Auth endpoints
-│   ├── 👥 user.routes.js        # User endpoints
-│   └── 📊 *.routes.js           # Other route files
-├── 📂 middleware/               # Custom middleware
-│   ├── 🔒 auth.middleware.js    # JWT verification
-│   ├── 👮 role.middleware.js    # Role checking
-│   └── 📁 upload.middleware.js  # File upload
-├── 📂 migrations/               # Database migrations
-├── 📂 seeders/                  # Database seeders
-├── 📂 utils/                    # Utility functions
-│   ├── 📨 response.js           # Response helpers
-│   ├── ✅ validation.js         # Input validation
-│   └── 📧 mailer.js             # Email utilities
-├── 📂 uploads/                  # File upload directory
-├── ⚙️ config/                   # Configuration files
-├── 🚀 server.js                 # Application entry point
-└── 📄 package.json
+├── config/
+│   ├── config.js          # Konfigurasi database Sequelize
+│   └── redis.js           # Koneksi Redis
+├── controllers/           # Business logic per modul
+├── middlewares/
+│   ├── auth.middleware.js       # Verifikasi JWT
+│   ├── role.middleware.js       # Otorisasi berbasis role
+│   ├── cache.middleware.js      # Invalidasi cache Redis
+│   ├── upload.middleware.js     # Konfigurasi Multer
+│   └── response-time.middleware.js
+├── migrations/            # Migrasi database Sequelize
+├── models/                # Model Sequelize
+├── routes/                # Definisi endpoint API
+├── seeders/               # Data awal database
+├── utils/
+│   ├── response.js        # Helper respons standar
+│   ├── jwt.js             # Helper JWT
+│   ├── cacheHelper.js     # Utility Redis cache
+│   ├── upload.js          # Utility file upload
+│   ├── fonnte.js          # Integrasi WhatsApp (Fonnte)
+│   ├── whatsappTemplate.js
+│   ├── password.js
+│   ├── parse_nim.js
+│   └── slug.js
+├── validators/
+│   └── auth.validator.js  # Validasi input (express-validator)
+├── uploads/               # Direktori penyimpanan file
+├── index.js               # Entry point aplikasi
+└── .env.example
 ```
 
 ---
 
-## 🚀 Quick Start
+## Roles
 
-### Prerequisites
+Sistem menggunakan RBAC dengan role berikut:
 
-- 📋 Node.js (v16+)
-- 🐬 MySQL (v8.0+)
-- 📦 npm atau yarn
+| Role | Deskripsi |
+|---|---|
+| `MAHASISWA` | Mengajukan dan memantau pendaftaran beasiswa |
+| `VERIFIKATOR_FAKULTAS` | Memverifikasi berkas di tingkat fakultas |
+| `VERIFIKATOR_DITMAWA` | Memverifikasi berkas di tingkat Ditmawa |
+| `VALIDATOR_DITMAWA` | Memvalidasi data pendaftar |
+| `PIMPINAN_FAKULTAS` | Melihat laporan dan statistik fakultas |
+| `PIMPINAN_DITMAWA` | Melihat laporan, statistik, dan import penerima |
+| `SUPERADMIN` | Akses penuh — manajemen beasiswa, pengguna, dan sistem |
 
-### 1️⃣ Clone & Install
+---
+
+## Quick Start
+
+### Prasyarat
+
+- Node.js v16+
+- MySQL v8.0+
+- Redis
+
+### 1. Install dependensi
 
 ```bash
-git clone https://github.com/username/beasiswa-platform-backend.git
-cd beasiswa-platform-backend
 npm install
 ```
 
-### 2️⃣ Database Setup
+### 2. Konfigurasi environment
 
 ```bash
-# Create database
-mysql -u root -p
-CREATE DATABASE beasiswa_db;
-
-# Configure environment
 cp .env.example .env
-# Edit .env dengan credentials database
+# Isi variabel di .env sesuai environment kamu
 ```
 
-### 3️⃣ Migration & Seeding
+### 3. Jalankan migrasi dan seeder
 
 ```bash
-# Run migrations
-npx sequelize-cli db:migrate
-
-# Seed initial data
-npx sequelize-cli db:seed:all
+npm run migrate
+npm run seed
 ```
 
-### 4️⃣ Start Server
+### 4. Jalankan server
 
 ```bash
-# Development mode
+# Development
 npm run dev
 
-# Production mode
+# Production
 npm start
-
-# Server running on http://localhost:5000
 ```
+
+Server berjalan di `http://localhost:5000`
 
 ---
 
-## 🔧 Environment Variables
+## Environment Variables
 
 ```env
+# Database
 DB_HOST=
 DB_USER=
 DB_PASS=
 DB_NAME=
 DB_DIALECT=
 
+# Redis
+REDIS_HOST=
+REDIS_PORT=
+REDIS_PASSWORD=
+
+# JWT
 JWT_ACCESS_SECRET=
 JWT_REFRESH_SECRET=
 JWT_RESET_PASSWORD_SECRET=
 
+# WhatsApp (Fonnte)
+FONNTE_TOKEN=
+
+# Email
+EMAIL_MAILER=
+EMAIL_HOST=
+EMAIL_PORT=
+EMAIL_ENCRYPTION=
 EMAIL_USER=
 EMAIL_PASSWORD=
 EMAIL_FROM=
+
+# App
 FRONTEND_URL=
+BASE_URL=
 ```
 
 ---
 
-## 📝 API Documentation
+## API Endpoints
 
-### 🔐 Authentication Endpoints
+Base URL: `/api`
 
-```http
-POST   /api/auth/login            # User login
-POST   /api/auth/register         # User registration
-POST   /api/auth/refresh          # Refresh JWT token
-POST   /api/auth/logout           # User logout
-POST   /api/auth/forgot-password  # Password reset request
-POST   /api/auth/reset-password   # Reset password
+### Auth — `/api/auth`
+
+```
+POST   /register                  Registrasi pengguna baru
+POST   /login                     Login
+POST   /logout                    Logout
+POST   /token                     Refresh access token
+POST   /verify-email              Verifikasi email
+POST   /resend-verification-code  Kirim ulang kode verifikasi
+POST   /forgot-password           Permintaan reset password
+POST   /verify-reset-code         Verifikasi kode reset
+POST   /reset-password            Reset password
+GET    /profile                   Profil lengkap (auth)
+GET    /basic-profile             Profil dasar (auth)
+PUT    /profile                   Update profil (auth)
+PUT    /password                  Ganti password (auth)
 ```
 
-### 👥 User Management
+### Users — `/api/users`
 
-```http
-GET    /api/users                 # Get all users (Admin only)
-GET    /api/users/:id             # Get user by ID
-POST   /api/users                 # Create new user (Admin)
-PUT    /api/users/:id             # Update user
-DELETE /api/users/:id             # Deactivate user
-PUT    /api/users/:id/activate    # Activate user
+```
+GET    /                          Daftar semua pengguna
+GET    /:id                       Detail pengguna
+POST   /                          Buat pengguna baru
+PUT    /:id                       Update pengguna
+DELETE /:id                       Nonaktifkan pengguna
+PUT    /:id/activate              Aktifkan pengguna
 ```
 
-### 🏛️ Academic Structure
+### Akademik
 
-```http
-# Faculties
-GET    /api/faculties             # Get all faculties
-POST   /api/faculties             # Create faculty
-PUT    /api/faculties/:id         # Update faculty
-DELETE /api/faculties/:id         # Deactivate faculty
+```
+# Fakultas — /api/faculties
+GET    /                          Daftar fakultas
+POST   /                          Tambah fakultas
+PUT    /:id                       Update fakultas
+DELETE /:id / PATCH /:id/activate Toggle status
 
-# Departments
-GET    /api/departments           # Get all departments
-POST   /api/departments           # Create department
-PUT    /api/departments/:id       # Update department
-DELETE /api/departments/:id       # Deactivate department
+# Departemen — /api/departments
+GET    /                          Daftar departemen
+POST   /                          Tambah departemen
+PUT    /:id                       Update departemen
+
+# Program Studi — /api/study-programs
+GET    /                          Daftar program studi
+POST   /                          Tambah program studi
+PUT    /:id                       Update program studi
 ```
 
-### 🎓 Scholarship Management
+### Beasiswa — `/api/beasiswa`
 
-```http
-GET    /api/scholarships          # Get scholarships
-POST   /api/scholarships          # Create scholarship
-PUT    /api/scholarships/:id      # Update scholarship
-DELETE /api/scholarships/:id      # Delete scholarship
-
-# Applications
-GET    /api/applications          # Get applications
-POST   /api/applications          # Submit application
-PUT    /api/applications/:id      # Update application
-POST   /api/applications/:id/verify # Verify application
+```
+GET    /user                      Daftar beasiswa (publik)
+GET    /user/:id                  Detail beasiswa (publik)
+GET    /user/:id/others           Beasiswa lain (publik)
+GET    /info/active               Beasiswa aktif untuk info (publik)
+GET    /                          Daftar beasiswa (SUPERADMIN)
+POST   /                          Buat beasiswa baru
+PUT    /:id                       Update beasiswa
+PATCH  /:id/activate              Aktifkan beasiswa
+PATCH  /:id/deactivate            Nonaktifkan beasiswa
+PATCH  /schema/:schemaId/activate       Aktifkan schema
+PATCH  /schema/:schemaId/deactivate     Nonaktifkan schema
 ```
 
----
+### Pendaftaran — `/api/pendaftaran`
 
-## 🗄️ Database Schema
-
-### Core Tables
-
-```sql
--- Users table with role-based system
-users (
-  id, username, email, password, role,
-  faculty_id, department_id, profile_data,
-  is_active, created_at, updated_at
-)
-
--- Academic structure
-faculties (id, name, code, is_active)
-departments (id, name, code, degree, faculty_id, is_active)
-
--- Scholarship system
-scholarships (id, name, description, requirements, deadline)
-applications (id, user_id, scholarship_id, status, documents)
-verifications (id, application_id, verifier_id, status, notes)
+```
+GET    /scholarship/:scholarshipId/form              Form pendaftaran (MAHASISWA)
+POST   /scholarship/:scholarshipId/submit            Submit pendaftaran (MAHASISWA)
+PUT    /application/:applicationId/revision          Submit revisi (MAHASISWA)
 ```
 
-### Relationships
+### Applications — `/api/applications`
 
-- User **belongsTo** Faculty, Department
-- Department **belongsTo** Faculty
-- Application **belongsTo** User, Scholarship
-- Verification **belongsTo** Application, User
-
----
-
-## 🔐 Authentication Flow
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant API
-    participant DB
-
-    Client->>API: POST /auth/login
-    API->>DB: Validate credentials
-    DB-->>API: User data
-    API-->>Client: JWT + Refresh token
-
-    Client->>API: GET /protected (with JWT)
-    API->>API: Verify JWT
-    API-->>Client: Protected resource
-
-    Client->>API: POST /auth/refresh
-    API->>API: Verify refresh token
-    API-->>Client: New JWT
+```
+GET    /                          Daftar semua pengajuan (staf)
+GET    /summary                   Ringkasan pengajuan (staf)
+GET    /:id                       Detail pengajuan (staf)
+GET    /user/:id                  Detail pengajuan milik mahasiswa
+GET    /:id/comments              Komentar pengajuan
+PUT    /awardees/assign           Assign penerima beasiswa (SUPERADMIN)
 ```
 
----
+### Verifikator — `/api/verifikator`
 
-## 🛡️ Security Implementation
-
-### JWT Middleware
-
-```javascript
-const verifyToken = (req, res, next) => {
-  const token = req.headers.authorization?.split(" ")[1];
-
-  if (!token) {
-    return res.status(401).json({
-      success: false,
-      message: "Access token required",
-    });
-  }
-
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch (error) {
-    return res.status(401).json({
-      success: false,
-      message: "Invalid token",
-    });
-  }
-};
+```
+PUT    /applications/:id/verify           Verifikasi pengajuan
+PUT    /applications/:id/reject           Tolak pengajuan
+PUT    /applications/:id/request-revision Minta revisi
 ```
 
-### Role-based Access
+### Validator — `/api/validator`
 
-```javascript
-const requireRole = (roles) => (req, res, next) => {
-  if (!roles.includes(req.user.role)) {
-    return res.status(403).json({
-      success: false,
-      message: "Insufficient permissions",
-    });
-  }
-  next();
-};
+```
+PUT    /applications/:id/validate         Validasi pengajuan
+PUT    /applications/:id/reject           Tolak pengajuan
+```
 
-// Usage: requireRole(['admin', 'verifikator'])
+### Analytics & Laporan — `/api/analytics`
+
+```
+GET    /summary                   Ringkasan statistik
+GET    /selection-summary         Statistik seleksi
+GET    /status-summary            Distribusi status
+GET    /faculty-distribution      Distribusi per fakultas
+GET    /department-distribution   Distribusi per departemen
+GET    /gender-distribution       Distribusi gender
+GET    /yearly-trend              Tren tahunan
+GET    /monthly-trend             Tren bulanan
+GET    /scholarship-performance   Performa beasiswa
+GET    /top-performing-faculties  Fakultas terbaik
+GET    /applications-list         Daftar pengajuan
+GET    /activities                Log aktivitas
+GET    /export-laporan            Export laporan Excel
+GET    /export-pendaftar          Export data pendaftar
+GET    /import-penerima/template  Template import penerima
+POST   /import-penerima/validate  Validasi file import
+POST   /import-penerima           Import data penerima
+```
+
+### Lainnya
+
+```
+GET|POST|PUT  /api/government-scholarships   Data beasiswa pemerintah
+GET|POST|PUT  /api/forms                     Manajemen form dinamis
+GET           /api/history                   Riwayat pengajuan
+GET|POST|PUT  /api/websites                  Konten website
+GET|POST|PUT  /api/additional                Data tambahan
+GET|POST|PUT  /api/notifications             Notifikasi
 ```
 
 ---
 
-## 📁 File Upload System
+## Health Check
 
-### Configuration
-
-```javascript
-const multer = require("multer");
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, process.env.UPLOAD_PATH);
-  },
-  filename: (req, file, cb) => {
-    const uniqueName = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, uniqueName + path.extname(file.originalname));
-  },
-});
-
-const fileFilter = (req, file, cb) => {
-  const allowedTypes = process.env.ALLOWED_FILE_TYPES.split(",");
-  const fileExt = path.extname(file.originalname).slice(1);
-
-  if (allowedTypes.includes(fileExt.toLowerCase())) {
-    cb(null, true);
-  } else {
-    cb(new Error("File type not allowed"), false);
-  }
-};
+```
+GET  /health        Status server dan koneksi database
+GET  /redis-test    Status koneksi Redis
 ```
 
 ---
 
-## 📧 Email Service
-
-### Nodemailer Setup
-
-```javascript
-const transporter = nodemailer.createTransporter({
-  host: process.env.SMTP_HOST,
-  port: process.env.SMTP_PORT,
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
-
-const sendVerificationEmail = async (to, verificationLink) => {
-  const mailOptions = {
-    from: process.env.SMTP_USER,
-    to,
-    subject: "Verifikasi Akun Beasiswa Platform",
-    html: `<p>Klik link berikut: <a href="${verificationLink}">Verifikasi</a></p>`,
-  };
-
-  await transporter.sendMail(mailOptions);
-};
-```
-
----
-
-## 📦 Deployment
-
-### Production Setup
+## Scripts
 
 ```bash
-# Build for production
-npm run build
-
-# Start with PM2
-npm install -g pm2
-pm2 start ecosystem.config.js
-
-# Or with Docker
-docker build -t beasiswa-backend .
-docker run -p 3000:3000 beasiswa-backend
+npm run dev              # Development dengan nodemon
+npm start                # Production
+npm run migrate          # Jalankan semua migrasi
+npm run migrate:undo     # Undo migrasi terakhir
+npm run migrate:undo:all # Undo semua migrasi
+npm run seed             # Jalankan semua seeder
+npm run seed:undo        # Undo seeder terakhir
+npm run seed:undo:all    # Undo semua seeder
 ```
 
 ---
 
-## 📄 Related Repositories
+## Docker
 
-- 🎨 **Frontend React**: [beasiswa-platform-frontend](https://github.com/paybackretr0/frontend-beasiswa-platform)
+```bash
+docker build -t beasiswa-backend .
+docker run -p 5000:5000 --env-file .env beasiswa-backend
+```
 
 ---
 
-<div align="center">
-  <p>Built with 🟢 Node.js & ❤️ for scalable backend services</p>
-  <p>⭐ Star this repo if you find it helpful!</p>
-</div>
+## Related
+
+- Frontend: [frontend-beasiswa-platform](https://github.com/paybackretr0/frontend-beasiswa-platform)
