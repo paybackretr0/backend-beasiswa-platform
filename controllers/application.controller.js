@@ -22,7 +22,11 @@ const {
 } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 const { Op } = require("sequelize");
-const { getOrSetCache } = require("../utils/cacheHelper");
+const {
+  getOrSetCache,
+  invalidateHistoryCaches,
+  invalidateApplicationCaches,
+} = require("../utils/cacheHelper");
 
 const getAllApplications = async (req, res) => {
   try {
@@ -825,6 +829,13 @@ const assignApplicationsAsAwardeeBulk = async (req, res) => {
       );
 
       await transaction.commit();
+
+      await Promise.all([
+        invalidateHistoryCaches(),
+        invalidateApplicationCaches(),
+      ]).catch((err) =>
+        console.error("Error invalidating caches after awardee assign:", err),
+      );
 
       return successResponse(res, "Berhasil assign awardee", {
         requested_count: normalizedIds.length,
