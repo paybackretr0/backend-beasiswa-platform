@@ -2155,6 +2155,151 @@ const buildImportRowsFromWorksheet = (worksheet) => {
   return rows;
 };
 
+const validateFacultyHierarchy = async (row) => {
+  if (!row.prodi) return { valid: false, message: "Program studi wajib diisi" };
+
+  const normalizedProdi = normalizeText(row.prodi);
+  const normalizedDept = normalizeText(row.departemen);
+  const normalizedFaculty = normalizeText(row.fakultas);
+
+  const studyProgram = await StudyProgram.findOne({
+    where: sequelize.where(
+      sequelize.fn("LOWER", sequelize.col("StudyProgram.name")),
+      normalizedProdi,
+    ),
+    include: [
+      {
+        model: Department,
+        as: "department",
+        required: true,
+        include: [
+          {
+            model: Faculty,
+            as: "faculty",
+            required: true,
+          },
+        ],
+      },
+    ],
+    attributes: ["id", "name", "degree", "department_id"],
+  });
+
+  if (!studyProgram) {
+    return {
+      valid: false,
+      message: `Program studi "${row.prodi}" tidak ditemukan dalam sistem`,
+    };
+  }
+
+  const actualDept = studyProgram.department?.name || "";
+  const actualFaculty = studyProgram.department?.faculty?.name || "";
+
+  if (normalizedFaculty && normalizeText(actualFaculty) !== normalizedFaculty) {
+    return {
+      valid: false,
+      message: `Fakultas "${row.fakultas}" tidak sesuai dengan program studi "${row.prodi}" (seharusnya: ${actualFaculty})`,
+    };
+  }
+
+  if (normalizedDept && normalizeText(actualDept) !== normalizedDept) {
+    return {
+      valid: false,
+      message: `Departemen "${row.departemen}" tidak sesuai dengan program studi "${row.prodi}" (seharusnya: ${actualDept})`,
+    };
+  }
+
+  return { valid: true, program: studyProgram };
+};
+
+const checkDuplicateAwardee = async (schemaId, row) => {
+  if (!schemaId || !row.nim) return null;
+
+  const existingAwardees = await Application.findAll({
+    where: {
+      schema_id: schemaId,
+      status: "AWARDEE",
+    },
+    attributes: ["id", "student_id", "schema_id"],
+    include: [
+      {
+        model: Student,
+        as: "student",
+        required: true,
+        attributes: ["id", "nim", "study_program_id"],
+        include: [
+          {
+            model: User,
+            as: "user",
+            attributes: ["id", "full_name", "email"],
+            required: true,
+          },
+          {
+            model: StudyProgram,
+            as: "study_program",
+            attributes: ["id", "name"],
+            required: true,
+            include: [
+              {
+                model: Department,
+                as: "department",
+                attributes: ["id", "name"],
+                required: true,
+                include: [
+                  {
+                    model: Faculty,
+                    as: "faculty",
+                    attributes: ["id", "name"],
+                    required: true,
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
+  for (const app of existingAwardees) {
+    const s = app.student;
+    if (!s) continue;
+
+    const matchNim = s.nim && String(s.nim).trim() === String(row.nim).trim();
+    if (!matchNim) continue;
+
+    const matchNama =
+      row.nama &&
+      normalizeText(s.user?.full_name) === normalizeText(row.nama);
+    const matchEmail =
+      row.email &&
+      s.user?.email &&
+      normalizeEmail(s.user.email) === normalizeEmail(row.email);
+    const matchFaculty =
+      row.fakultas &&
+      normalizeText(s.study_program?.department?.faculty?.name) ===
+        normalizeText(row.fakultas);
+    const matchDept =
+      row.departemen &&
+      normalizeText(s.study_program?.department?.name) ===
+        normalizeText(row.departemen);
+    const matchProdi =
+      row.prodi &&
+      normalizeText(s.study_program?.name) === normalizeText(row.prodi);
+
+    if (matchNim && matchNama && matchEmail && matchFaculty && matchDept && matchProdi) {
+      return {
+        id: app.id,
+        nim: s.nim,
+        nama: s.user?.full_name,
+        email: s.user?.email,
+        prodi: s.study_program?.name,
+      };
+    }
+  }
+
+  return null;
+};
+
 const getOrCreateFaculty = async (name, cache, transaction) => {
   const normalized = normalizeText(name);
   if (!normalized) return null;
@@ -2260,6 +2405,29 @@ const getOrCreateStudyProgram = async (
   return program;
 };
 
+const ensureSchemaStudyProgramMapping = async (
+  schemaId,
+  studyProgramId,
+  transaction,
+) => {
+  if (!schemaId || !studyProgramId) return null;
+
+  let mapping = await ScholarshipSchemaStudyProgram.findOne({
+    where: { schema_id: schemaId, study_program_id: studyProgramId },
+    attributes: ["id", "schema_id", "study_program_id"],
+    transaction,
+  });
+
+  if (!mapping) {
+    mapping = await ScholarshipSchemaStudyProgram.create(
+      { schema_id: schemaId, study_program_id: studyProgramId },
+      { transaction },
+    );
+  }
+
+  return mapping;
+};
+
 const findSchemaStudyProgramMapping = async (
   schemaId,
   studyProgramId,
@@ -2324,12 +2492,47 @@ const ensureUserForImportedRecipient = async ({
         as: "study_program",
         attributes: ["id", "name", "degree", "department_id"],
         required: false,
+        include: [
+          {
+            model: Department,
+            as: "department",
+            attributes: ["id", "name", "faculty_id"],
+            required: false,
+            include: [
+              {
+                model: Faculty,
+                as: "faculty",
+                attributes: ["id", "name"],
+                required: false,
+              },
+            ],
+          },
+        ],
       },
     ],
     transaction,
   });
 
   if (student) {
+    const actualProdi = student.study_program?.name || "";
+    const actualDepartment = student.study_program?.department?.name || "";
+    const actualFaculty =
+      student.study_program?.department?.faculty?.name || "";
+
+    if (row.prodi && normalizeText(row.prodi) !== normalizeText(actualProdi)) {
+      throw new Error(
+        `Baris ${row.excelRow}: Program studi di file (${row.prodi}) tidak sesuai dengan data mahasiswa (${actualProdi})`,
+      );
+    }
+    if (
+      row.fakultas &&
+      normalizeText(row.fakultas) !== normalizeText(actualFaculty)
+    ) {
+      throw new Error(
+        `Baris ${row.excelRow}: Fakultas di file (${row.fakultas}) tidak sesuai dengan data mahasiswa (${actualFaculty})`,
+      );
+    }
+
     const schemaStudyProgram = await findSchemaStudyProgramMapping(
       schemaId,
       student.study_program_id,
@@ -2344,6 +2547,11 @@ const ensureUserForImportedRecipient = async ({
       isDummyCreated: false,
       email_source: "EXISTING",
     };
+  }
+
+  const hierarchyValidation = await validateFacultyHierarchy(row);
+  if (!hierarchyValidation.valid) {
+    throw new Error(`Baris ${row.excelRow}: ${hierarchyValidation.message}`);
   }
 
   const faculty = await getOrCreateFaculty(
@@ -2883,21 +3091,102 @@ const validateImportPenerimaBeasiswa = async (req, res) => {
             attributes: ["id", "full_name", "email"],
             required: true,
           },
+          {
+            model: StudyProgram,
+            as: "study_program",
+            attributes: ["id", "name", "degree", "department_id"],
+            required: false,
+            include: [
+              {
+                model: Department,
+                as: "department",
+                attributes: ["id", "name", "faculty_id"],
+                required: false,
+                include: [
+                  {
+                    model: Faculty,
+                    as: "faculty",
+                    attributes: ["id", "name"],
+                    required: false,
+                  },
+                ],
+              },
+            ],
+          },
         ],
       });
 
+      if (existingStudent) {
+        const actualProdi = existingStudent.study_program?.name || "";
+        const actualDepartment =
+          existingStudent.study_program?.department?.name || "";
+        const actualFaculty =
+          existingStudent.study_program?.department?.faculty?.name || "";
+
+        if (
+          row.prodi &&
+          normalizeText(row.prodi) !== normalizeText(actualProdi)
+        ) {
+          errors.push({
+            row: row.excelRow,
+            field: "prodi",
+            message: `Program studi di file (${row.prodi}) tidak sesuai dengan data mahasiswa (${actualProdi})`,
+          });
+          continue;
+        }
+        if (
+          row.fakultas &&
+          normalizeText(row.fakultas) !== normalizeText(actualFaculty)
+        ) {
+          errors.push({
+            row: row.excelRow,
+            field: "fakultas",
+            message: `Fakultas di file (${row.fakultas}) tidak sesuai dengan data mahasiswa (${actualFaculty})`,
+          });
+          continue;
+        }
+      }
+
       const requestedEmail = normalizeEmail(row.email);
+
+      if (!existingStudent) {
+        const hierarchyCheck = await validateFacultyHierarchy(row);
+        if (!hierarchyCheck.valid) {
+          errors.push({
+            row: row.excelRow,
+            field: "prodi",
+            message: hierarchyCheck.message,
+          });
+          continue;
+        }
+      }
+
+      const duplicate = await checkDuplicateAwardee(selectedSchema.id, row);
+      if (duplicate) {
+        errors.push({
+          row: row.excelRow,
+          field: "nim",
+          message: `Duplikat: ${duplicate.nama} (NIM: ${duplicate.nim}) sudah terdaftar sebagai penerima beasiswa untuk skema ini`,
+        });
+        continue;
+      }
+
+      const hasRestrictions =
+        (selectedSchema.schema_study_programs?.length || 0) > 0;
+
       const matchedSchemaStudyProgram = existingStudent
-        ? selectedSchema.schema_study_programs?.find(
-            (mapping) =>
-              mapping.study_program_id === existingStudent.study_program_id,
-          ) || null
+        ? hasRestrictions
+          ? selectedSchema.schema_study_programs?.find(
+              (mapping) =>
+                mapping.study_program_id === existingStudent.study_program_id,
+            ) || null
+          : { id: existingStudent.study_program_id }
         : resolveSchemaStudyProgramFromRow(
             row,
             selectedSchema.schema_study_programs || [],
           );
 
-      if (!matchedSchemaStudyProgram) {
+      if (hasRestrictions && !matchedSchemaStudyProgram) {
         errors.push({
           row: row.excelRow,
           field: "prodi",
@@ -2905,6 +3194,26 @@ const validateImportPenerimaBeasiswa = async (req, res) => {
             "Program studi pada baris ini tidak termasuk dalam cakupan skema terpilih",
         });
         continue;
+      }
+
+      if (!existingStudent && !matchedSchemaStudyProgram) {
+        if (hasRestrictions) {
+          errors.push({
+            row: row.excelRow,
+            field: "prodi",
+            message:
+              "Program studi pada baris ini tidak termasuk dalam cakupan skema terpilih",
+          });
+          continue;
+        }
+        if (!row.prodi) {
+          errors.push({
+            row: row.excelRow,
+            field: "prodi",
+            message: "Program studi wajib diisi untuk mahasiswa baru",
+          });
+          continue;
+        }
       }
 
       preview.push({
@@ -3070,18 +3379,49 @@ const importPenerimaBeasiswa = async (req, res) => {
           programCache,
         });
 
-        const resolvedSchemaStudyProgram =
-          schemaStudyProgram ||
-          (!wasExistingStudent
+        if (!student?.study_program_id) {
+          errors.push(
+            `Baris ${row.excelRow}: data mahasiswa tidak memiliki program studi`,
+          );
+          continue;
+        }
+
+        const hasRestrictions =
+          (selectedSchema.schema_study_programs?.length || 0) > 0;
+
+        if (hasRestrictions) {
+          const resolvedFromRow = !wasExistingStudent
             ? resolveSchemaStudyProgramFromRow(
                 row,
                 selectedSchema.schema_study_programs || [],
               )
-            : null);
+            : schemaStudyProgram;
 
-        if (!student?.study_program_id || !resolvedSchemaStudyProgram) {
+          if (!resolvedFromRow && !schemaStudyProgram) {
+            errors.push(
+              `Baris ${row.excelRow}: program studi tidak termasuk dalam cakupan skema terpilih`,
+            );
+            continue;
+          }
+        }
+
+        const effectiveMapping =
+          schemaStudyProgram ||
+          (hasRestrictions
+            ? resolveSchemaStudyProgramFromRow(
+                row,
+                selectedSchema.schema_study_programs || [],
+              )
+            : await ensureSchemaStudyProgramMapping(
+                selectedSchema.id,
+                student.study_program_id,
+                transaction,
+              ));
+
+        const duplicateCheck = await checkDuplicateAwardee(selectedSchema.id, row);
+        if (duplicateCheck) {
           errors.push(
-            `Baris ${row.excelRow}: program studi tidak termasuk dalam cakupan skema terpilih`,
+            `Baris ${row.excelRow}: Duplikat — ${duplicateCheck.nama} (NIM: ${duplicateCheck.nim}) sudah terdaftar sebagai penerima beasiswa untuk skema ini`,
           );
           continue;
         }
@@ -3107,7 +3447,7 @@ const importPenerimaBeasiswa = async (req, res) => {
               submitted_at: existingApplication.submitted_at || importDate,
               validated_by: req.user?.id || null,
               validated_at: new Date(),
-              schema_study_program_id: resolvedSchemaStudyProgram.id,
+              schema_study_program_id: effectiveMapping.id,
             },
             { transaction },
           );
@@ -3117,7 +3457,7 @@ const importPenerimaBeasiswa = async (req, res) => {
             {
               schema_id: selectedSchema.id,
               student_id: student.id,
-              schema_study_program_id: resolvedSchemaStudyProgram.id,
+              schema_study_program_id: effectiveMapping.id,
               status: "AWARDEE",
               submitted_at: importDate,
               validated_by: req.user?.id || null,
