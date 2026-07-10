@@ -724,25 +724,65 @@ const assignApplicationsAsAwardeeBulk = async (req, res) => {
       where: {
         id: { [Op.in]: normalizedIds },
       },
-      attributes: ["id", "status"],
+      attributes: ["id", "status", "schema_id"],
+      include: [
+        {
+          model: ScholarshipSchema,
+          as: "schema",
+          attributes: ["id"],
+          include: [
+            {
+              model: Scholarship,
+              as: "scholarship",
+              attributes: ["id", "is_active", "end_date", "year"],
+            },
+          ],
+        },
+      ],
     });
 
     const foundById = new Map(applications.map((app) => [app.id, app]));
     const notFoundIds = normalizedIds.filter((id) => !foundById.has(id));
 
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
     const validIds = [];
     const skipped = [];
 
     for (const app of applications) {
-      if (app.status === "VALIDATED") {
-        validIds.push(app.id);
-      } else {
+      const scholarship = app.schema?.scholarship;
+
+      if (app.status !== "VALIDATED") {
         skipped.push({
           id: app.id,
           status: app.status,
           reason: "NOT_VALIDATED",
         });
+        continue;
       }
+
+      if (!scholarship || !scholarship.is_active) {
+        skipped.push({
+          id: app.id,
+          status: app.status,
+          reason: "SCHOLARSHIP_NOT_ACTIVE",
+          detail: "Beasiswa sudah tidak aktif",
+        });
+        continue;
+      }
+
+      if (scholarship.end_date && new Date(scholarship.end_date) < sixMonthsAgo) {
+        skipped.push({
+          id: app.id,
+          status: app.status,
+          reason: "SCHOLARSHIP_EXPIRED",
+          detail: `Batas pendaftaran sudah lewat lebih dari 6 bulan (${new Date(scholarship.end_date).toLocaleDateString("id-ID")})`,
+        });
+        continue;
+      }
+
+      validIds.push(app.id);
     }
 
     const transaction = await Application.sequelize.transaction();
