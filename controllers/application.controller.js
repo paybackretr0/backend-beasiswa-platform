@@ -5,7 +5,6 @@ const {
   ApplicationDocument,
   Scholarship,
   ScholarshipBenefit,
-  ScholarshipSchemaFaculty,
   ScholarshipSchema,
   ScholarshipSchemaRequirement,
   ScholarshipSchemaDocument,
@@ -48,13 +47,6 @@ const getAllApplications = async (req, res) => {
       }
 
       scholarshipInclude.where = { verification_level: "FACULTY" };
-      schemaEligibilityInclude = {
-        model: ScholarshipSchemaFaculty,
-        as: "scholarshipSchemaFaculties",
-        where: { faculty_id: user.staff?.faculty_id },
-        attributes: [],
-        required: true,
-      };
     } else if (user.role === "VERIFIKATOR_DITMAWA") {
       scholarshipInclude.where = { verification_level: "DITMAWA" };
     }
@@ -100,9 +92,7 @@ const getAllApplications = async (req, res) => {
           as: "schema",
           attributes: ["id", "name", "is_active"],
           required: true,
-          include: schemaEligibilityInclude
-            ? [scholarshipInclude, schemaEligibilityInclude]
-            : [scholarshipInclude],
+          include: [scholarshipInclude],
         },
         studentInclude,
       ],
@@ -167,13 +157,6 @@ const getApplicationsSummary = async (req, res) => {
                 as: "scholarship",
                 attributes: [],
                 where: { verification_level: "FACULTY" },
-                required: true,
-              },
-              {
-                model: ScholarshipSchemaFaculty,
-                as: "scholarshipSchemaFaculties",
-                where: { faculty_id: user.staff?.faculty_id },
-                attributes: [],
                 required: true,
               },
             ],
