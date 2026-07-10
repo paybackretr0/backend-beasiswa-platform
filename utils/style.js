@@ -106,6 +106,53 @@ const applyFooterRowStyle = (cell) => {
   };
 };
 
+const addAcknowledgementToSheet = (sheet, columnCount) => {
+  const row1 = sheet.addRow([]);
+  const row2 = sheet.addRow([]);
+
+  const labelRow = sheet.addRow({});
+  const labelCell = labelRow.getCell(1);
+  labelCell.value = "Mengetahui,";
+  labelCell.font = { bold: true, size: 12 };
+  labelCell.alignment = { horizontal: "left", vertical: "middle" };
+  sheet.mergeCells(`A${labelRow.number}:${sheet.getColumn(columnCount).letter}${labelRow.number}`);
+
+  const row3 = sheet.addRow([]);
+
+  const nameRow = sheet.addRow({});
+  const nameCell = nameRow.getCell(1);
+  nameCell.value = "Direktur Kemahasiswaan";
+  nameCell.font = { bold: true, size: 12, underline: true };
+  nameCell.alignment = { horizontal: "left", vertical: "middle" };
+  sheet.mergeCells(`A${nameRow.number}:${sheet.getColumn(columnCount).letter}${nameRow.number}`);
+
+  const rowUnit = sheet.addRow({});
+  const unitCell = rowUnit.getCell(1);
+  unitCell.value = "Universitas Andalas";
+  unitCell.font = { bold: true, size: 11 };
+  unitCell.alignment = { horizontal: "left", vertical: "middle" };
+  sheet.mergeCells(`A${rowUnit.number}:${sheet.getColumn(columnCount).letter}${rowUnit.number}`);
+
+  const row4 = sheet.addRow([]);
+  const row5 = sheet.addRow([]);
+
+  const ttdRow = sheet.addRow({});
+  const ttdCell = ttdRow.getCell(1);
+  ttdCell.value = "(                             )";
+  ttdCell.font = { size: 12, color: { argb: "FF6B7280" } };
+  ttdCell.alignment = { horizontal: "left", vertical: "middle" };
+  sheet.mergeCells(`A${ttdRow.number}:${sheet.getColumn(columnCount).letter}${ttdRow.number}`);
+
+  const row6 = sheet.addRow({});
+
+  const nipLabelRow = sheet.addRow({});
+  const nipCell = nipLabelRow.getCell(1);
+  nipCell.value = "NIP. .....................";
+  nipCell.font = { size: 11, italic: true, color: { argb: "FF6B7280" } };
+  nipCell.alignment = { horizontal: "left", vertical: "middle" };
+  sheet.mergeCells(`A${nipLabelRow.number}:${sheet.getColumn(columnCount).letter}${nipLabelRow.number}`);
+};
+
 module.exports = {
   applyHeaderStyle,
   applyDataRowStyle,
@@ -114,4 +161,5 @@ module.exports = {
   applyTitleRowStyle,
   applyInfoRowStyle,
   applyFooterRowStyle,
+  addAcknowledgementToSheet,
 };

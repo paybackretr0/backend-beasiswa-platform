@@ -17,6 +17,7 @@ const {
   applyDataRowStyle,
   applyTotalRowStyle,
   applyCenterAlignment,
+  addAcknowledgementToSheet,
 } = require("../utils/style");
 const { Op } = require("sequelize");
 const ExcelJS = require("exceljs");
@@ -1104,6 +1105,7 @@ const exportLaporanBeasiswa = async (req, res) => {
     });
 
     applyCenterAlignment(summarySheet, ["nilai"]);
+    addAcknowledgementToSheet(summarySheet, summarySheet.columnCount);
 
     const recapSheet = workbook.addWorksheet("Rekapitulasi Keseluruhan");
     recapSheet.columns = [
@@ -1136,6 +1138,7 @@ const exportLaporanBeasiswa = async (req, res) => {
       "jumlah_pendaftar",
       "jumlah_penerima",
     ]);
+    addAcknowledgementToSheet(recapSheet, recapSheet.columnCount);
 
     const ongoingSheet = workbook.addWorksheet("Penerima Sedang Berjalan");
     ongoingSheet.columns = [
@@ -1187,6 +1190,7 @@ const exportLaporanBeasiswa = async (req, res) => {
       "status_penerima",
       "nilai_beasiswa",
     ]);
+    addAcknowledgementToSheet(ongoingSheet, ongoingSheet.columnCount);
 
     const pendaftarSheet = workbook.addWorksheet("Data Pendaftar");
     pendaftarSheet.columns = [
@@ -1214,6 +1218,7 @@ const exportLaporanBeasiswa = async (req, res) => {
     });
 
     applyCenterAlignment(pendaftarSheet, ["nim", "gender", "tanggalDaftar"]);
+    addAcknowledgementToSheet(pendaftarSheet, pendaftarSheet.columnCount);
 
     const monthlySheet = workbook.addWorksheet("Tren Bulanan");
     monthlySheet.columns = [
@@ -1232,6 +1237,7 @@ const exportLaporanBeasiswa = async (req, res) => {
     });
 
     applyCenterAlignment(monthlySheet, ["bulan", "jumlah"]);
+    addAcknowledgementToSheet(monthlySheet, monthlySheet.columnCount);
 
     const fakultasSheet = workbook.addWorksheet("Distribusi Fakultas");
     fakultasSheet.columns = [
@@ -1252,6 +1258,7 @@ const exportLaporanBeasiswa = async (req, res) => {
     }
 
     applyCenterAlignment(fakultasSheet, ["jumlah"]);
+    addAcknowledgementToSheet(fakultasSheet, fakultasSheet.columnCount);
 
     const departemenSheet = workbook.addWorksheet("Distribusi Departemen");
     departemenSheet.columns = [
@@ -1272,6 +1279,7 @@ const exportLaporanBeasiswa = async (req, res) => {
     }
 
     applyCenterAlignment(departemenSheet, ["jumlah"]);
+    addAcknowledgementToSheet(departemenSheet, departemenSheet.columnCount);
 
     const prodiSheet = workbook.addWorksheet("Distribusi Prodi");
     prodiSheet.columns = [
@@ -1292,6 +1300,7 @@ const exportLaporanBeasiswa = async (req, res) => {
     }
 
     applyCenterAlignment(prodiSheet, ["jumlah"]);
+    addAcknowledgementToSheet(prodiSheet, prodiSheet.columnCount);
 
     const genderSheet = workbook.addWorksheet("Distribusi Gender");
     genderSheet.columns = [
@@ -1312,6 +1321,7 @@ const exportLaporanBeasiswa = async (req, res) => {
     }
 
     applyCenterAlignment(genderSheet, ["gender", "jumlah"]);
+    addAcknowledgementToSheet(genderSheet, genderSheet.columnCount);
 
     if (isAllYears) {
       const { years: recapYears, rows: recapRows } =
@@ -1427,6 +1437,7 @@ const exportLaporanBeasiswa = async (req, res) => {
         const totalRow = recapAllYearsSheet.addRow(totalRowValues);
         recapAllYearsSheet.mergeCells(totalRow.number, 1, totalRow.number, 2);
         applyTotalRowStyle(totalRow);
+        addAcknowledgementToSheet(recapAllYearsSheet, totalCol);
       }
     }
 
@@ -1534,6 +1545,7 @@ const exportLaporanBeasiswa = async (req, res) => {
           "durasi_semester",
           "estimasi_selesai",
         ]);
+        addAcknowledgementToSheet(recipientSheet, recipientSheet.columnCount);
       }
 
       const applicantsDetail = await getApplicantsByScholarshipDetail(
@@ -1714,6 +1726,7 @@ const exportLaporanBeasiswa = async (req, res) => {
         "no_hp",
         "tanggal_daftar",
       ]);
+      addAcknowledgementToSheet(applicantSheet, applicantSheet.columnCount);
     }
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -1981,6 +1994,9 @@ const exportPendaftarLaporan = async (req, res) => {
       "gender",
       "tanggalDaftar",
     ]);
+    addAcknowledgementToSheet(applicantsSheet, applicantsSheet.columnCount);
+    applyCenterAlignment(summarySheet, ["nilai"]);
+    addAcknowledgementToSheet(summarySheet, summarySheet.columnCount);
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const yearLabel = year || "Semua";
