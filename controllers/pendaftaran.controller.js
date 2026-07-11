@@ -19,6 +19,8 @@ const {
 } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 const { Op } = require("sequelize");
+const path = require("path");
+const fs = require("fs");
 
 const normalizeLabel = (label) =>
   String(label || "")
@@ -718,6 +720,7 @@ const submitApplication = async (req, res) => {
         file_path: null,
         mime_type: null,
         uploaded_at: null,
+        original_filename: null,
       };
 
       if (field.type === "FILE") {
@@ -728,10 +731,43 @@ const submitApplication = async (req, res) => {
           answerData.file_path = uploadedFile.path;
           answerData.mime_type = uploadedFile.mimetype;
           answerData.uploaded_at = new Date();
+          answerData.original_filename = uploadedFile.originalname;
         } else if (fieldAnswer?.file_path) {
           answerData.file_path = fieldAnswer.file_path;
           answerData.mime_type = fieldAnswer.mime_type;
           answerData.uploaded_at = new Date();
+          answerData.original_filename = fieldAnswer.original_filename || null;
+        }
+
+        const previousFileId = req.body[`use_previous_file_${field.id}`];
+        if (!answerData.file_path && previousFileId) {
+          const prevAnswer = await FormAnswer.findByPk(previousFileId, {
+            attributes: ["id", "file_path", "mime_type", "original_filename"],
+          });
+          if (prevAnswer?.file_path) {
+            const ext = path.extname(prevAnswer.file_path) || ".pdf";
+            const copyName = `prev_${Date.now()}_${Math.round(Math.random() * 1e9)}${ext}`;
+            const baseDir = path.join(
+              "uploads",
+              "applications",
+              req.user.id,
+              "documents",
+            );
+            const destPath = path.join(baseDir, copyName);
+            try {
+              const srcPath = path.resolve(prevAnswer.file_path);
+              if (fs.existsSync(srcPath)) {
+                fs.mkdirSync(path.dirname(destPath), { recursive: true });
+                fs.copyFileSync(srcPath, destPath);
+                answerData.file_path = destPath;
+                answerData.mime_type = prevAnswer.mime_type;
+                answerData.uploaded_at = new Date();
+                answerData.original_filename = prevAnswer.original_filename;
+              }
+            } catch (copyErr) {
+              console.error("Error copying previous file:", copyErr);
+            }
+          }
         }
       } else if (!isOptionFieldType(field.type)) {
         if (fieldAnswer?.answer_text) {
@@ -818,6 +854,9 @@ const submitApplication = async (req, res) => {
           size_bytes: uploadedFile
             ? uploadedFile.size
             : fieldAnswer.size_bytes || null,
+          original_filename: uploadedFile
+            ? uploadedFile.originalname
+            : fieldAnswer.original_filename || null,
         };
 
         return ApplicationDocument.create(documentData);
@@ -851,6 +890,106 @@ const submitApplication = async (req, res) => {
   } catch (error) {
     console.error("Error submitting application:", error);
     return errorResponse(res, "Gagal menyimpan aplikasi", 500);
+  }
+};
+
+const getPreviousApplicationFiles = async (req, res) => {
+  try {
+    const user = req.user;
+    let studentId = user.student?.id;
+
+    if (!studentId) {
+      const student = await Student.findOne({
+        where: { id: user.id },
+        attributes: ["id"],
+      });
+      if (!student) {
+        return errorResponse(res, "User bukan mahasiswa", 400);
+      }
+      studentId = student.id;
+    }
+
+    const previousFiles = await FormAnswer.findAll({
+      attributes: [
+        "id",
+        "application_id",
+        "field_id",
+        "file_path",
+        "mime_type",
+        "original_filename",
+        "uploaded_at",
+      ],
+      include: [
+        {
+          model: Application,
+          as: "application",
+          attributes: ["id", "schema_id", "status", "createdAt"],
+          where: { student_id: studentId },
+          required: true,
+          include: [
+            {
+              model: ScholarshipSchema,
+              as: "schema",
+              attributes: ["id", "name", "scholarship_id"],
+              include: [
+                {
+                  model: Scholarship,
+                  as: "scholarship",
+                  attributes: ["id", "name"],
+                  required: true,
+                },
+              ],
+            },
+          ],
+        },
+        {
+          model: FormField,
+          as: "field",
+          attributes: ["id", "label", "type"],
+          required: true,
+        },
+      ],
+      where: {
+        file_path: { [Op.ne]: null },
+      },
+      order: [["uploaded_at", "DESC"]],
+    });
+
+    const grouped = {};
+    for (const fa of previousFiles) {
+      const label = (fa.field?.label || "").trim().toLowerCase();
+      if (!label) continue;
+      if (!grouped[label]) {
+        grouped[label] = {
+          field_label: fa.field?.label || "Unknown Field",
+          files: [],
+        };
+      }
+      if (grouped[label].files.length < 5) {
+        const fileName =
+          fa.original_filename ||
+          fa.file_path?.split("\\").pop()?.split("/").pop() ||
+          "File";
+        grouped[label].files.push({
+          id: fa.id,
+          application_id: fa.application_id,
+          file_path: fa.file_path,
+          mime_type: fa.mime_type,
+          original_filename: fileName,
+          uploaded_at: fa.uploaded_at,
+          scholarship_name:
+            fa.application?.schema?.scholarship?.name || "Beasiswa",
+          schema_name: fa.application?.schema?.name || "",
+        });
+      }
+    }
+
+    return successResponse(res, "Berhasil mengambil file sebelumnya", {
+      files: Object.values(grouped),
+    });
+  } catch (error) {
+    console.error("Error getting previous application files:", error);
+    return errorResponse(res, "Gagal mengambil file sebelumnya", 500);
   }
 };
 
@@ -1045,6 +1184,7 @@ const submitRevision = async (req, res) => {
         file_path: null,
         mime_type: null,
         uploaded_at: null,
+        original_filename: null,
       };
 
       if (field.type === "FILE") {
@@ -1055,6 +1195,7 @@ const submitRevision = async (req, res) => {
           answerData.file_path = uploadedFile.path;
           answerData.mime_type = uploadedFile.mimetype;
           answerData.uploaded_at = new Date();
+          answerData.original_filename = uploadedFile.originalname;
         } else if (fieldAnswer?.file_path) {
           answerData.file_path = fieldAnswer.file_path;
           answerData.mime_type = fieldAnswer.mime_type;
@@ -1204,6 +1345,7 @@ const submitRevision = async (req, res) => {
 
 module.exports = {
   getScholarshipForm,
+  getPreviousApplicationFiles,
   submitApplication,
   submitRevision,
 };

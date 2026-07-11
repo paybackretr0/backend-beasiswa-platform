@@ -19,7 +19,7 @@ const getApplicationByUser = async (req, res) => {
               {
                 model: Scholarship,
                 as: "scholarship",
-                attributes: ["id", "name", "organizer", "is_active"],
+                attributes: ["id", "name", "organizer", "is_active", "end_date"],
               },
             ],
           },
@@ -37,6 +37,7 @@ const getApplicationByUser = async (req, res) => {
           : app.createdAt
             ? new Date(app.createdAt).toISOString().split("T")[0]
             : null,
+        deadline_pendaftaran: app.schema?.scholarship?.end_date || null,
         status: app.status,
         notes: app.notes,
         verified_at: app.verified_at,

@@ -13,11 +13,18 @@ const {
 const { applicationUpload } = require("../middlewares/upload.middleware");
 const {
   getScholarshipForm,
+  getPreviousApplicationFiles,
   submitApplication,
   submitRevision,
 } = require("../controllers/pendaftaran.controller");
 
 router.use(authenticate, verifiedUser);
+
+router.get(
+  "/previous-files",
+  authorize(["MAHASISWA"]),
+  getPreviousApplicationFiles,
+);
 
 router.get(
   "/scholarship/:scholarshipId/form",

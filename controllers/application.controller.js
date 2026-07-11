@@ -5,7 +5,6 @@ const {
   ApplicationDocument,
   Scholarship,
   ScholarshipBenefit,
-  ScholarshipSchemaFaculty,
   ScholarshipSchema,
   ScholarshipSchemaRequirement,
   ScholarshipSchemaDocument,
@@ -23,7 +22,11 @@ const {
 } = require("../models");
 const { successResponse, errorResponse } = require("../utils/response");
 const { Op } = require("sequelize");
-const { getOrSetCache } = require("../utils/cacheHelper");
+const {
+  getOrSetCache,
+  invalidateHistoryCaches,
+  invalidateApplicationCaches,
+} = require("../utils/cacheHelper");
 
 const getAllApplications = async (req, res) => {
   try {
@@ -48,13 +51,6 @@ const getAllApplications = async (req, res) => {
       }
 
       scholarshipInclude.where = { verification_level: "FACULTY" };
-      schemaEligibilityInclude = {
-        model: ScholarshipSchemaFaculty,
-        as: "scholarshipSchemaFaculties",
-        where: { faculty_id: user.staff?.faculty_id },
-        attributes: [],
-        required: true,
-      };
     } else if (user.role === "VERIFIKATOR_DITMAWA") {
       scholarshipInclude.where = { verification_level: "DITMAWA" };
     }
@@ -100,9 +96,7 @@ const getAllApplications = async (req, res) => {
           as: "schema",
           attributes: ["id", "name", "is_active"],
           required: true,
-          include: schemaEligibilityInclude
-            ? [scholarshipInclude, schemaEligibilityInclude]
-            : [scholarshipInclude],
+          include: [scholarshipInclude],
         },
         studentInclude,
       ],
@@ -167,13 +161,6 @@ const getApplicationsSummary = async (req, res) => {
                 as: "scholarship",
                 attributes: [],
                 where: { verification_level: "FACULTY" },
-                required: true,
-              },
-              {
-                model: ScholarshipSchemaFaculty,
-                as: "scholarshipSchemaFaculties",
-                where: { faculty_id: user.staff?.faculty_id },
-                attributes: [],
                 required: true,
               },
             ],
@@ -741,25 +728,65 @@ const assignApplicationsAsAwardeeBulk = async (req, res) => {
       where: {
         id: { [Op.in]: normalizedIds },
       },
-      attributes: ["id", "status"],
+      attributes: ["id", "status", "schema_id"],
+      include: [
+        {
+          model: ScholarshipSchema,
+          as: "schema",
+          attributes: ["id"],
+          include: [
+            {
+              model: Scholarship,
+              as: "scholarship",
+              attributes: ["id", "is_active", "end_date", "year"],
+            },
+          ],
+        },
+      ],
     });
 
     const foundById = new Map(applications.map((app) => [app.id, app]));
     const notFoundIds = normalizedIds.filter((id) => !foundById.has(id));
 
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
     const validIds = [];
     const skipped = [];
 
     for (const app of applications) {
-      if (app.status === "VALIDATED") {
-        validIds.push(app.id);
-      } else {
+      const scholarship = app.schema?.scholarship;
+
+      if (app.status !== "VALIDATED") {
         skipped.push({
           id: app.id,
           status: app.status,
           reason: "NOT_VALIDATED",
         });
+        continue;
       }
+
+      if (!scholarship || !scholarship.is_active) {
+        skipped.push({
+          id: app.id,
+          status: app.status,
+          reason: "SCHOLARSHIP_NOT_ACTIVE",
+          detail: "Beasiswa sudah tidak aktif",
+        });
+        continue;
+      }
+
+      if (scholarship.end_date && new Date(scholarship.end_date) < sixMonthsAgo) {
+        skipped.push({
+          id: app.id,
+          status: app.status,
+          reason: "SCHOLARSHIP_EXPIRED",
+          detail: `Batas pendaftaran sudah lewat lebih dari 6 bulan (${new Date(scholarship.end_date).toLocaleDateString("id-ID")})`,
+        });
+        continue;
+      }
+
+      validIds.push(app.id);
     }
 
     const transaction = await Application.sequelize.transaction();
@@ -802,6 +829,13 @@ const assignApplicationsAsAwardeeBulk = async (req, res) => {
       );
 
       await transaction.commit();
+
+      await Promise.all([
+        invalidateHistoryCaches(),
+        invalidateApplicationCaches(),
+      ]).catch((err) =>
+        console.error("Error invalidating caches after awardee assign:", err),
+      );
 
       return successResponse(res, "Berhasil assign awardee", {
         requested_count: normalizedIds.length,

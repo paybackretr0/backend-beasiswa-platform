@@ -621,10 +621,31 @@ const createScholarship = async (req, res) => {
       }
 
       if (stages && stages.length > 0) {
+        const sortedStages = [...stages].sort(
+          (a, b) => (a.order_no || 0) - (b.order_no || 0),
+        );
+        for (let i = 1; i < sortedStages.length; i++) {
+          if (
+            sortedStages[i].start_date &&
+            sortedStages[i - 1].start_date &&
+            new Date(sortedStages[i].start_date) < new Date(sortedStages[i - 1].start_date)
+          ) {
+            const prevDate = new Date(sortedStages[i - 1].start_date).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+            const currDate = new Date(sortedStages[i].start_date).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+            return errorResponse(
+              res,
+              `"${sortedStages[i].name || "Tahapan " + (i + 1)}" dimulai ${currDate}, lebih awal dari "${sortedStages[i - 1].name || "Tahapan " + i}" yang dimulai ${prevDate}`,
+              400,
+            );
+          }
+        }
+
         const stageData = stages.map((stage, index) => ({
           schema_id: schema.id,
           stage_name: stage.name || stage.stage_name,
           order_no: stage.order_no || index + 1,
+          start_date: stage.start_date || null,
+          end_date: stage.end_date || null,
         }));
         await ScholarshipSchemaStage.bulkCreate(stageData, { transaction });
       }
@@ -682,7 +703,7 @@ const createScholarship = async (req, res) => {
         {
           model: ScholarshipSchemaStage,
           as: "stages",
-          attributes: ["id", "stage_name", "order_no"],
+          attributes: ["id", "stage_name", "order_no", "start_date", "end_date"],
         },
         {
           model: FormField,
@@ -971,7 +992,7 @@ const getBeasiswaById = async (req, res) => {
           {
             model: ScholarshipSchemaStage,
             as: "stages",
-            attributes: ["id", "stage_name", "order_no"],
+            attributes: ["id", "stage_name", "order_no", "start_date", "end_date"],
           },
           {
             model: StudyProgram,
@@ -1426,10 +1447,32 @@ const updateScholarship = async (req, res) => {
       }
 
       if (stages && stages.length > 0) {
+        const sortedStages = [...stages].sort(
+          (a, b) => (a.order_no || 0) - (b.order_no || 0),
+        );
+        for (let i = 1; i < sortedStages.length; i++) {
+          if (
+            sortedStages[i].start_date &&
+            sortedStages[i - 1].start_date &&
+            new Date(sortedStages[i].start_date) < new Date(sortedStages[i - 1].start_date)
+          ) {
+            const prevDate = new Date(sortedStages[i - 1].start_date).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+            const currDate = new Date(sortedStages[i].start_date).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
+            await transaction.rollback();
+            return errorResponse(
+              res,
+              `"${sortedStages[i].name || "Tahapan " + (i + 1)}" dimulai ${currDate}, lebih awal dari "${sortedStages[i - 1].name || "Tahapan " + i}" yang dimulai ${prevDate}`,
+              400,
+            );
+          }
+        }
+
         const stageData = stages.map((stage, index) => ({
           schema_id: schema.id,
           stage_name: stage.name || stage.stage_name,
           order_no: stage.order_no || index + 1,
+          start_date: stage.start_date || null,
+          end_date: stage.end_date || null,
         }));
         await ScholarshipSchemaStage.bulkCreate(stageData, { transaction });
       }
@@ -1629,7 +1672,7 @@ const updateScholarship = async (req, res) => {
         {
           model: ScholarshipSchemaStage,
           as: "stages",
-          attributes: ["id", "stage_name", "order_no"],
+          attributes: ["id", "stage_name", "order_no", "start_date", "end_date"],
         },
         {
           model: FormField,
@@ -1864,7 +1907,7 @@ const getActiveScholarshipsForInfo = async (req, res) => {
               {
                 model: ScholarshipSchemaStage,
                 as: "stages",
-                attributes: ["id", "stage_name", "order_no"],
+                attributes: ["id", "stage_name", "order_no", "start_date", "end_date"],
                 order: [["order_no", "ASC"]],
               },
             ],
