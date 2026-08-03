@@ -1,31 +1,37 @@
+# ---------- Stage 1: Install dependencies ----------
+FROM node:18-alpine AS deps
+
+WORKDIR /app
+
+# Install only production dependencies inside the container
+COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+# ---------- Stage 2: Runtime ----------
 FROM node:18-alpine
 
-# Install wget for healthcheck
+# wget for the healthcheck
 RUN apk add --no-cache wget
 
 WORKDIR /app
 
-# Copy package files first
-COPY package*.json ./
+ENV NODE_ENV=production
 
-# Install dependencies
-RUN npm ci --only=production
+# Reuse the dependencies compiled in the deps stage
+COPY --from=deps --chown=node:node /app/node_modules ./node_modules
 
-# Copy application code
-COPY . .
+# Copy application code (node_modules, .env, uploads, logs excluded by .dockerignore)
+COPY --chown=node:node . .
 
-# Create directories with proper permissions
+# Create the directories that docker-compose mounts volumes onto
 RUN mkdir -p uploads/documents uploads/images logs && \
-    chown -R node:node /app
+    chown -R node:node uploads logs
 
-# Switch to node user
 USER node
 
 EXPOSE 5000
 
-# Health check using wget
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD wget --quiet --tries=1 --spider http://localhost:5000/health || exit 1
 
-# Start the application
 CMD ["npm", "start"]
