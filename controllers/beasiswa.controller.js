@@ -204,7 +204,12 @@ const getAllScholarships = async (req, res) => {
             attributes: ["benefit_text"],
           },
         ],
-        order: [["end_date", "ASC"]],
+        order: [
+          ["is_active", "DESC"],
+          [sequelize.literal("CASE WHEN end_date >= CURDATE() THEN 0 WHEN end_date IS NULL THEN 1 ELSE 2 END"), "ASC"],
+          [sequelize.literal("CASE WHEN end_date >= CURDATE() THEN end_date END"), "ASC"],
+          [sequelize.literal("CASE WHEN end_date < CURDATE() THEN end_date END"), "DESC"],
+        ],
       });
 
       if (scholarships.length === 0) return [];
@@ -215,30 +220,30 @@ const getAllScholarships = async (req, res) => {
 
       const schemaStudyPrograms = schemaIds.length
         ? await ScholarshipSchemaStudyProgram.findAll({
-            where: { schema_id: schemaIds },
-            include: [
-              {
-                model: StudyProgram,
-                as: "study_program",
-                attributes: ["id", "name", "degree"],
-                include: [
-                  {
-                    model: Department,
-                    as: "department",
-                    attributes: ["id", "name"],
-                    include: [
-                      {
-                        model: Faculty,
-                        as: "faculty",
-                        attributes: ["id", "name"],
-                      },
-                    ],
-                  },
-                ],
-              },
-            ],
-            attributes: ["schema_id"],
-          })
+          where: { schema_id: schemaIds },
+          include: [
+            {
+              model: StudyProgram,
+              as: "study_program",
+              attributes: ["id", "name", "degree"],
+              include: [
+                {
+                  model: Department,
+                  as: "department",
+                  attributes: ["id", "name"],
+                  include: [
+                    {
+                      model: Faculty,
+                      as: "faculty",
+                      attributes: ["id", "name"],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+          attributes: ["schema_id"],
+        })
         : [];
 
       const addUniqueItem = (map, schemaId, item) => {
