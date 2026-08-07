@@ -566,6 +566,10 @@ const updateProfile = async (req, res) => {
       phone_number: user.phone_number,
       gender:
         user.role === "MAHASISWA" ? user.student?.gender : user.staff?.gender,
+      birth_date:
+        user.role === "MAHASISWA" ? user.student?.birth_date : undefined,
+      birth_place:
+        user.role === "MAHASISWA" ? user.student?.birth_place : undefined,
       email: user.email,
       role: user.role,
     });
