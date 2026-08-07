@@ -29,28 +29,35 @@ const getOrSetCache = async (key, ttl, callback) => {
  * Hapus cache berdasarkan pattern (DEV / controlled use)
  */
 const invalidateCacheByPattern = async (pattern) => {
-  let cursor = "0";
-  let deleted = 0;
+  // Safe when Redis is down: never throw, so request handlers are never
+  // blocked or broken by a cache invalidation failure.
+  try {
+    let cursor = "0";
+    let deleted = 0;
 
-  do {
-    const [nextCursor, keys] = await redis.scan(
-      cursor,
-      "MATCH",
-      pattern,
-      "COUNT",
-      100,
-    );
+    do {
+      const [nextCursor, keys] = await redis.scan(
+        cursor,
+        "MATCH",
+        pattern,
+        "COUNT",
+        100,
+      );
 
-    cursor = nextCursor;
+      cursor = nextCursor;
 
-    if (keys.length > 0) {
-      await redis.del(keys);
-      deleted += keys.length;
-    }
-  } while (cursor !== "0");
+      if (keys.length > 0) {
+        await redis.del(keys);
+        deleted += keys.length;
+      }
+    } while (cursor !== "0");
 
-  console.log(`🧹 Cache invalidated: ${pattern} (${deleted} keys)`);
-  return deleted;
+    console.log(`🧹 Cache invalidated: ${pattern} (${deleted} keys)`);
+    return deleted;
+  } catch (err) {
+    console.error(`Cache invalidate skipped (${pattern}):`, err?.message || err);
+    return 0;
+  }
 };
 
 /**
